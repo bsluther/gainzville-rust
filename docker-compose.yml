@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: gainzville-postgres
+    environment:
+      POSTGRES_USER: gainzville
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_DB: gainzville_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

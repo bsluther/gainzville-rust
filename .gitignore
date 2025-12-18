@@ -1,0 +1,15 @@
+/target
+.env
+
+# Backup files from rustfmt
+**/*.rs.bk
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
