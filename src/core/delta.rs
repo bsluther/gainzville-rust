@@ -1,27 +1,14 @@
-use crate::core::{
-    model::Model,
-    models::{actor::Actor, user::User},
-};
+use crate::core::models::{actor::Actor, user::User};
 use uuid::Uuid;
 
-pub enum Delta<M: Model> {
-    Insert {
-        id: Uuid,
-        new: M,
-    },
-
-    Update {
-        id: Uuid,
-        old: M::Patch,
-        new: M::Patch,
-    },
-
-    Delete {
-        id: Uuid,
-        old: M,
-    },
+#[derive(Debug)]
+pub enum Delta<M> {
+    Insert { id: Uuid, new: M },
+    Update { id: Uuid, old: M, new: M },
+    Delete { id: Uuid, old: M },
 }
 
+#[derive(Debug)]
 pub enum ModelDelta {
     User(Delta<User>),
     Actor(Delta<Actor>),

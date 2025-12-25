@@ -55,11 +55,12 @@ impl SqliteApply for Delta<User> {
                     .await?;
             }
             Delta::Update { id, new, .. } => {
+                // TODO: this updates all fields, even those that haven't changed.
                 sqlx::query(
                     "UPDATE users SET username = COALESCE(?, username), email = COALESCE(?, email) WHERE actor_id = ?"
                 )
-                .bind(new.username.map(|u| u.as_str().to_string()))
-                .bind(new.email.map(|u| u.as_str().to_string()))
+                .bind(new.username.as_str().to_string())
+                .bind(new.email.as_str().to_string())
                 .bind(id.to_string())
                 .execute(&mut **tx)
                 .await?;

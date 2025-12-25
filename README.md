@@ -30,6 +30,9 @@ Connect to psql from inside the container (main database)
 Connect to psql from inside the container (test database)
 `docker exec -it gainzville-postgres psql -U gainzville -d gainzville_test`
 
+Run pg_sandbox with test DB
+`TEST_DATABASE_URL="postgres://gainzville:dev_password@localhost:5432/gainzville_test" cargo run --bin pg_sandbox`
+
 ### Sqlite
 
 Sqlite isn't setup to use migrations or sqlx compiled queries, for now just a proof of concept.

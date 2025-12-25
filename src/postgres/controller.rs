@@ -1,15 +1,18 @@
 use sqlx::PgPool;
+use tracing::{info, instrument};
 
 use crate::{
     core::{actions::ActionService, error::Result, models::user::User},
     postgres::{apply::PgApply, repos::PgContext},
 };
 
+#[derive(Debug)]
 pub struct PgController {
     pub pool: PgPool,
 }
 
 impl PgController {
+    #[instrument(skip_all)]
     pub async fn handle_create_user(&self, user: User) -> Result<()> {
         // Begin PG transaction.
         let mut tx = self.pool.begin().await?;
@@ -28,8 +31,7 @@ impl PgController {
         }
 
         // Commit transacton.
-        // TODO: bring in Tracing!
-        println!("Committing...");
+        info!("Committing create_user transaction");
         let res = tx.commit().await;
         match res {
             Ok(_) => {

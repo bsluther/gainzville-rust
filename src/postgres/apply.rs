@@ -1,4 +1,6 @@
 use sqlx::{Postgres, Transaction};
+use std::fmt::Debug;
+use tracing::{info, instrument, warn};
 
 use crate::core::{
     delta::{Delta, ModelDelta},
@@ -12,7 +14,9 @@ pub trait PgApply: Sized {
 }
 
 impl PgApply for ModelDelta {
+    #[instrument(skip_all)]
     async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+        info!(?self, "Applying delta");
         match self {
             ModelDelta::Actor(delta) => delta.apply_delta(tx).await,
             ModelDelta::User(delta) => delta.apply_delta(tx).await,
@@ -24,6 +28,7 @@ impl PgApply for Delta<Actor> {
     async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
         match self {
             Delta::Insert { id, new } => {
+                // info!("Applying insert delta to Actor table");
                 sqlx::query!(
                     r#"
                     INSERT INTO actors (id, actor_kind, created_at)
@@ -36,8 +41,12 @@ impl PgApply for Delta<Actor> {
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Update { .. } => {} // No-op
+            Delta::Update { .. } => {
+                // No-op, shouldn't happen.
+                warn!("Applying update delta to Actor table which does not support updates");
+            }
             Delta::Delete { id, .. } => {
+                // info!("Applying delete delta to Actors table");
                 sqlx::query!(
                     r#"
                     DELETE FROM actors WHERE id = $1
@@ -69,17 +78,18 @@ impl PgApply for Delta<User> {
                 .await?;
             }
             Delta::Update { id, new, .. } => {
+                // TODO: this updates all fields, even those that haven't changed.
                 sqlx::query!(
                     r#"
                     UPDATE users
                     SET
-                        username = COALESCE($1, username),
-                        email = COALESCE($2, email)
+                        username = $1,
+                        email = $2
 
                     WHERE actor_id = $3
                     "#,
-                    new.username.map(|u| u.as_str().to_string()),
-                    new.email.map(|u| u.as_str().to_string()),
+                    new.username.as_str().to_string(),
+                    new.email.as_str().to_string(),
                     id
                 )
                 .execute(&mut **tx)

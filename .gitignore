@@ -4,6 +4,11 @@
 # Backup files from rustfmt
 **/*.rs.bk
 
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
 # macOS
 .DS_Store
 
