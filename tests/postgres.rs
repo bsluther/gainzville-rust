@@ -1,9 +1,12 @@
 #[path = "postgres/common.rs"]
 mod common;
 
+use std::str::FromStr;
+
 use gv_rust_2025_12::{
     core::{
-        models::user::User,
+        actions::{Action, CreateActivity, CreateUser},
+        models::{activity::ActivityName, user::User},
         validation::{Email, Username},
     },
     postgres::controller::PgController,
@@ -12,7 +15,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn test_create_user() {
-    let pool = common::setup_clear_database().await;
+    let pool = common::setup_test_pool().await;
     let pg_controller = PgController { pool: pool.clone() };
 
     let new_id = Uuid::new_v4();
@@ -24,8 +27,8 @@ async fn test_create_user() {
         email: Email::parse(email.to_string()).expect("Invalid email"),
     };
 
-    pg_controller
-        .handle_create_user(new_user)
+    let mut tx = pg_controller
+        .run_action(Action::CreateUser(CreateUser { user: new_user }))
         .await
         .expect("Failed to create user");
 
@@ -33,7 +36,7 @@ async fn test_create_user() {
         "SELECT username, email FROM users WHERE actor_id = $1",
         new_id
     )
-    .fetch_optional(&pool)
+    .fetch_optional(&mut *tx)
     .await
     .expect("Failed to query test user");
 
@@ -48,5 +51,48 @@ async fn test_create_user() {
         row.email,
         email.to_string(),
         "Email should match created user"
+    );
+}
+
+#[tokio::test]
+async fn test_create_activity() {
+    let pool = common::setup_test_pool().await;
+    let pg_controller = PgController { pool: pool.clone() };
+
+    let name = "Test activity";
+    let description = "This is a test activity";
+    let act_id = Uuid::new_v4();
+    let system_actor_id = Uuid::from_str("eee9e6ae-6531-4580-8356-427604a0dc02").unwrap();
+    let action = Action::CreateActivity(CreateActivity {
+        activity_id: act_id,
+        actor_id: system_actor_id,
+        description: Some(description.to_string()),
+        name: ActivityName::parse(name.to_string()).unwrap(),
+        owner_id: system_actor_id,
+    });
+    let mut tx = pg_controller
+        .run_action(action)
+        .await
+        .expect("Failed to create activity");
+
+    let row = sqlx::query!(
+        "SELECT name, description FROM activities WHERE id = $1",
+        act_id
     )
+    .fetch_optional(&mut *tx)
+    .await
+    .expect("Failed to query test activity");
+
+    assert!(row.is_some(), "Activity should exist in database");
+    let row = row.unwrap();
+    assert_eq!(
+        row.name,
+        name.to_string(),
+        "Name should match created activity"
+    );
+    assert_eq!(
+        row.description,
+        Some(description.to_string()),
+        "Description should match created activity"
+    );
 }

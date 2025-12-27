@@ -1,8 +1,12 @@
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use tracing::{info, instrument};
 
 use crate::{
-    core::{actions::ActionService, error::Result, models::user::User},
+    core::{
+        actions::{Action, ActionService, CreateUser},
+        error::Result,
+        models::user::User,
+    },
     postgres::{apply::PgApply, repos::PgContext},
 };
 
@@ -13,34 +17,28 @@ pub struct PgController {
 
 impl PgController {
     #[instrument(skip_all)]
-    pub async fn handle_create_user(&self, user: User) -> Result<()> {
+    pub async fn run_action<'a>(&'a self, action: Action) -> Result<Transaction<'a, Postgres>> {
         // Begin PG transaction.
         let mut tx = self.pool.begin().await?;
 
-        // Create AuthnRepo (which is a trait on PgContext).
-        // PgContext is a god object, which is unfortunate, but it was the most expedient way to
-        // get a transaction piped through.
+        // Create PgContext.
         let pg_context = PgContext::new(&mut tx);
 
         // Create mutation.
-        let mx = ActionService::create_user(pg_context, user).await?;
+        let mx = match action {
+            Action::CreateActivity(action) => {
+                ActionService::create_activity(pg_context, action).await?
+            }
+            Action::CreateUser(action) => ActionService::create_user(pg_context, action).await?,
+        };
 
         // Apply deltas.
         for delta in mx.changes {
             delta.apply_delta(&mut tx).await?;
         }
 
-        // Commit transacton.
-        info!("Committing create_user transaction");
-        let res = tx.commit().await;
-        match res {
-            Ok(_) => {
-                println!("Committed!");
-            }
-            Err(e) => {
-                println!("Error: {e}");
-            }
-        }
-        Ok(())
+        // Do not commit the transaction, leave it up to the caller. This allows for rollback in
+        // testing.
+        Ok(tx)
     }
 }

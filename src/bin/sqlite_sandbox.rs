@@ -2,13 +2,14 @@ use std::env;
 
 use gv_rust_2025_12::{
     core::{
+        actions::{Action, CreateUser},
         models::user::User,
         validation::{Email, Username},
     },
     sqlite::controller::SqliteController,
 };
-use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Row;
+use sqlx::sqlite::SqlitePoolOptions;
 use uuid::Uuid;
 
 #[tokio::main]
@@ -30,29 +31,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("🚀 Attempting to create user: {}", new_id);
-    match sqlite_controller.handle_create_user(new_user).await {
-        Ok(_) => {
-            println!("Handle create user succeeded!");
-        }
-        Err(e) => {
-            println!("Error in handle_create_user: {e}");
-            return Ok(());
-        }
+    let mut tx = if let Ok(result) = sqlite_controller
+        .run_action(Action::CreateUser(CreateUser { user: new_user }))
+        .await
+    {
+        println!("Handle create user succeeded!");
+        result
+    } else {
+        println!("Error in handle_create_user");
+        return Ok(());
     };
 
     println!("🔎 Verifying in Database...");
     let row = sqlx::query("SELECT username, email FROM users WHERE actor_id = ?")
         .bind(new_id.to_string())
-        .fetch_optional(&pool)
+        .fetch_optional(&mut *tx)
         .await?;
 
     match row {
         Some(r) => {
             let username: String = r.try_get("username")?;
-            println!(
-                "🎉 FOUND: User '{}' is stored safely in SQLite.",
-                username
-            );
+            println!("🎉 FOUND: User '{}' is stored safely in SQLite.", username);
         }
         None => println!(
             "⚠️  WARNING: Workflow succeeded, but user was not found in DB! Check transaction commits."

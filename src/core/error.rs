@@ -10,6 +10,10 @@ pub enum DomainError {
     InvalidUsername(String),
     #[error("Other: {0}")]
     Other(String),
+    #[error("Invalid activity name: {0}")]
+    InvalidActivityName(String),
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
 }
 
 pub type Result<T> = std::result::Result<T, DomainError>;

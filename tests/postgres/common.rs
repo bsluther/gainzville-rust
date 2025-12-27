@@ -1,7 +1,9 @@
 use sqlx::PgPool;
 
 pub async fn setup_test_pool() -> PgPool {
-    let database_url = std::env::var("TEST_DATABASE_URL").unwrap();
+    let _ = dotenvy::dotenv();
+    let database_url =
+        std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL not found in env");
 
     PgPool::connect(&database_url)
         .await
@@ -9,15 +11,23 @@ pub async fn setup_test_pool() -> PgPool {
 }
 
 async fn clear_database(pool: &PgPool) -> Result<(), sqlx::Error> {
-    sqlx::query!("TRUNCATE TABLE users, actors RESTART IDENTITY CASCADE")
-        .execute(pool)
-        .await?;
-    // Re-insert system user.
+    // Truncate all tables with CASCADE to handle FK constraints robustly
+    // This works even with circular references
     sqlx::query!(
         r#"
-    INSERT INTO actors (id, actor_kind)
+        TRUNCATE TABLE actors, users, activities, entries
+        RESTART IDENTITY CASCADE
+        "#
+    )
+    .execute(pool)
+    .await?;
+
+    // Re-insert system actor
+    sqlx::query!(
+        r#"
+        INSERT INTO actors (id, actor_kind)
         VALUES ('eee9e6ae-6531-4580-8356-427604a0dc02', 'system')
-    "#
+        "#
     )
     .execute(pool)
     .await?;

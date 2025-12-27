@@ -13,8 +13,8 @@ pub struct User {
 }
 
 impl User {
-    pub fn update(&self) -> UserUpdateBuilder {
-        UserUpdateBuilder {
+    pub fn update(&self) -> UserUpdater {
+        UserUpdater {
             id: self.actor_id,
             old: self.clone(),
             new: self.clone(),
@@ -23,13 +23,13 @@ impl User {
 }
 
 #[derive(Debug)]
-pub struct UserUpdateBuilder {
+pub struct UserUpdater {
     id: Uuid,
     old: User,
     new: User,
 }
 
-impl UserUpdateBuilder {
+impl UserUpdater {
     pub fn username(mut self, username: Username) -> Self {
         self.new.username = username;
         self
@@ -47,10 +47,4 @@ impl UserUpdateBuilder {
             new: self.new,
         }
     }
-}
-
-#[derive(Debug)]
-pub struct UserPatch {
-    pub username: Option<Username>,
-    pub email: Option<Email>,
 }

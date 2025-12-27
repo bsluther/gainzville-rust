@@ -23,6 +23,3 @@ pub struct Actor {
     pub actor_kind: ActorKind,
     pub created_at: DateTime<Utc>,
 }
-
-#[derive(Debug)]
-pub struct ActorPatch {}

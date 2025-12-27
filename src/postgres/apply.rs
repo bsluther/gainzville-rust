@@ -1,11 +1,10 @@
 use sqlx::{Postgres, Transaction};
-use std::fmt::Debug;
 use tracing::{info, instrument, warn};
 
 use crate::core::{
     delta::{Delta, ModelDelta},
     error::Result,
-    models::{actor::Actor, user::User},
+    models::{activity::Activity, actor::Actor, user::User},
 };
 
 #[allow(async_fn_in_trait)]
@@ -20,6 +19,7 @@ impl PgApply for ModelDelta {
         match self {
             ModelDelta::Actor(delta) => delta.apply_delta(tx).await,
             ModelDelta::User(delta) => delta.apply_delta(tx).await,
+            ModelDelta::Activity(delta) => delta.apply_delta(tx).await,
         }
     }
 }
@@ -28,7 +28,6 @@ impl PgApply for Delta<Actor> {
     async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
         match self {
             Delta::Insert { id, new } => {
-                // info!("Applying insert delta to Actor table");
                 sqlx::query!(
                     r#"
                     INSERT INTO actors (id, actor_kind, created_at)
@@ -46,7 +45,6 @@ impl PgApply for Delta<Actor> {
                 warn!("Applying update delta to Actor table which does not support updates");
             }
             Delta::Delete { id, .. } => {
-                // info!("Applying delete delta to Actors table");
                 sqlx::query!(
                     r#"
                     DELETE FROM actors WHERE id = $1
@@ -99,6 +97,59 @@ impl PgApply for Delta<User> {
                 sqlx::query!(
                     r#"
                     DELETE FROM users WHERE actor_id = $1
+                    "#,
+                    id
+                )
+                .execute(&mut **tx)
+                .await?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl PgApply for Delta<Activity> {
+    async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+        match self {
+            Delta::Insert { id, new } => {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO activities (id, owner_id, source_activity_id, name, description)
+                    VALUES ($1, $2, $3, $4, $5)
+                    "#,
+                    id,
+                    new.owner_id,
+                    new.source_activity_id,
+                    new.name.to_string(),
+                    new.description
+                )
+                .execute(&mut **tx)
+                .await?;
+            }
+            Delta::Update { id, new, .. } => {
+                sqlx::query!(
+                    r#"
+                    UPDATE activities
+                    SET
+                        owner_id = $1,
+                        source_activity_id = $2,
+                        name = $3,
+                        description = $4
+                    WHERE id = $5
+                    "#,
+                    new.owner_id,
+                    new.source_activity_id,
+                    new.name.to_string(),
+                    new.description,
+                    id
+                )
+                .execute(&mut **tx)
+                .await?;
+            }
+            Delta::Delete { id, .. } => {
+                sqlx::query!(
+                    r#"
+                    DELETE FROM activities WHERE id = $1
                     "#,
                     id
                 )

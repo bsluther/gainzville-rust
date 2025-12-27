@@ -3,7 +3,7 @@ use sqlx::{Sqlite, Transaction};
 use crate::core::{
     delta::{Delta, ModelDelta},
     error::Result,
-    models::{actor::Actor, user::User},
+    models::{activity::Activity, actor::Actor, user::User},
 };
 
 #[allow(async_fn_in_trait)]
@@ -16,6 +16,7 @@ impl SqliteApply for ModelDelta {
         match self {
             ModelDelta::Actor(delta) => delta.apply_delta(tx).await,
             ModelDelta::User(delta) => delta.apply_delta(tx).await,
+            ModelDelta::Activity(delta) => delta.apply_delta(tx).await,
         }
     }
 }
@@ -68,6 +69,40 @@ impl SqliteApply for Delta<User> {
             Delta::Delete { id, .. } => {
                 sqlx::query("DELETE FROM users WHERE actor_id = ?")
                     .bind(id.to_string())
+                    .execute(&mut **tx)
+                    .await?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl SqliteApply for Delta<Activity> {
+    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
+        match self {
+            Delta::Insert { id, new } => {
+                sqlx::query("INSERT INTO activities (id, owner_id, source_activity_id, name, description) VALUES (?, ?, ?, ?, ?)")
+                    .bind(id.to_string())
+                    .bind(new.owner_id.to_string())
+                    .bind(new.source_activity_id)
+                    .bind(new.name.to_string())
+                    .bind(new.description)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+            Delta::Update { id, new, .. } => {
+                sqlx::query("UPDATE activities SET owner_id = ?, source_activity_id = ?, name = ?, description = ? WHERE id = ?")
+                    .bind(new.owner_id)
+                    .bind(new.source_activity_id)
+                    .bind(new.name.to_string())
+                    .bind(new.description)
+                    .bind(id)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+            Delta::Delete { id, .. } => {
+                sqlx::query("DELETE FROM activities WHERE id = ?")
+                    .bind(id)
                     .execute(&mut **tx)
                     .await?;
             }

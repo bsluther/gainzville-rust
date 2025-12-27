@@ -2,6 +2,7 @@ use std::env;
 
 use gv_rust_2025_12::{
     core::{
+        actions::{Action, CreateUser},
         models::user::User,
         validation::{Email, Username},
     },
@@ -35,7 +36,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     info!(actor_id = new_id.to_string(), "Attempting to create user");
-    match pg_controller.handle_create_user(new_user).await {
+    match pg_controller
+        .run_action(Action::CreateUser(CreateUser { user: new_user }))
+        .await
+    {
         Ok(_) => {
             println!("Handle create user succeeded!");
         }
