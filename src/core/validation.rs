@@ -1,4 +1,4 @@
-use crate::core::error::DomainError;
+use crate::core::error::{DomainError, ValidationError};
 use sqlx::{Decode, Postgres, Sqlite, Type};
 
 // NOTE: Type and Decode implementaions are all AI generated.
@@ -9,15 +9,15 @@ impl Email {
     pub fn parse(email: String) -> Result<Self, DomainError> {
         // Basic validation (use a crate like `validator` or `email_address` in real code)
         if !email.contains('@') {
-            return Err(DomainError::InvalidEmail("missing @".into()));
+            return Err(ValidationError::InvalidEmail("missing @".to_string()).into());
         }
 
         if email.len() > 255 {
-            return Err(DomainError::InvalidEmail("too long".into()));
+            return Err(ValidationError::InvalidEmail("too long".to_string()).into());
         }
 
         if email.trim() != email {
-            return Err(DomainError::InvalidEmail("whitespace".into()));
+            return Err(ValidationError::InvalidEmail("whitespace".to_string()).into());
         }
 
         Ok(Self(email.to_lowercase())) // Normalize
@@ -60,11 +60,11 @@ pub struct Username(String);
 impl Username {
     pub fn parse(username: String) -> Result<Self, DomainError> {
         if username.is_empty() {
-            return Err(DomainError::InvalidUsername("empty".into()));
+            return Err(ValidationError::InvalidUsername("empty".to_string()).into());
         }
 
         if username.len() > 50 {
-            return Err(DomainError::InvalidUsername("too long".into()));
+            return Err(ValidationError::InvalidUsername("too long".to_string()).into());
         }
 
         // Check for valid characters (alphanumeric, underscore, dash)
@@ -72,7 +72,7 @@ impl Username {
             .chars()
             .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
         {
-            return Err(DomainError::InvalidUsername("invalid characters".into()));
+            return Err(ValidationError::InvalidUsername("invalid characters".to_string()).into());
         }
 
         Ok(Self(username))

@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::core::error::{DomainError, Result};
+use crate::core::error::{DomainError, Result, ValidationError};
 
 #[derive(Debug, Clone)]
 pub struct Activity {
@@ -18,7 +18,7 @@ impl ActivityName {
     pub fn parse(str: String) -> Result<ActivityName> {
         let trimmed = str.trim();
         match str.len() {
-            0 | 50.. => Err(DomainError::InvalidActivityName(trimmed.to_string())),
+            0 | 50.. => Err(ValidationError::InvalidActivityName(trimmed.to_string()).into()),
             _ => Ok(ActivityName(trimmed.to_string())),
         }
     }

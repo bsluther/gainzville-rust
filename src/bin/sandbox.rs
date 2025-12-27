@@ -1,4 +1,5 @@
 use gv_rust_2025_12::core::{models::activity::ActivityName, validation::Email};
+use uuid::Uuid;
 
 fn main() {
     println!("Hello world");
