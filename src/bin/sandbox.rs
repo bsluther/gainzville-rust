@@ -1,5 +1,5 @@
 use gv_rust_2025_12::core::{models::activity::ActivityName, validation::Email};
-use uuid::Uuid;
+use rand::prelude::*;
 
 fn main() {
     println!("Hello world");
@@ -8,4 +8,8 @@ fn main() {
 
     let act_name = ActivityName::parse(" test".to_string());
     println!("activity name = {:?}", act_name.unwrap().to_string());
+
+    let mut rng = rand::rng();
+    let random_bytes = rng.random();
+    let _ = uuid::Builder::from_random_bytes(random_bytes).into_uuid();
 }

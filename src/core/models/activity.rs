@@ -1,7 +1,5 @@
-use serde::Deserialize;
+use crate::core::error::{Result, ValidationError};
 use uuid::Uuid;
-
-use crate::core::error::{DomainError, Result, ValidationError};
 
 #[derive(Debug, Clone)]
 pub struct Activity {

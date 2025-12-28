@@ -1,5 +1,4 @@
-- [ ] Move validation errors into dedicated error type.
-- [ ] Use seeded rng (e.g. for generating Uuid's).
+- [ ] Use seeded rng for determinism (e.g. for generating Uuid's).
 - [ ] There is going to be an issue when I want to run a test which runs multiple actions. The
 execute_action function on the controllers returns a tx but doesn't take one as an argument. Will
 need to pass the tx as an argument to be able to rollback the transaction, which allows for

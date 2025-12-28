@@ -1,26 +1,54 @@
 use crate::core::error::{DomainError, ValidationError};
 use sqlx::{Decode, Postgres, Sqlite, Type};
 
-// NOTE: Type and Decode implementaions are all AI generated.
+// NOTE: Mostly AI generated.
 
+/// A very naive type representing an email. Not production ready, but good enough for now.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Email(String);
 impl Email {
     pub fn parse(email: String) -> Result<Self, DomainError> {
-        // Basic validation (use a crate like `validator` or `email_address` in real code)
-        if !email.contains('@') {
-            return Err(ValidationError::InvalidEmail("missing @".to_string()).into());
+        let email = email.trim().to_lowercase();
+
+        // Split on @
+        let parts: Vec<&str> = email.split('@').collect();
+        if parts.len() != 2 {
+            return Err(ValidationError::InvalidEmail("must have exactly one @".into()).into());
         }
 
-        if email.len() > 255 {
-            return Err(ValidationError::InvalidEmail("too long".to_string()).into());
+        let local = parts[0];
+        let domain = parts[1];
+
+        // Local part: alphanumeric, dots, underscores
+        if local.is_empty() || local.len() > 64 {
+            return Err(ValidationError::InvalidEmail("local part length invalid".into()).into());
+        }
+        if !local
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '.' || c == '_')
+        {
+            return Err(
+                ValidationError::InvalidEmail("invalid characters in local part".into()).into(),
+            );
         }
 
-        if email.trim() != email {
-            return Err(ValidationError::InvalidEmail("whitespace".to_string()).into());
+        // Domain: alphanumeric with dots and dashes, must have a dot
+        if domain.is_empty() || domain.len() > 255 {
+            return Err(ValidationError::InvalidEmail("domain length invalid".into()).into());
+        }
+        if !domain.contains('.') {
+            return Err(ValidationError::InvalidEmail("domain must have a dot".into()).into());
+        }
+        if !domain
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '.' || c == '-')
+        {
+            return Err(
+                ValidationError::InvalidEmail("invalid characters in domain".into()).into(),
+            );
         }
 
-        Ok(Self(email.to_lowercase())) // Normalize
+        Ok(Self(email))
     }
 
     pub fn as_str(&self) -> &str {

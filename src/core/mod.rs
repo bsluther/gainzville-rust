@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod arbitrary;
 pub mod delta;
 pub mod error;
 pub mod models;
