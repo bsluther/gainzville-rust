@@ -1,4 +1,4 @@
-use crate::core::models::{activity::Activity, actor::Actor, user::User};
+use crate::core::models::{activity::Activity, actor::Actor, entry::Entry, user::User};
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -13,6 +13,7 @@ pub enum ModelDelta {
     User(Delta<User>),
     Actor(Delta<Actor>),
     Activity(Delta<Activity>),
+    Entry(Delta<Entry>),
 }
 
 /// Convert Delta<T> --> ModelDelta::T.
@@ -29,5 +30,10 @@ impl From<Delta<Actor>> for ModelDelta {
 impl From<Delta<Activity>> for ModelDelta {
     fn from(d: Delta<Activity>) -> Self {
         ModelDelta::Activity(d)
+    }
+}
+impl From<Delta<Entry>> for ModelDelta {
+    fn from(d: Delta<Entry>) -> Self {
+        ModelDelta::Entry(d)
     }
 }

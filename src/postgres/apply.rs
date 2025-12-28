@@ -4,7 +4,7 @@ use tracing::{info, instrument, warn};
 use crate::core::{
     delta::{Delta, ModelDelta},
     error::Result,
-    models::{activity::Activity, actor::Actor, user::User},
+    models::{activity::Activity, actor::Actor, entry::Entry, user::User},
 };
 
 #[allow(async_fn_in_trait)]
@@ -20,6 +20,7 @@ impl PgApply for ModelDelta {
             ModelDelta::Actor(delta) => delta.apply_delta(tx).await,
             ModelDelta::User(delta) => delta.apply_delta(tx).await,
             ModelDelta::Activity(delta) => delta.apply_delta(tx).await,
+            ModelDelta::Entry(delta) => delta.apply_delta(tx).await,
         }
     }
 }
@@ -150,6 +151,73 @@ impl PgApply for Delta<Activity> {
                 sqlx::query!(
                     r#"
                     DELETE FROM activities WHERE id = $1
+                    "#,
+                    id
+                )
+                .execute(&mut **tx)
+                .await?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl PgApply for Delta<Entry> {
+    async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+        match self {
+            Delta::Insert { id, new } => {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO entries (
+                        id,
+                        activity_id,
+                        owner_id,
+                        parent_id, 
+                        frac_index,
+                        is_template,
+                        display_as_sets,
+                        is_sequence
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    "#,
+                    id,
+                    new.activity_id,
+                    new.owner_id,
+                    new.parent_id,
+                    new.frac_index.map(|f| f.to_string()),
+                    new.is_template,
+                    new.display_as_sets,
+                    new.is_sequence
+                )
+                .execute(&mut **tx)
+                .await?;
+            }
+            Delta::Update { id, new, .. } => {
+                sqlx::query!(
+                    r#"
+                    UPDATE entries
+                    SET
+                        activity_id = $1,
+                        parent_id = $2,
+                        frac_index = $3,
+                        display_as_sets = $4,
+                        is_sequence = $5
+                    WHERE id = $6
+                    "#,
+                    new.activity_id,
+                    new.parent_id,
+                    new.frac_index.map(|f| f.to_string()),
+                    new.display_as_sets,
+                    new.is_sequence,
+                    id
+                )
+                .execute(&mut **tx)
+                .await?;
+            }
+            Delta::Delete { id, .. } => {
+                sqlx::query!(
+                    r#"
+                    DELETE FROM entries WHERE id = $1
                     "#,
                     id
                 )

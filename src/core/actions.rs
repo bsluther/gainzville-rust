@@ -30,6 +30,10 @@ pub struct CreateUser {
     pub user: User,
 }
 
+pub struct CreateLogEntry {
+    pub actor_id: Uuid,
+}
+
 // TODO: relocate.
 pub struct Mutation {
     pub id: Uuid,
