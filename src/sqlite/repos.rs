@@ -2,8 +2,8 @@ use sqlx::{Sqlite, Transaction};
 
 use crate::core::{
     error::Result,
-    models::user::User,
-    repos::AuthnRepo,
+    models::{activity::Activity, user::User},
+    repos::{ActivityRepo, AuthnRepo},
     validation::{Email, Username},
 };
 
@@ -50,5 +50,18 @@ impl<'c, 't> AuthnRepo for SqliteContext<'c, 't> {
             .await?;
 
         Ok(user)
+    }
+}
+
+impl<'c, 't> ActivityRepo for SqliteContext<'c, 't> {
+    async fn find_activity_by_id(&mut self, id: uuid::Uuid) -> Result<Option<Activity>> {
+        let activity = sqlx::query_as::<_, Activity>(
+            "SELECT id, owner_id, source_activity_id, name, description FROM activities WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&mut **self.tx)
+        .await?;
+
+        Ok(activity)
     }
 }

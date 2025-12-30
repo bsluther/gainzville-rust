@@ -22,6 +22,11 @@ impl Entry {
     }
 }
 
+pub struct Position {
+    pub parent_id: Uuid,
+    pub frac_index: FractionalIndex,
+}
+
 #[derive(Debug)]
 pub struct EntryUpdater {
     old: Entry,

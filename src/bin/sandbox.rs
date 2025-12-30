@@ -12,4 +12,8 @@ fn main() {
     let mut rng = rand::rng();
     let random_bytes = rng.random();
     let _ = uuid::Builder::from_random_bytes(random_bytes).into_uuid();
+
+    let xs = vec![1, 2, 3, 4, 5];
+    let choices = rng.random_range(0..0);
+    println!("choices = {choices}");
 }

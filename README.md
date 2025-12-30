@@ -7,12 +7,11 @@ Install sqlx-cli
 ### Migrations via sqlx
 
 Run migrations
-```
+```sh
 sqlx migrate run
-```
-```
 sqlx migrate run --database-url postgres://gainzville:dev_password@localhost/gainzville_test
 ```
+
 
 Add a new migration with the current timestamp
 `sqlx migrate add <name>`
@@ -29,10 +28,12 @@ Stop the database and erase volumes (delete container database).
 `docker-compose down -v`
 
 Connect to psql from inside the container (main database)
-`docker exec -it gainzville-postgres psql -U gainzville -d gainzville_dev`
+```sh
+docker exec -it gainzville-postgres psql -U gainzville -d gainzville_dev
+```
 
 Connect to psql from inside the container (test database)
-```
+```sh
 docker exec -it gainzville-postgres psql -U gainzville -d gainzville_test
 ```
 
@@ -45,7 +46,7 @@ Sqlite isn't setup to use migrations or sqlx compiled queries, for now just a pr
 sqlite_sandbox.rs assumes a root level test.db file.
 
 Create tables for ./test.db
-```
+```sh
 sqlite3 test.db < src/sqlite/sqlite-schema.sql
 ```
 - There's a good chance this schema will be out of date as I evolve the PG schema!

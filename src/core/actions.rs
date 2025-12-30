@@ -7,15 +7,16 @@ use crate::core::{
     models::{
         activity::{Activity, ActivityName},
         actor::{Actor, ActorKind},
+        entry::Entry,
         user::User,
     },
-    repos::AuthnRepo,
+    repos::{ActivityRepo, AuthnRepo, EntryRepo},
 };
-// Consider: defining each action struct independent then creating an enum of them. That way the
-// action impl just takes the typed struct.
+
 pub enum Action {
     CreateUser(CreateUser),
     CreateActivity(CreateActivity),
+    CreateEntry(CreateEntry),
 }
 
 pub struct CreateActivity {
@@ -30,8 +31,11 @@ pub struct CreateUser {
     pub user: User,
 }
 
-pub struct CreateLogEntry {
+// CreateEntryFromTemplate
+// CreateTemplateEntry
+pub struct CreateEntry {
     pub actor_id: Uuid,
+    pub entry: Entry,
 }
 
 // TODO: relocate.
@@ -68,7 +72,7 @@ impl ActionService {
             return Err(DomainError::Other("actor_id already in use".to_string()));
         }
 
-        // Create user, actor insert deltas.
+        // Create user and actor insert deltas.
         let insert_actor = Delta::<Actor>::Insert {
             id: user.actor_id,
             new: Actor {
@@ -121,6 +125,49 @@ impl ActionService {
             timestamp: Utc::now(),
             action: Action::CreateActivity(action),
             changes: vec![insert_activity.into()],
+        })
+    }
+
+    pub async fn create_entry(mut ctx: impl ActivityRepo, action: CreateEntry) -> Result<Mutation> {
+        // Check if actor has permission to create entry at the given position.
+        // For now, only allow the owner to create.
+        if action.actor_id != action.entry.owner_id {
+            return Err(DomainError::Unauthorized(format!(
+                "actor '{}' is not authorized to create entry for owner '{}' in parent entry '{:?}'",
+                action.actor_id, action.entry.owner_id, action.entry.parent_id
+            )));
+        }
+
+        // Check if referenced activity exists,
+        if let Some(activity_id) = action.entry.activity_id {
+            if ctx.find_activity_by_id(activity_id).await?.is_none() {
+                return Err(DomainError::Other(format!(
+                    "create entry failed, activity '{}' not found",
+                    activity_id
+                )));
+            }
+        };
+
+        // Check that position/parent_id are both none or both some
+        if action.entry.parent_id.is_none() && action.entry.frac_index.is_some()
+            || action.entry.parent_id.is_some() && action.entry.frac_index.is_none()
+        {
+            return Err(DomainError::Other(
+                "create entry failed, parent_id and frac_index must both be Some or both be None"
+                    .to_string(),
+            ));
+        }
+
+        let insert_entry = Delta::Insert {
+            id: action.entry.id,
+            new: action.entry.clone(),
+        };
+
+        Ok(Mutation {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            action: Action::CreateEntry(action),
+            changes: vec![insert_entry.into()],
         })
     }
 }

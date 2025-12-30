@@ -3,7 +3,7 @@ use sqlx::{Postgres, Transaction};
 use crate::core::{
     error::Result,
     models::user::User,
-    repos::AuthnRepo,
+    repos::{ActivityRepo, AuthnRepo},
     validation::{Email, Username},
 };
 
@@ -50,5 +50,21 @@ impl<'c, 't> AuthnRepo for PgContext<'c, 't> {
             .await?;
 
         Ok(user)
+    }
+}
+
+impl<'c, 't> ActivityRepo for PgContext<'c, 't> {
+    async fn find_activity_by_id(
+        &mut self,
+        id: uuid::Uuid,
+    ) -> Result<Option<crate::core::models::activity::Activity>> {
+        let activity = sqlx::query_as::<_, crate::core::models::activity::Activity>(
+            "SELECT id, owner_id, source_activity_id, name, description FROM activities WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&mut **self.tx)
+        .await?;
+
+        Ok(activity)
     }
 }

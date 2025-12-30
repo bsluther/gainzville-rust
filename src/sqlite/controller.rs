@@ -30,6 +30,7 @@ impl SqliteController {
                 ActionService::create_activity(pg_context, action).await?
             }
             Action::CreateUser(action) => ActionService::create_user(pg_context, action).await?,
+            Action::CreateEntry(action) => ActionService::create_entry(pg_context, action).await?,
         };
 
         // Apply deltas.

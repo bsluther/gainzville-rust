@@ -2,8 +2,8 @@ use std::env;
 
 use gv_rust_2025_12::{
     core::{
-        actions::{Action, CreateUser},
-        models::user::User,
+        actions::{Action, CreateActivity, CreateEntry, CreateUser},
+        models::{activity::ActivityName, entry::Entry, user::User},
         validation::{Email, Username},
     },
     postgres::controller::PgController,
@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = dotenvy::dotenv();
     tracing_subscriber::fmt().pretty().init();
     let span = span!(Level::INFO, "main");
     let _guard = span.enter();
@@ -28,20 +29,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let pg_controller = PgController { pool: pool.clone() };
 
-    let new_id = Uuid::new_v4();
+    let new_user_id = Uuid::new_v4();
     let new_user = User {
-        actor_id: new_id,
-        username: Username::parse("sandbox_test6".to_string())?,
-        email: Email::parse("sandbox6@test.com".to_string())?,
+        actor_id: new_user_id.clone(),
+        username: Username::parse("sandbox_test3".to_string())?,
+        email: Email::parse("sandbox3@test.com".to_string())?,
     };
 
-    info!(actor_id = new_id.to_string(), "Attempting to create user");
+    info!(
+        actor_id = new_user_id.to_string(),
+        "Attempting to create user"
+    );
     match pg_controller
         .run_action(Action::CreateUser(CreateUser { user: new_user }))
         .await
     {
-        Ok(_) => {
+        Ok(tx) => {
             println!("Handle create user succeeded!");
+            tx.commit().await?;
         }
         Err(e) => {
             println!("Error in handle_create_user: {e}");
@@ -49,22 +54,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    println!("🔎 Verifying in Database...");
-    let row = sqlx::query!(
-        "SELECT username, email FROM users WHERE actor_id = $1",
-        new_id
-    )
-    .fetch_optional(&pool)
-    .await?;
+    // Create Pull Up activity
+    let pull_up_id = Uuid::new_v4();
+    let create_activity = CreateActivity {
+        actor_id: new_user_id.clone(),
+        activity_id: pull_up_id.clone(),
+        name: ActivityName::parse("Pull Up".to_string()).unwrap(),
+        description: Some("Pull yourself up.".to_string()),
+        owner_id: new_user_id.clone(),
+    };
+    let tx = pg_controller
+        .run_action(Action::CreateActivity(create_activity))
+        .await?;
+    tx.commit().await?;
 
-    match row {
-        Some(r) => println!(
-            "🎉 FOUND: User '{}' is stored safely in Postgres.",
-            r.username
-        ),
-        None => println!(
-            "⚠️  WARNING: Workflow succeeded, but user was not found in DB! Check transaction commits."
-        ),
-    }
+    let create_entry = CreateEntry {
+        actor_id: new_user_id.clone(),
+        entry: Entry {
+            id: Uuid::new_v4(),
+            activity_id: Some(pull_up_id.clone()),
+            owner_id: new_user_id.clone(),
+            parent_id: None,
+            frac_index: None,
+            is_template: false,
+            display_as_sets: false,
+            is_sequence: false,
+        },
+    };
+    let tx = pg_controller
+        .run_action(Action::CreateEntry(create_entry))
+        .await?;
+    tx.commit().await?;
+
     Ok(())
 }

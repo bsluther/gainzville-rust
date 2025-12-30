@@ -5,7 +5,8 @@ need to pass the tx as an argument to be able to rollback the transaction, which
 parallel tests because it isolated each test from each other through the transaction boundary and
 never commits.
     - Is it as easy creating an alternate constructor which takes tx as an arg instead of pool?
+- [ ] Use `garde` to validate types like Email, Username, etc.
 
-- [ ] Maybe: write a macros to do one or both of
+- [ ] Maybe: write macros to do one or both of
     - [ ] Create model updater.
     - [ ] Create model apply_delta functions.
