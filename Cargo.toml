@@ -23,5 +23,7 @@ proptest = "1.0.0"
 test-strategy = "0.4.3"
 fractional_index = "2.0.2"
 dotenvy = "0.15.7"
+anarchist-readable-name-generator-lib = "0.2.1"
+lipsum = "0.9.1"
 
 [dev-dependencies]

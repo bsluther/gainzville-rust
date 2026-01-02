@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use std::fmt::Display;
 use uuid::Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ActorKind {
     System,
     User,
@@ -17,7 +17,7 @@ impl Display for ActorKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Actor {
     pub actor_id: Uuid,
     pub actor_kind: ActorKind,

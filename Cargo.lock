@@ -9,6 +9,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "anarchist-readable-name-generator-lib"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "653e8243a8f9488a96a8c97f67e480ea5397cc580bbfa717eb43b70dffb9fd70"
+dependencies = [
+ "rand 0.9.2",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -468,10 +477,12 @@ dependencies = [
 name = "gv-rust-2025-12"
 version = "0.1.0"
 dependencies = [
+ "anarchist-readable-name-generator-lib",
  "anyhow",
  "chrono",
  "dotenvy",
  "fractional_index",
+ "lipsum",
  "proptest",
  "rand 0.9.2",
  "serde",
@@ -750,6 +761,16 @@ name = "linux-raw-sys"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
+
+[[package]]
+name = "lipsum"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "636860251af8963cc40f6b4baadee105f02e21b28131d76eba8e40ce84ab8064"
+dependencies = [
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+]
 
 [[package]]
 name = "litemap"

@@ -13,32 +13,70 @@ use crate::core::{
     repos::{ActivityRepo, AuthnRepo, EntryRepo},
 };
 
+#[derive(Debug, Clone)]
 pub enum Action {
     CreateUser(CreateUser),
     CreateActivity(CreateActivity),
     CreateEntry(CreateEntry),
 }
 
-pub struct CreateActivity {
-    pub actor_id: Uuid,
-    pub owner_id: Uuid,
-    pub activity_id: Uuid,
-    pub name: ActivityName,
-    pub description: Option<String>,
+impl From<CreateUser> for Action {
+    fn from(value: CreateUser) -> Self {
+        Action::CreateUser(value)
+    }
 }
 
+impl From<CreateActivity> for Action {
+    fn from(value: CreateActivity) -> Self {
+        Action::CreateActivity(value)
+    }
+}
+
+impl From<CreateEntry> for Action {
+    fn from(value: CreateEntry) -> Self {
+        Action::CreateEntry(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateActivity {
+    pub actor_id: Uuid,
+    pub activity: Activity,
+}
+
+impl From<Activity> for CreateActivity {
+    fn from(activity: Activity) -> Self {
+        CreateActivity {
+            actor_id: activity.owner_id,
+            activity,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct CreateUser {
     pub user: User,
 }
 
 // CreateEntryFromTemplate
 // CreateTemplateEntry
+#[derive(Debug, Clone)]
 pub struct CreateEntry {
     pub actor_id: Uuid,
     pub entry: Entry,
 }
 
+impl From<Entry> for CreateEntry {
+    fn from(entry: Entry) -> Self {
+        CreateEntry {
+            actor_id: entry.owner_id,
+            entry: entry,
+        }
+    }
+}
+
 // TODO: relocate.
+#[derive(Debug, Clone)]
 pub struct Mutation {
     pub id: Uuid,
     pub timestamp: DateTime<Utc>,
@@ -100,30 +138,25 @@ impl ActionService {
         mut ctx: impl AuthnRepo,
         action: CreateActivity,
     ) -> Result<Mutation> {
+        let activity = action.activity.clone();
         // Check if actor has permission to create activities for owner.
         // For now, only allow if actor == owner.
-        if action.actor_id != action.owner_id {
+        if action.actor_id != activity.owner_id {
             return Err(DomainError::Unauthorized(format!(
                 "actor '{}' is not authorized to create activities for owner '{}'",
-                action.actor_id, action.owner_id
+                action.actor_id, activity.owner_id
             )));
         }
 
         let insert_activity = Delta::Insert {
-            id: action.activity_id,
-            new: Activity {
-                id: action.activity_id.clone(),
-                owner_id: action.owner_id.clone(),
-                source_activity_id: None,
-                name: action.name.clone(),
-                description: action.description.clone(),
-            },
+            id: activity.id,
+            new: activity,
         };
 
         Ok(Mutation {
             id: Uuid::new_v4(),
             timestamp: Utc::now(),
-            action: Action::CreateActivity(action),
+            action: Action::CreateActivity(action.clone()),
             changes: vec![insert_activity.into()],
         })
     }

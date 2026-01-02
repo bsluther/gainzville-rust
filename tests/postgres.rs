@@ -33,13 +33,7 @@ async fn test_create_activity_ts(
     let pool = common::setup_test_pool().await;
     let pg_controller = PgController { pool: pool.clone() };
 
-    let action = Action::CreateActivity(CreateActivity {
-        activity_id: activity.id,
-        actor_id: activity.owner_id,
-        description: activity.description.clone(),
-        name: activity.name.clone(),
-        owner_id: activity.owner_id.clone(),
-    });
+    let action = Action::CreateActivity(activity.clone().into());
     let mut tx = pg_controller
         .run_action(action)
         .await
@@ -152,13 +146,14 @@ async fn test_create_activity() {
     let description = "This is a test activity";
     let act_id = Uuid::new_v4();
     let system_actor_id = Uuid::from_str(SYSTEM_ACTOR_ID).unwrap();
-    let action = Action::CreateActivity(CreateActivity {
-        activity_id: act_id,
-        actor_id: system_actor_id,
-        description: Some(description.to_string()),
-        name: ActivityName::parse(name.to_string()).unwrap(),
+    let activity = Activity {
+        id: act_id,
         owner_id: system_actor_id,
-    });
+        source_activity_id: None,
+        name: ActivityName::parse(name.to_string()).unwrap(),
+        description: Some(description.to_string()),
+    };
+    let action = Action::CreateActivity(activity.into());
     let mut tx = pg_controller
         .run_action(action)
         .await

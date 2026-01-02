@@ -51,6 +51,16 @@ impl<'c, 't> AuthnRepo for SqliteContext<'c, 't> {
 
         Ok(user)
     }
+    async fn all_actor_ids(&mut self) -> Result<Vec<uuid::Uuid>> {
+        let actor_ids = sqlx::query_scalar(
+            r#"
+            SELECT id FROM actors
+            "#,
+        )
+        .fetch_all(&mut **self.tx)
+        .await?;
+        Ok(actor_ids)
+    }
 }
 
 impl<'c, 't> ActivityRepo for SqliteContext<'c, 't> {

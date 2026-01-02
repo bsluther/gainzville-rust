@@ -1,14 +1,14 @@
 use crate::core::models::{activity::Activity, actor::Actor, entry::Entry, user::User};
 use uuid::Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Delta<M> {
     Insert { id: Uuid, new: M },
     Update { id: Uuid, old: M, new: M },
     Delete { id: Uuid, old: M },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ModelDelta {
     User(Delta<User>),
     Actor(Delta<Actor>),
