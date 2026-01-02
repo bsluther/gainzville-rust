@@ -2,16 +2,14 @@ use fractional_index::FractionalIndex;
 use rand::Rng;
 use uuid::Uuid;
 
-use crate::{
-    core::{
-        actions::CreateEntry,
-        models::{
-            activity::Activity,
-            entry::{Entry, Position},
-        },
+use gv_core::core::{
+    actions::CreateEntry,
+    models::{
+        activity::Activity,
+        entry::{Entry, Position},
     },
-    generation::{Arbitrary, ArbitraryFrom, GenerationContext, pick, pick_index},
 };
+use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick, pick_index};
 
 // TODO: could use a trait, i.e. ForestNode, which keeps only the forest structure. Then Entry can
 // implement ForestNode, but so can a collection of Positions.

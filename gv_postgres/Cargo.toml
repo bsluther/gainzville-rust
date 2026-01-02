@@ -1,0 +1,33 @@
+[package]
+name = "gv_postgres"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "lib.rs"
+
+[[bin]]
+name = "pg_sandbox"
+path = "bin/pg_sandbox.rs"
+
+[[test]]
+name = "postgres"
+path = "tests/postgres.rs"
+
+[dependencies]
+# Core dependency
+gv_core = { path = "../core" }
+
+# Workspace deps
+sqlx = { workspace = true }
+tracing = { workspace = true }
+
+# Binary dependencies
+tokio = { workspace = true }
+dotenvy = { workspace = true }
+uuid = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+test-strategy = { workspace = true }

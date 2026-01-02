@@ -1,9 +1,7 @@
 use uuid::Uuid;
 
-use crate::{
-    core::{actions::CreateActivity, models::activity::Activity},
-    generation::ArbitraryFrom,
-};
+use gv_core::core::{actions::CreateActivity, models::activity::Activity};
+use crate::ArbitraryFrom;
 
 impl ArbitraryFrom<Vec<Uuid>> for CreateActivity {
     fn arbitrary_from<R: rand::Rng, C: super::GenerationContext>(

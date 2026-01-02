@@ -1,0 +1,27 @@
+[package]
+name = "generation"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "lib.rs"
+
+[[bin]]
+name = "sim_sandbox"
+path = "bin/sim_sandbox.rs"
+
+[dependencies]
+# Core dependency
+gv_core = { path = "../core" }
+gv_postgres = { path = "../gv_postgres" }
+
+# Workspace deps
+rand = { workspace = true }
+uuid = { workspace = true }
+fractional_index = { workspace = true }
+anarchist-readable-name-generator-lib = { workspace = true }
+
+# Binary dependencies
+tokio = { workspace = true }
+sqlx = { workspace = true }
+dotenvy = { workspace = true }

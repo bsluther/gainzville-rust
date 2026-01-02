@@ -1,19 +1,19 @@
 use std::env;
 
-use gv_core::{
-    core::{
-        actions::{Action, CreateUser},
-        models::user::User,
-        validation::{Email, Username},
-    },
-    sqlite::controller::SqliteController,
+use gv_core::core::{
+    actions::{Action, CreateUser},
+    models::user::User,
+    validation::{Email, Username},
 };
+use gv_sqlite::controller::SqliteController;
 use sqlx::Row;
 use sqlx::sqlite::SqlitePoolOptions;
 use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = dotenvy::dotenv();
+
     let db_url = env::var("SQLITE_DATABASE_URL").unwrap_or_else(|_| "sqlite:test.db".to_string());
 
     println!("Connecting to {}", db_url);

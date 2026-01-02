@@ -441,6 +441,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "generation"
+version = "0.1.0"
+dependencies = [
+ "anarchist-readable-name-generator-lib",
+ "dotenvy",
+ "fractional_index",
+ "gv_core",
+ "gv_postgres",
+ "rand 0.9.2",
+ "sqlx",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -493,6 +508,33 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "gv_postgres"
+version = "0.1.0"
+dependencies = [
+ "dotenvy",
+ "gv_core",
+ "proptest",
+ "sqlx",
+ "test-strategy",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "gv_sqlite"
+version = "0.1.0"
+dependencies = [
+ "dotenvy",
+ "gv_core",
+ "sqlx",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 

@@ -1,8 +1,8 @@
 use sqlx::{Postgres, Transaction};
 
-use crate::core::{
+use gv_core::core::{
     error::Result,
-    models::user::User,
+    models::{activity::Activity, user::User},
     repos::{ActivityRepo, AuthnRepo},
     validation::{Email, Username},
 };
@@ -68,8 +68,8 @@ impl<'c, 't> ActivityRepo for PgContext<'c, 't> {
     async fn find_activity_by_id(
         &mut self,
         id: uuid::Uuid,
-    ) -> Result<Option<crate::core::models::activity::Activity>> {
-        let activity = sqlx::query_as::<_, crate::core::models::activity::Activity>(
+    ) -> Result<Option<Activity>> {
+        let activity = sqlx::query_as::<_, Activity>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities WHERE id = $1",
         )
         .bind(id)

@@ -4,17 +4,15 @@ mod common;
 mod macros;
 use std::str::FromStr;
 
-use gv_core::{
-    core::{
-        actions::{Action, CreateActivity, CreateUser},
-        models::{
-            activity::{Activity, ActivityName},
-            user::User,
-        },
-        validation::{Email, Username},
+use gv_core::core::{
+    actions::{Action, CreateActivity, CreateUser},
+    models::{
+        activity::{Activity, ActivityName},
+        user::User,
     },
-    postgres::controller::PgController,
+    validation::{Email, Username},
 };
+use gv_postgres::controller::PgController;
 use proptest::{prelude::*, test_runner::FileFailurePersistence};
 use test_strategy::proptest;
 use uuid::Uuid;

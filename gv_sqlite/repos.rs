@@ -1,6 +1,6 @@
 use sqlx::{Sqlite, Transaction};
 
-use crate::core::{
+use gv_core::core::{
     error::Result,
     models::{activity::Activity, user::User},
     repos::{ActivityRepo, AuthnRepo},

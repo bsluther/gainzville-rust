@@ -1,14 +1,12 @@
 use std::env;
 
-use gv_core::{
-    core::{
-        actions::{CreateActivity, CreateEntry},
-        models::{activity::Activity, entry::Entry},
-        repos::AuthnRepo,
-    },
-    generation::{ArbitraryFrom, GenerationContext, SimulationContext, gen_random_text},
-    postgres::{controller::PgController, repos::PgContext},
+use gv_core::core::{
+    actions::{CreateActivity, CreateEntry},
+    models::{activity::Activity, entry::Entry},
+    repos::AuthnRepo,
 };
+use gv_postgres::{controller::PgController, repos::PgContext};
+use generation::{ArbitraryFrom, GenerationContext, SimulationContext, gen_random_text};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]

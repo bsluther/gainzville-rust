@@ -1,17 +1,15 @@
 use std::env;
 
-use gv_core::{
-    core::{
-        actions::{Action, CreateEntry, CreateUser},
-        models::{
-            activity::{Activity, ActivityName},
-            entry::Entry,
-            user::User,
-        },
-        validation::{Email, Username},
+use gv_core::core::{
+    actions::{Action, CreateEntry, CreateUser},
+    models::{
+        activity::{Activity, ActivityName},
+        entry::Entry,
+        user::User,
     },
-    postgres::controller::PgController,
+    validation::{Email, Username},
 };
+use gv_postgres::controller::PgController;
 use sqlx::postgres::PgPoolOptions;
 use tracing::{Level, info, span};
 use uuid::Uuid;

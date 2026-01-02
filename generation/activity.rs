@@ -1,9 +1,7 @@
 use uuid::Uuid;
 
-use crate::{
-    core::models::activity::{Activity, ActivityName},
-    generation::{Arbitrary, ArbitraryFrom, gen_random_text, pick},
-};
+use gv_core::core::models::activity::{Activity, ActivityName};
+use crate::{Arbitrary, ArbitraryFrom, gen_random_text, pick};
 
 impl Arbitrary for ActivityName {
     fn arbitrary<R: rand::Rng, C: super::GenerationContext>(rng: &mut R, context: &C) -> Self {
