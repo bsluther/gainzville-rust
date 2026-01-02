@@ -4,7 +4,7 @@ mod common;
 mod macros;
 use std::str::FromStr;
 
-use gv_rust_2025_12::{
+use gv_core::{
     core::{
         actions::{Action, CreateActivity, CreateUser},
         models::{

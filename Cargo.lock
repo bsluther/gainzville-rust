@@ -474,7 +474,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gv-rust-2025-12"
+name = "gv_core"
 version = "0.1.0"
 dependencies = [
  "anarchist-readable-name-generator-lib",

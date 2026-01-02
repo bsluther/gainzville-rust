@@ -1,6 +1,6 @@
 use std::env;
 
-use gv_rust_2025_12::{
+use gv_core::{
     core::{
         actions::{Action, CreateUser},
         models::user::User,

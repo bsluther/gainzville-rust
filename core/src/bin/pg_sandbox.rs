@@ -1,9 +1,13 @@
 use std::env;
 
-use gv_rust_2025_12::{
+use gv_core::{
     core::{
-        actions::{Action, CreateActivity, CreateEntry, CreateUser},
-        models::{activity::ActivityName, entry::Entry, user::User},
+        actions::{Action, CreateEntry, CreateUser},
+        models::{
+            activity::{Activity, ActivityName},
+            entry::Entry,
+            user::User,
+        },
         validation::{Email, Username},
     },
     postgres::controller::PgController,
@@ -56,15 +60,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create Pull Up activity
     let pull_up_id = Uuid::new_v4();
-    let create_activity = CreateActivity {
-        actor_id: new_user_id.clone(),
-        activity_id: pull_up_id.clone(),
+    let activity = Activity {
+        id: pull_up_id,
+        owner_id: new_user_id,
+        source_activity_id: None,
         name: ActivityName::parse("Pull Up".to_string()).unwrap(),
         description: Some("Pull yourself up.".to_string()),
-        owner_id: new_user_id.clone(),
     };
+
     let tx = pg_controller
-        .run_action(Action::CreateActivity(create_activity))
+        .run_action(Action::CreateActivity(activity.into()))
         .await?;
     tx.commit().await?;
 
