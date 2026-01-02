@@ -1,4 +1,4 @@
-use gv_core::core::{models::activity::ActivityName, validation::Email};
+use gv_core::{models::activity::ActivityName, validation::Email};
 use rand::prelude::*;
 
 fn main() {

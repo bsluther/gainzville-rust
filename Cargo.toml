@@ -4,8 +4,8 @@ resolver = "2"
 members = [
     "core",
     "generation",
-    "gv_postgres",
-    "gv_sqlite",
+    "postgres",
+    "sqlite",
 ]
 
 [workspace.dependencies]

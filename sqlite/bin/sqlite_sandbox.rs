@@ -1,6 +1,6 @@
 use std::env;
 
-use gv_core::core::{
+use gv_core::{
     actions::{Action, CreateUser},
     models::user::User,
     validation::{Email, Username},

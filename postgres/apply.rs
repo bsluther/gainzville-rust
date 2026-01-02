@@ -1,7 +1,7 @@
 use sqlx::{Postgres, Transaction};
 use tracing::{info, instrument, warn};
 
-use gv_core::core::{
+use gv_core::{
     delta::{Delta, ModelDelta},
     error::Result,
     models::{activity::Activity, actor::Actor, entry::Entry, user::User},

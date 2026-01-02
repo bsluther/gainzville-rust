@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use gv_core::core::models::activity::{Activity, ActivityName};
+use gv_core::models::activity::{Activity, ActivityName};
 use crate::{Arbitrary, ArbitraryFrom, gen_random_text, pick};
 
 impl Arbitrary for ActivityName {

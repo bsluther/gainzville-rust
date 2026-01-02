@@ -1,4 +1,3 @@
-- [ ] Move core/core into core
 - [ ] Use seeded rng for determinism (e.g. for generating Uuid's).
 - [ ] There is going to be an issue when I want to run a test which runs multiple actions. The
 execute_action function on the controllers returns a tx but doesn't take one as an argument. Will

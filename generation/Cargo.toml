@@ -13,7 +13,7 @@ path = "bin/sim_sandbox.rs"
 [dependencies]
 # Core dependency
 gv_core = { path = "../core" }
-gv_postgres = { path = "../gv_postgres" }
+gv_postgres = { path = "../postgres" }
 
 # Workspace deps
 rand = { workspace = true }

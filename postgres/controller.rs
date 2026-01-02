@@ -1,24 +1,25 @@
-use sqlx::{Sqlite, SqlitePool, Transaction};
-use tracing::instrument;
+use sqlx::{PgPool, Postgres, Transaction};
+use tracing::{info, instrument};
 
-use gv_core::core::{
+use gv_core::{
     actions::{Action, ActionService},
     error::Result,
 };
-use crate::{apply::SqliteApply, repos::SqliteContext};
+use crate::{apply::PgApply, repos::PgContext};
 
-pub struct SqliteController {
-    pub pool: SqlitePool,
+#[derive(Debug)]
+pub struct PgController {
+    pub pool: PgPool,
 }
 
-impl SqliteController {
+impl PgController {
     #[instrument(skip_all)]
-    pub async fn run_action<'a>(&'a self, action: Action) -> Result<Transaction<'a, Sqlite>> {
-        // Begin Sqlite transaction.
+    pub async fn run_action<'a>(&'a self, action: Action) -> Result<Transaction<'a, Postgres>> {
+        // Begin PG transaction.
         let mut tx = self.pool.begin().await?;
 
-        // Create SqliteContext.
-        let pg_context = SqliteContext::new(&mut tx);
+        // Create PgContext.
+        let pg_context = PgContext::new(&mut tx);
 
         // Create mutation.
         let mx = match action {

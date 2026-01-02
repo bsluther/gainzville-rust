@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use gv_core::core::{actions::CreateActivity, models::activity::Activity};
+use gv_core::{actions::CreateActivity, models::activity::Activity};
 use crate::ArbitraryFrom;
 
 impl ArbitraryFrom<Vec<Uuid>> for CreateActivity {

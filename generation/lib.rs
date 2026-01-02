@@ -4,7 +4,7 @@ use fractional_index::FractionalIndex;
 use rand::{Rng, rand_core};
 use uuid::Uuid;
 
-use gv_core::core::{
+use gv_core::{
     actions::CreateEntry,
     models::{
         activity::Activity,

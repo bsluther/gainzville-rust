@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::core::{
+use crate::{
     error::Result,
     models::{activity::Activity, user::User},
     validation::{Email, Username},

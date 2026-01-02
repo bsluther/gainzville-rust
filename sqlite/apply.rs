@@ -1,6 +1,6 @@
 use sqlx::{Sqlite, Transaction};
 
-use gv_core::core::{
+use gv_core::{
     delta::{Delta, ModelDelta},
     error::Result,
     models::{activity::Activity, actor::Actor, entry::Entry, user::User},

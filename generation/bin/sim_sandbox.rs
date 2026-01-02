@@ -1,6 +1,6 @@
 use std::env;
 
-use gv_core::core::{
+use gv_core::{
     actions::{CreateActivity, CreateEntry},
     models::{activity::Activity, entry::Entry},
     repos::AuthnRepo,

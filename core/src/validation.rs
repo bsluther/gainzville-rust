@@ -1,4 +1,4 @@
-use crate::core::error::{DomainError, ValidationError};
+use crate::error::{DomainError, ValidationError};
 use sqlx::{Decode, Postgres, Sqlite, Type};
 
 // NOTE: Mostly AI generated.

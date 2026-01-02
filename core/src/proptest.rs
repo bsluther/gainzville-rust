@@ -1,4 +1,4 @@
-use crate::core::models::activity::{Activity, ActivityName};
+use crate::models::activity::{Activity, ActivityName};
 
 use super::models::user::User;
 use super::validation::{Email, Username};

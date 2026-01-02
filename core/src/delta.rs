@@ -1,4 +1,4 @@
-use crate::core::models::{activity::Activity, actor::Actor, entry::Entry, user::User};
+use crate::models::{activity::Activity, actor::Actor, entry::Entry, user::User};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]

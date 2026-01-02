@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::core::{
+use crate::{
     delta::{Delta, ModelDelta},
     error::{DomainError, Result},
     models::{

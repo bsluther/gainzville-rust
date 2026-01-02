@@ -1,4 +1,4 @@
-use crate::core::{
+use crate::{
     delta::Delta,
     validation::{Email, Username},
 };

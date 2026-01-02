@@ -1,4 +1,4 @@
-use crate::core::error::{Result, ValidationError};
+use crate::error::{Result, ValidationError};
 use sqlx::prelude::FromRow;
 use uuid::Uuid;
 
