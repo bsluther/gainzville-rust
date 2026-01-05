@@ -6,14 +6,21 @@ pub struct Entry {
     pub id: Uuid,
     pub activity_id: Option<Uuid>,
     pub owner_id: Uuid,
-    pub parent_id: Option<Uuid>,
-    pub frac_index: Option<FractionalIndex>,
+    pub position: Option<Position>,
     pub is_template: bool,
     pub display_as_sets: bool,
     pub is_sequence: bool,
 }
 
 impl Entry {
+    pub fn parent_id(&self) -> Option<Uuid> {
+        self.position.as_ref().map(|p| p.parent_id)
+    }
+
+    pub fn frac_index(&self) -> Option<&FractionalIndex> {
+        self.position.as_ref().map(|p| &p.frac_index)
+    }
+
     pub fn update(&self) -> EntryUpdater {
         EntryUpdater {
             old: self.clone(),
@@ -22,6 +29,7 @@ impl Entry {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Position {
     pub parent_id: Uuid,
     pub frac_index: FractionalIndex,
@@ -34,14 +42,8 @@ pub struct EntryUpdater {
 }
 
 impl EntryUpdater {
-    /// Atomically update both parent_id and frac_index (position in tree)
-    pub fn position(
-        mut self,
-        parent_id: Option<Uuid>,
-        frac_index: Option<FractionalIndex>,
-    ) -> Self {
-        self.new.parent_id = parent_id;
-        self.new.frac_index = frac_index;
+    pub fn position(mut self, position: Option<Position>) -> Self {
+        self.new.position = position;
         self
     }
 

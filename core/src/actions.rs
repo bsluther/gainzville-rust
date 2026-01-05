@@ -5,13 +5,49 @@ use crate::{
     delta::{Delta, ModelDelta},
     error::{DomainError, Result},
     models::{
-        activity::{Activity, ActivityName},
+        activity::Activity,
         actor::{Actor, ActorKind},
         entry::Entry,
         user::User,
     },
-    repos::{ActivityRepo, AuthnRepo, EntryRepo},
+    repos::{ActivityRepo, AuthnRepo},
 };
+
+/*
+Decisions
+- Do users duplicate activites added from another library?
+    - Always consider the sequence case first, it's more complcated.
+    - Should profiles be separate from activites? Again, consider the sequence case...
+*/
+
+/*
+Features to add:
+- Time
+    - Attribute or built-in
+- Sets
+- Attributes
+- Categories
+- Permissions
+*/
+
+/*
+Properties to test:
+- Forest (acyclic)
+*/
+
+/*
+Actions to add:
+    MoveEntry
+    - Check template and log entires are disjoint.
+    - Check acyclic.
+    CreateEntryFromTemplate
+    - Or should the client do the look-up, and just CreateEntry?
+    CreateActivityTemplate
+    - Or should each activity automatically have a template?
+    CreateAttribute
+    AddValueToEntry
+
+*/
 
 #[derive(Debug, Clone)]
 pub enum Action {
@@ -58,8 +94,6 @@ pub struct CreateUser {
     pub user: User,
 }
 
-// CreateEntryFromTemplate
-// CreateTemplateEntry
 #[derive(Debug, Clone)]
 pub struct CreateEntry {
     pub actor_id: Uuid,
@@ -167,7 +201,9 @@ impl ActionService {
         if action.actor_id != action.entry.owner_id {
             return Err(DomainError::Unauthorized(format!(
                 "actor '{}' is not authorized to create entry for owner '{}' in parent entry '{:?}'",
-                action.actor_id, action.entry.owner_id, action.entry.parent_id
+                action.actor_id,
+                action.entry.owner_id,
+                action.entry.position.map(|p| p.parent_id)
             )));
         }
 
@@ -180,16 +216,6 @@ impl ActionService {
                 )));
             }
         };
-
-        // Check that position/parent_id are both none or both some
-        if action.entry.parent_id.is_none() && action.entry.frac_index.is_some()
-            || action.entry.parent_id.is_some() && action.entry.frac_index.is_none()
-        {
-            return Err(DomainError::Other(
-                "create entry failed, parent_id and frac_index must both be Some or both be None"
-                    .to_string(),
-            ));
-        }
 
         let insert_entry = Delta::Insert {
             id: action.entry.id,

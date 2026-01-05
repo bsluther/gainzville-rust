@@ -1,11 +1,11 @@
 use sqlx::{PgPool, Postgres, Transaction};
-use tracing::{info, instrument};
+use tracing::instrument;
 
+use crate::{apply::PgApply, repos::PgContext};
 use gv_core::{
     actions::{Action, ActionService},
     error::Result,
 };
-use crate::{apply::PgApply, repos::PgContext};
 
 #[derive(Debug)]
 pub struct PgController {

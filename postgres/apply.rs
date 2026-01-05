@@ -183,8 +183,8 @@ impl PgApply for Delta<Entry> {
                     id,
                     new.activity_id,
                     new.owner_id,
-                    new.parent_id,
-                    new.frac_index.map(|f| f.to_string()),
+                    new.parent_id(),
+                    new.frac_index().map(|f| f.to_string()),
                     new.is_template,
                     new.display_as_sets,
                     new.is_sequence
@@ -205,8 +205,8 @@ impl PgApply for Delta<Entry> {
                     WHERE id = $6
                     "#,
                     new.activity_id,
-                    new.parent_id,
-                    new.frac_index.map(|f| f.to_string()),
+                    new.parent_id(),
+                    new.frac_index().map(|f| f.to_string()),
                     new.display_as_sets,
                     new.is_sequence,
                     id
