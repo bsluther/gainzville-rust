@@ -7,47 +7,11 @@ use crate::{
     models::{
         activity::Activity,
         actor::{Actor, ActorKind},
-        entry::Entry,
+        entry::{Entry, Position, Temporal},
         user::User,
     },
     repos::{ActivityRepo, AuthnRepo},
 };
-
-/*
-Decisions
-- Do users duplicate activites added from another library?
-    - Always consider the sequence case first, it's more complcated.
-    - Should profiles be separate from activites? Again, consider the sequence case...
-*/
-
-/*
-Features to add:
-- Time
-    - Attribute or built-in
-- Sets
-- Attributes
-- Categories
-- Permissions
-*/
-
-/*
-Properties to test:
-- Forest (acyclic)
-*/
-
-/*
-Actions to add:
-    MoveEntry
-    - Check template and log entires are disjoint.
-    - Check acyclic.
-    CreateEntryFromTemplate
-    - Or should the client do the look-up, and just CreateEntry?
-    CreateActivityTemplate
-    - Or should each activity automatically have a template?
-    CreateAttribute
-    AddValueToEntry
-
-*/
 
 #[derive(Debug, Clone)]
 pub enum Action {
@@ -107,6 +71,13 @@ impl From<Entry> for CreateEntry {
             entry: entry,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct MoveEntry {
+    pub actor_id: Uuid,
+    pub position: Option<Position>,
+    pub temporal: Temporal,
 }
 
 // TODO: relocate.

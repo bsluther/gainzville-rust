@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS entries (
     is_template BOOLEAN,
     display_as_sets BOOLEAN,
     is_sequence BOOLEAN,
+    start_time TIMESTAMPTZ,
+    end_time TIMESTAMPTZ,
+    duration_ms BIGINT
 
     CONSTRAINT entry_parent_frac_index_together
         CHECK ((parent_id IS NULL) = (frac_index IS NULL))

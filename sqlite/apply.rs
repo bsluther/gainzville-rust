@@ -117,7 +117,21 @@ impl SqliteApply for Delta<Entry> {
         match self {
             Delta::Insert { id, new } => {
                 sqlx::query(
-                    "INSERT INTO entries (id, activity_id, owner_id, parent_id, frac_index, is_template, display_as_sets, is_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                    r#"
+                    INSERT INTO entries (
+                        id, activity_id, 
+                        owner_id, 
+                        parent_id, 
+                        frac_index,
+                        is_template, 
+                        display_as_sets, 
+                        is_sequence,
+                        start_time, 
+                        end_time, 
+                        duration_ms
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    "#,
                 )
                 .bind(id.to_string())
                 .bind(new.activity_id.map(|u| u.to_string()))
@@ -127,18 +141,35 @@ impl SqliteApply for Delta<Entry> {
                 .bind(new.is_template)
                 .bind(new.display_as_sets)
                 .bind(new.is_sequence)
+                .bind(new.temporal.start().map(|dt| dt.to_rfc3339()))
+                .bind(new.temporal.end().map(|dt| dt.to_rfc3339()))
+                .bind(new.temporal.duration().map(|d| d as i64))
                 .execute(&mut **tx)
                 .await?;
             }
             Delta::Update { id, new, .. } => {
                 sqlx::query(
-                    "UPDATE entries SET activity_id = ?, parent_id = ?, frac_index = ?, display_as_sets = ?, is_sequence = ? WHERE id = ?"
+                    r#"
+                    UPDATE entries SET
+                        activity_id = ?, 
+                        parent_id = ?,
+                        frac_index = ?,
+                        display_as_sets = ?, 
+                        is_sequence = ?,
+                        start_time = ?, 
+                        end_time = ?,
+                        duration_ms = ?
+                    WHERE id = ?
+                    "#,
                 )
                 .bind(new.activity_id.map(|u| u.to_string()))
                 .bind(new.parent_id().map(|u| u.to_string()))
                 .bind(new.frac_index().map(|f| f.to_string()))
                 .bind(new.display_as_sets)
                 .bind(new.is_sequence)
+                .bind(new.temporal.start().map(|dt| dt.to_rfc3339()))
+                .bind(new.temporal.end().map(|dt| dt.to_rfc3339()))
+                .bind(new.temporal.duration().map(|d| d as i64))
                 .bind(id.to_string())
                 .execute(&mut **tx)
                 .await?;

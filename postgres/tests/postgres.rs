@@ -5,7 +5,7 @@ mod macros;
 use std::str::FromStr;
 
 use gv_core::{
-    actions::{Action, CreateActivity, CreateUser},
+    actions::{Action, CreateUser},
     models::{
         activity::{Activity, ActivityName},
         user::User,

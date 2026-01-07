@@ -6,12 +6,16 @@ Install sqlx-cli
 
 ### Migrations via sqlx
 
-Run migrations
+Run migrations (if cwd is postgres)
 ```sh
 sqlx migrate run
 sqlx migrate run --database-url postgres://gainzville:dev_password@localhost/gainzville_test
 ```
-
+Run migrations (from root)
+```sh
+sqlx migrate run --source postgres/migrations
+sqlx migrate run --database-url postgres://gainzville:dev_password@localhost/gainzville_test --source postgres/migrations
+```
 
 Add a new migration with the current timestamp
 `sqlx migrate add <name>`

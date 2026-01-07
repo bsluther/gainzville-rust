@@ -1,5 +1,6 @@
 use std::num::NonZeroUsize;
 
+use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use fractional_index::FractionalIndex;
 use rand::{Rng, rand_core};
 use uuid::Uuid;
@@ -90,6 +91,22 @@ impl Arbitrary for Uuid {
     }
 }
 
+impl Arbitrary for DateTime<Utc> {
+    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+        let min = chrono::DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z")
+            .expect("RFC3339 string must be valid");
+        let max = chrono::DateTime::parse_from_rfc3339("2050-12-12T23:59:59Z")
+            .expect("RFC3339 string must be valid");
+
+        let diff = max - min;
+        let diff_seconds = diff.num_seconds();
+        let random_seconds = rng.random_range(0..=diff_seconds);
+
+        let dt = min + Duration::seconds(random_seconds);
+        dt.to_utc()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,9 +126,19 @@ mod tests {
             let text = gen_random_text(&mut rng, 0..100);
             assert!(
                 text.split(" ").count() < 100,
-                "Length of text should be in range 0..100, found length = {}",
+                "Number of words should be in range 0..100, found length = {}",
                 text.len()
             );
+        }
+    }
+
+    #[test]
+    /// Check DateTime<Utc> generation doesn't fail.
+    fn test_arbitrary_datetime() {
+        let context = SimulationContext {};
+        let mut rng = rand::rng();
+        for _ in 0..10_000 {
+            DateTime::<Utc>::arbitrary(&mut rng, &context);
         }
     }
 }

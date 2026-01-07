@@ -4,7 +4,7 @@ use gv_core::{
     actions::{Action, CreateEntry, CreateUser},
     models::{
         activity::{Activity, ActivityName},
-        entry::Entry,
+        entry::{Entry, Temporal},
         user::User,
     },
     validation::{Email, Username},
@@ -81,6 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             is_template: false,
             display_as_sets: false,
             is_sequence: false,
+            temporal: Temporal::None,
         },
     };
     let tx = pg_controller

@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS entries (
     is_template INTEGER,  -- SQLite uses INTEGER for BOOLEAN (0 = false, 1 = true)
     display_as_sets INTEGER,
     is_sequence INTEGER,
+    start_time TEXT,
+    end_time TEXT,
+    duration_ms INTEGER,
     CONSTRAINT entry_parent_frac_index_together
         CHECK ((parent_id IS NULL) = (frac_index IS NULL))
 );

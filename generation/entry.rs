@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
 use rand::Rng;
 use uuid::Uuid;
@@ -7,7 +8,7 @@ use gv_core::{
     actions::CreateEntry,
     models::{
         activity::Activity,
-        entry::{Entry, Position},
+        entry::{Entry, Position, Temporal},
     },
 };
 
@@ -70,6 +71,8 @@ impl Arbitrary for Entry {
                 parent_id: Uuid::arbitrary(rng, context),
                 frac_index: FractionalIndex::arbitrary(rng, context),
             }),
+            // TODO: generate arbitrarily
+            temporal: Temporal::None,
         }
     }
 }
@@ -154,6 +157,38 @@ impl ArbitraryFrom<(&Vec<Activity>, &Vec<Entry>)> for Entry {
             is_sequence: rng.random_bool(0.5),
             is_template: false,
             position,
+            // TODO: generate arbitrarily
+            temporal: Temporal::None,
+        }
+    }
+}
+
+impl Arbitrary for Temporal {
+    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+        match rng.random_range(0..=6) {
+            0 => Temporal::None,
+            1 => Temporal::Start {
+                start: DateTime::<Utc>::arbitrary(rng, context),
+            },
+            2 => Temporal::End {
+                end: DateTime::<Utc>::arbitrary(rng, context),
+            },
+            3 => Temporal::Duration {
+                duration: rng.random(),
+            },
+            4 => Temporal::StartAndEnd {
+                start: DateTime::<Utc>::arbitrary(rng, context),
+                end: DateTime::<Utc>::arbitrary(rng, context),
+            },
+            5 => Temporal::StartAndDuration {
+                start: DateTime::<Utc>::arbitrary(rng, context),
+                duration_ms: rng.random(),
+            },
+            6 => Temporal::DurationAndEnd {
+                duration_ms: rng.random(),
+                end: DateTime::<Utc>::arbitrary(rng, context),
+            },
+            _ => unreachable!(),
         }
     }
 }
@@ -172,6 +207,17 @@ impl ArbitraryFrom<(Vec<Activity>, Vec<Entry>)> for CreateEntry {
 mod tests {
     use super::*;
     use crate::SimulationContext;
+
+    #[test]
+    /// Test that generation of temporals doesn't fail.
+    fn test_arbitrary_temporal() {
+        let mut rng = rand::rng();
+        let context = SimulationContext {};
+
+        for _ in 0..10_000 {
+            Temporal::arbitrary(&mut rng, &context);
+        }
+    }
 
     #[test]
     fn test_arbitrary_fractional_index() {

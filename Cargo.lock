@@ -445,6 +445,7 @@ name = "generation"
 version = "0.1.0"
 dependencies = [
  "anarchist-readable-name-generator-lib",
+ "chrono",
  "dotenvy",
  "fractional_index",
  "gv_core",

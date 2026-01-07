@@ -1,4 +1,34 @@
-- [ ] Refactor `Entry` to use `Position`.
+Decisions:
+- Do users duplicate activites added from another library?
+    - Always consider the sequence case first, it's more complcated.
+    - Should profiles be separate from activites? Again, consider the sequence case...
+
+Features to add:
+- Time
+    - Attribute or built-in?
+- Sets
+- Attributes
+- Categories
+- Permissions
+
+Properties to test:
+- Forest (acyclic)
+- No dangling parent pointers
+- Undo/redo roundtrip
+
+Actions to add:
+    MoveEntry
+    - Check template entries never have parent pointer to log entries and vica versa.
+    - Check acyclic.
+    CreateEntryFromTemplate
+    - Or should the client do the look-up, and just CreateEntry?
+    CreateActivityTemplate
+    - Or should each activity automatically have a template?
+    CreateAttribute
+    AddValueToEntry
+    UpdateValue
+
+- [ ] Consider wrapping actions in a struct that provides actor_id.
 
 - [ ] Refactor `ArbitraryFrom` impls to take slices rather an vec refs.
 
@@ -6,7 +36,12 @@
 
 - [ ] Use seeded rng for determinism (e.g. for generating Uuid's).
 
-- [ ] Consider using a SortedFracitionalIndices type to avoid having to defensively copy/sort
+- [ ] Implement Delete* actions.
+    - Should I use tombstones for soft-deletes? If I log all mutations/deltas, then I techincally
+    don't need soft-deletes, since I retain the information needed to reconstruct. But it could be
+    preferrable to use soft-deletes for other reasons. Not sure.
+
+- [ ] Consider using a SortedFractionalIndices type to avoid having to defensively copy/sort
 lists of fractional indices.
 
 - [ ] There is going to be an issue when I want to run a test which runs multiple actions. The
