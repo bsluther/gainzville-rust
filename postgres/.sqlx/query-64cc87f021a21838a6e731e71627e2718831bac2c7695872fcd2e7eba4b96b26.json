@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    INSERT INTO users (actor_id, username, email)\n                    VALUES ($1, $2, $3)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "64cc87f021a21838a6e731e71627e2718831bac2c7695872fcd2e7eba4b96b26"
+}

@@ -28,6 +28,8 @@ Actions to add:
     AddValueToEntry
     UpdateValue
 
+- [ ] Consider refactoring `Position` to have a `Root` variant (rather than `Option<Position>`).
+
 - [ ] Consider wrapping actions in a struct that provides actor_id.
 
 - [ ] Refactor `ArbitraryFrom` impls to take slices rather an vec refs.

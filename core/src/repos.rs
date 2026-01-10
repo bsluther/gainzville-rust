@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::{
     error::Result,
-    models::{activity::Activity, user::User},
+    models::{activity::Activity, entry::Entry, user::User},
     validation::{Email, Username},
 };
 
@@ -18,6 +18,13 @@ pub trait AuthnRepo {
 pub trait ActivityRepo {
     async fn find_activity_by_id(&mut self, id: Uuid) -> Result<Option<Activity>>;
 }
+
+#[allow(async_fn_in_trait)]
 pub trait EntryRepo {
-    // async fn find_
+    /// Get the ids of the provided entry's ancestors.
+    /// Returns ancestor ids in ascending order including the provided entry,
+    /// i.e. [entry, parent, grandparent, ..., root].
+    /// If the entry is not found, returns error.
+    async fn find_ancestors(&mut self, entry_id: Uuid) -> Result<Vec<Uuid>>;
+    async fn find_entry_by_id(&mut self, entry_id: Uuid) -> Result<Option<Entry>>;
 }

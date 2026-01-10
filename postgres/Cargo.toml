@@ -21,12 +21,14 @@ gv_core = { path = "../core" }
 # Workspace deps
 sqlx = { workspace = true }
 tracing = { workspace = true }
+itertools = { workspace = true }
 
 # Binary dependencies
 tokio = { workspace = true }
 dotenvy = { workspace = true }
 uuid = { workspace = true }
 tracing-subscriber = { workspace = true }
+fractional_index = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

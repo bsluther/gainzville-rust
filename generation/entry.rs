@@ -158,7 +158,7 @@ impl ArbitraryFrom<(&Vec<Activity>, &Vec<Entry>)> for Entry {
             is_template: false,
             position,
             // TODO: generate arbitrarily
-            temporal: Temporal::None,
+            temporal: Temporal::arbitrary(rng, context),
         }
     }
 }
@@ -209,8 +209,8 @@ mod tests {
     use crate::SimulationContext;
 
     #[test]
-    /// Test that generation of temporals doesn't fail.
-    fn test_arbitrary_temporal() {
+    /// Test that generation of temporals doesn't panic.
+    fn test_arbitrary_temporal_does_not_panic() {
         let mut rng = rand::rng();
         let context = SimulationContext {};
 
@@ -220,8 +220,8 @@ mod tests {
     }
 
     #[test]
-    fn test_arbitrary_fractional_index() {
-        // Test that generation of random fractional indices doesn't fail.
+    /// Test that generation of fractional indices doesn't panic.
+    fn test_arbitrary_fractional_index_does_not_panic() {
         let mut rng = rand::rng();
         let context = SimulationContext {};
 

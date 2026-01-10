@@ -1,11 +1,11 @@
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use tracing::instrument;
 
+use crate::{apply::SqliteApply, repos::SqliteContext};
 use gv_core::{
     actions::{Action, ActionService},
     error::Result,
 };
-use crate::{apply::SqliteApply, repos::SqliteContext};
 
 pub struct SqliteController {
     pub pool: SqlitePool,
@@ -27,6 +27,7 @@ impl SqliteController {
             }
             Action::CreateUser(action) => ActionService::create_user(pg_context, action).await?,
             Action::CreateEntry(action) => ActionService::create_entry(pg_context, action).await?,
+            Action::MoveEntry(action) => ActionService::move_entry(pg_context, action).await?,
         };
 
         // Apply deltas.

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            WITH RECURSIVE ancestors AS (\n                SELECT id, parent_id, 0 as dist\n                    FROM entries\n                    WHERE id = ?\n                UNION ALL\n                SELECT e.id, e.parent_id, a.dist + 1 as dist\n                    FROM entries e\n                    INNER JOIN ancestors a ON a.parent_id = e.id\n            )\n            SELECT id, parent_id FROM ancestors\n            ORDER BY dist\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "parent_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "b26ebf1146c888db46ce7e5025d85307f75da5a9adb971c4add40e6042a5fe03"
+}

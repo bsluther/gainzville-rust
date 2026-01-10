@@ -1,9 +1,11 @@
+use itertools::Itertools;
 use sqlx::{Sqlite, Transaction};
 
 use gv_core::{
-    error::Result,
+    error::{DomainError, Result},
+    models::entry::{Entry, EntryRow},
     models::{activity::Activity, user::User},
-    repos::{ActivityRepo, AuthnRepo},
+    repos::{ActivityRepo, AuthnRepo, EntryRepo},
     validation::{Email, Username},
 };
 
@@ -73,5 +75,79 @@ impl<'c, 't> ActivityRepo for SqliteContext<'c, 't> {
         .await?;
 
         Ok(activity)
+    }
+}
+
+impl<'c, 't> EntryRepo for SqliteContext<'c, 't> {
+    async fn find_ancestors(&mut self, entry_id: uuid::Uuid) -> Result<Vec<uuid::Uuid>> {
+        let entry_id_str = entry_id.to_string();
+        let results = sqlx::query!(
+            r#"
+            WITH RECURSIVE ancestors AS (
+                SELECT id, parent_id, 0 as dist
+                    FROM entries
+                    WHERE id = ?
+                UNION ALL
+                SELECT e.id, e.parent_id, a.dist + 1 as dist
+                    FROM entries e
+                    INNER JOIN ancestors a ON a.parent_id = e.id
+            )
+            SELECT id, parent_id FROM ancestors
+            ORDER BY dist
+            "#,
+            entry_id_str
+        )
+        .fetch_all(&mut **self.tx)
+        .await?;
+
+        if results.is_empty() {
+            return Err(DomainError::Other("entry not found".to_string()));
+        }
+
+        // Validate parent-child chain
+        for (child, parent) in results.iter().tuple_windows() {
+            let child_parent = child
+                .parent_id
+                .as_ref()
+                .expect("non-root entries must have parent_id");
+            let parent_id = parent.id.as_ref().expect("all entries must have id");
+            assert_eq!(
+                child_parent, parent_id,
+                "broken ancestor chain: child parent_id {} != parent id {}",
+                child_parent, parent_id
+            );
+        }
+
+        // Last row must be root (no parent)
+        assert!(
+            results.last().unwrap().parent_id.is_none(),
+            "root must have no parent"
+        );
+
+        // Extract IDs - SQLite returns UUIDs as strings, so parse them back
+        let ancestors = results
+            .into_iter()
+            .map(|r| {
+                let id_str = r.id.expect("all entries must have id");
+                uuid::Uuid::parse_str(&id_str).expect("all entries must have valid UUID ids")
+            })
+            .collect();
+
+        Ok(ancestors)
+    }
+
+    async fn find_entry_by_id(&mut self, entry_id: uuid::Uuid) -> Result<Option<Entry>> {
+        sqlx::query_as::<_, EntryRow>(
+            r#"
+            SELECT id, owner_id, activity_id, parent_id, frac_index, is_template, display_as_sets, is_sequence, start_time, end_time, duration_ms
+            FROM entries
+            WHERE id = ?
+            "#,
+        )
+        .bind(entry_id.to_string())
+        .fetch_optional(&mut **self.tx)
+        .await?
+        .map(|e| e.to_entry())
+        .transpose()
     }
 }

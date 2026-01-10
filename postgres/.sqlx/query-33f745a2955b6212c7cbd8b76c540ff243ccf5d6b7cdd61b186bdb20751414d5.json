@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE entries\n                    SET\n                        activity_id = $1,\n                        parent_id = $2,\n                        frac_index = $3,\n                        display_as_sets = $4,\n                        is_sequence = $5,\n                        start_time = $6,\n                        end_time = $7,\n                        duration_ms = $8\n                    WHERE id = $9\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bool",
+        "Bool",
+        "Timestamptz",
+        "Timestamptz",
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "33f745a2955b6212c7cbd8b76c540ff243ccf5d6b7cdd61b186bdb20751414d5"
+}

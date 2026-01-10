@@ -10,6 +10,8 @@ pub enum DomainError {
     Unauthorized(String),
     #[error("Validation error: {0}")]
     Validation(#[from] ValidationError),
+    #[error("Consistency error: {0}")]
+    Consistency(String),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -20,6 +22,8 @@ pub enum ValidationError {
     InvalidUsername(String),
     #[error("Invalid activity name: {0}")]
     InvalidActivityName(String),
+    #[error("Other: {0}")]
+    Other(String),
 }
 
 pub type Result<T> = std::result::Result<T, DomainError>;

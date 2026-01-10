@@ -1,3 +1,5 @@
+use std::ops::RangeBounds;
+
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
@@ -10,7 +12,7 @@ use crate::{
         entry::{Entry, Position, Temporal},
         user::User,
     },
-    repos::{ActivityRepo, AuthnRepo},
+    repos::{ActivityRepo, AuthnRepo, EntryRepo},
 };
 
 #[derive(Debug, Clone)]
@@ -18,6 +20,7 @@ pub enum Action {
     CreateUser(CreateUser),
     CreateActivity(CreateActivity),
     CreateEntry(CreateEntry),
+    MoveEntry(MoveEntry),
 }
 
 impl From<CreateUser> for Action {
@@ -76,6 +79,7 @@ impl From<Entry> for CreateEntry {
 #[derive(Debug, Clone)]
 pub struct MoveEntry {
     pub actor_id: Uuid,
+    pub entry_id: Uuid,
     pub position: Option<Position>,
     pub temporal: Temporal,
 }
@@ -198,6 +202,64 @@ impl ActionService {
             timestamp: Utc::now(),
             action: Action::CreateEntry(action),
             changes: vec![insert_entry.into()],
+        })
+    }
+
+    /// Move an entry by changing it's parent, fractional index, and temporal. Does not allow
+    /// moving to root without a defined start or end time; while the model allows for this, it
+    /// should be intentional and utilize a different action.
+    pub async fn move_entry(mut ctx: impl EntryRepo, action: MoveEntry) -> Result<Mutation> {
+        // Moving entry should exist.
+        let Some(entry) = ctx.find_entry_by_id(action.entry_id).await? else {
+            return Err(DomainError::Consistency(
+                "entry that does not exist cannot be moved".to_string(),
+            ));
+        };
+
+        if let Some(position) = &action.position {
+            // Check for cycles
+            let parent_ancestors: Vec<Uuid> = ctx.find_ancestors(position.parent_id).await?;
+            if parent_ancestors.contains(&action.entry_id) {
+                return Err(DomainError::Consistency(
+                    "move_entry would create a cycle".to_string(),
+                ));
+            }
+
+            // Check parent and child are both template or log entries
+            let parent = ctx
+                .find_entry_by_id(action.entry_id)
+                .await?
+                .expect("parent should exist after earlier condition");
+            if entry.is_template && !parent.is_template {
+                return Err(DomainError::Consistency(
+                    "template entry cannot be a child of a log entry".to_string(),
+                ));
+            }
+            if !entry.is_template && parent.is_template {
+                return Err(DomainError::Consistency(
+                    "log entry cannot be a child of a template entry".to_string(),
+                ));
+            }
+        } else {
+            // Moving to root, check that start or end time is defined.
+            if action.temporal.start().is_none() && action.temporal.end().is_none() {
+                return Err(DomainError::Consistency(
+                    "root entry must have defined start or end time".to_string(),
+                ));
+            }
+        }
+
+        let update_delta = entry
+            .update()
+            .position(action.position.clone())
+            .temporal(action.temporal.clone())
+            .to_delta();
+
+        Ok(Mutation {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            action: Action::MoveEntry(action),
+            changes: vec![update_delta.into()],
         })
     }
 }

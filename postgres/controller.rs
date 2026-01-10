@@ -28,6 +28,7 @@ impl PgController {
             }
             Action::CreateUser(action) => ActionService::create_user(pg_context, action).await?,
             Action::CreateEntry(action) => ActionService::create_entry(pg_context, action).await?,
+            Action::MoveEntry(action) => ActionService::move_entry(pg_context, action).await?,
         };
 
         // Apply deltas.

@@ -1,18 +1,17 @@
 use std::env;
 
+use generation::{ArbitraryFrom, SimulationContext};
 use gv_core::{
     actions::{CreateActivity, CreateEntry},
     models::{activity::Activity, entry::Entry},
     repos::AuthnRepo,
 };
 use gv_postgres::{controller::PgController, repos::PgContext};
-use generation::{ArbitraryFrom, GenerationContext, SimulationContext, gen_random_text};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = dotenvy::dotenv();
-
     let db_url = env::var("DATABASE_URL").expect("Database URL must be set in env.");
 
     let pool = PgPoolOptions::new()
@@ -47,20 +46,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for activity in activities {
         let create_activity: CreateActivity = activity.into();
-        pg_controller
-            .run_action(create_activity.into())
-            .await?
-            .commit()
-            .await?;
+        // This won't work: the _tx is dropped, which rolls back, and thus the future actions
+        // which depend on earlier ones fail referential integrity.
+        let _tx = pg_controller.run_action(create_activity.into()).await?;
+        // can i just not commit here?
+        // .commit()
+        // .await?;
     }
 
     for entry in entries {
         let create_entry: CreateEntry = entry.into();
-        pg_controller
-            .run_action(create_entry.into())
-            .await?
-            .commit()
-            .await?;
+        let _tx = pg_controller.run_action(create_entry.into()).await?;
+        // .commit()
+        // .await?;
     }
 
     Ok(())

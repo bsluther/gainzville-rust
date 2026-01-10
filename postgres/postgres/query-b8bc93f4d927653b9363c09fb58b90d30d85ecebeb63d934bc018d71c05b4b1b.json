@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE activities\n                    SET\n                        owner_id = $1,\n                        source_activity_id = $2,\n                        name = $3,\n                        description = $4\n                    WHERE id = $5\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b8bc93f4d927653b9363c09fb58b90d30d85ecebeb63d934bc018d71c05b4b1b"
+}

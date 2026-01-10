@@ -1,4 +1,6 @@
 /target
+
+# Environment files
 .env
 
 # Backup files from rustfmt

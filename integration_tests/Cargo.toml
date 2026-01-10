@@ -1,25 +1,19 @@
 [package]
-name = "gv_sqlite"
+name = "integration_tests"
 version = "0.1.0"
 edition = "2024"
 
-[lib]
-path = "lib.rs"
+# [lib] section not needed - defaults to src/lib.rs
 
-[[bin]]
-name = "sqlite_sandbox"
-path = "bin/sqlite_sandbox.rs"
 
 [dependencies]
-# Core dependency
 gv_core = { path = "../core" }
-
-# Workspace deps
+gv_postgres = { path = "../postgres" }
+generation = { path = "../generation" }
 sqlx = { workspace = true }
 tracing = { workspace = true }
-itertools = { workspace = true }
-
-# Binary dependencies
 tokio = { workspace = true }
 dotenvy = { workspace = true }
 uuid = { workspace = true }
+rand = { workspace = true }
+tracing-subscriber = { workspace = true }
