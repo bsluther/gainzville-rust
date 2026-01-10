@@ -263,4 +263,8 @@ impl EntryUpdater {
             new: self.new,
         }
     }
+
+    pub fn to_entry(self) -> Entry {
+        self.new
+    }
 }

@@ -217,7 +217,7 @@ impl ActionService {
         };
 
         if let Some(position) = &action.position {
-            // Check for cycles
+            // Check for cycles.
             let parent_ancestors: Vec<Uuid> = ctx.find_ancestors(position.parent_id).await?;
             if parent_ancestors.contains(&action.entry_id) {
                 return Err(DomainError::Consistency(
@@ -225,11 +225,19 @@ impl ActionService {
                 ));
             }
 
-            // Check parent and child are both template or log entries
             let parent = ctx
                 .find_entry_by_id(action.entry_id)
                 .await?
                 .expect("parent should exist after earlier condition");
+
+            // Destination entry must be a sequence.
+            if !parent.is_sequence {
+                return Err(DomainError::Consistency(
+                    "cannot move entry into a non-sequence entry".to_string(),
+                ));
+            }
+
+            // Check parent and child are both template or log entries
             if entry.is_template && !parent.is_template {
                 return Err(DomainError::Consistency(
                     "template entry cannot be a child of a log entry".to_string(),

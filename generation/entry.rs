@@ -40,7 +40,6 @@ impl Forest {
     }
 }
 
-// Not sure this works, trying to use for a test.
 impl Arbitrary for FractionalIndex {
     fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
         // Found the terminator in the fractional_index internals, seems to work.
@@ -57,7 +56,7 @@ impl Arbitrary for FractionalIndex {
     }
 }
 
-// TODO: should generate Options variants probabilistically.
+// TODO: should generate all Options variants probabilistically.
 impl Arbitrary for Entry {
     fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
         Entry {

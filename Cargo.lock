@@ -748,6 +748,7 @@ name = "integration_tests"
 version = "0.1.0"
 dependencies = [
  "dotenvy",
+ "fractional_index",
  "generation",
  "gv_core",
  "gv_postgres",
