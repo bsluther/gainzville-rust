@@ -28,6 +28,10 @@ Actions to add:
     AddValueToEntry
     UpdateValue
 
+- [ ] Consider refactoring repo `context`.
+    - Take transaction as an argument?
+    - Can I wrap a Sqlite and Postgres transaction in an enum?
+
 - [ ] Consider refactoring `Position` to have a `Root` variant (rather than `Option<Position>`).
 
 - [ ] Consider wrapping actions in a struct that provides actor_id.
@@ -52,6 +56,7 @@ need to pass the tx as an argument to be able to rollback the transaction, which
 parallel tests because it isolated each test from each other through the transaction boundary and
 never commits.
     - Is it as easy creating an alternate constructor which takes tx as an arg instead of pool?
+    
 - [ ] Use `garde` to validate types like Email, Username, etc.
 
 - [ ] Maybe: write macros to do one or both of
