@@ -1,32 +1,14 @@
-use std::time::Duration;
-
 use crate::components::Entry;
-use dioxus::{html::form::action, prelude::*};
-use futures_util::StreamExt;
+use dioxus::prelude::*;
+use futures_util::{Stream, StreamExt};
 use gv_core::{
     actions::CreateActivity,
+    error::Result,
     models::activity::{Activity, ActivityName},
     SYSTEM_ACTOR_ID,
 };
 use gv_sqlite::client::Client;
 use uuid::Uuid;
-
-/// Custom hook that creates a signal updated by a fake stream
-fn use_fake_stream() -> Signal<String> {
-    let mut signal = use_signal(|| "Initial data".to_string());
-
-    use_resource(move || async move {
-        let mut fake_stream =
-            futures_util::stream::iter(["Chunk 1", "Chunk 2", "Chunk 3", "Final chunk"]);
-
-        while let Some(chunk) = fake_stream.next().await {
-            signal.set(chunk.to_string());
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-        }
-    });
-
-    signal
-}
 
 /// Custom hook that streams activities from the database
 fn use_activities_stream() -> Signal<Vec<Activity>> {
@@ -51,24 +33,52 @@ fn use_activities_stream() -> Signal<Vec<Activity>> {
     signal
 }
 
-/// The Home page component that will be rendered when the current route is `[Route::Home]`
+/// Create a signal that reads from a stream. The stream must return a result, which will be mapped
+/// into an option. The stream returns None before the first item is pulled from the stream or if
+/// there is an error.
+fn use_stream<T, S, F>(stream_fn: F) -> Signal<Option<T>>
+where
+    T: 'static + Clone,
+    S: 'static + Stream<Item = Result<T>>,
+    F: Fn() -> S + 'static,
+{
+    let mut signal = use_signal(|| None);
+
+    use_resource(move || {
+        let stream = stream_fn();
+        tracing::debug!("Test");
+        async move {
+            tokio::pin!(stream);
+
+            while let Some(result) = stream.next().await {
+                match result {
+                    Ok(result) => signal.set(Some(result)),
+                    Err(e) => eprintln!("Error reading stream in use_stream: {e}"),
+                }
+            }
+        }
+    });
+    signal
+}
+
 #[component]
 pub fn EntrySandbox() -> Element {
-    let stream_data = use_fake_stream();
-    let activities = use_activities_stream();
+    let client = consume_context::<Client>();
+    let activities = use_stream(move || client.stream_activities());
 
     rsx! {
         div { class: "entry-list",
             Entry { is_sequence: true }
             Entry { is_sequence: false }
         }
-        div { {stream_data} }
         CreateActivityComponent {}
         div { class: "p-4",
-            h3 { "Activities ({activities.read().len()}):" }
+            h3 { "Activities ({activities.read().as_ref().map_or(0, |a| a.len())}):" }
             ul {
-                for activity in activities.read().iter() {
-                    li { "{activity.name.to_string()}" }
+                if let Some(activities) = activities() {
+                    for activity in activities.iter() {
+                        li { "{activity.name.to_string()}" }
+                    }
                 }
             }
         }

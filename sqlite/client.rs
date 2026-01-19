@@ -42,7 +42,7 @@ impl Client {
             .map_err(|e| gv_core::error::DomainError::Other(e.to_string()))
     }
 
-    pub fn stream_activities(&self) -> impl Stream<Item = Result<Vec<Activity>>> {
+    pub fn stream_activities(&self) -> impl Stream<Item = Result<Vec<Activity>>> + use<> {
         let pool = self.controller.pool.clone();
         let mut change_rx = self.change_sender.subscribe();
 

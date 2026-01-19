@@ -4,9 +4,11 @@ use uuid::Uuid;
 
 use gv_core::{
     error::{DomainError, Result},
-    models::activity::{Activity, ActivityName},
-    models::entry::{Entry, EntryRow},
-    models::user::User,
+    models::{
+        activity::{Activity, ActivityName},
+        entry::{Entry, EntryRow},
+        user::User,
+    },
     repos::{ActivityRepo, AuthnRepo, EntryRepo},
     validation::{Email, Username},
 };

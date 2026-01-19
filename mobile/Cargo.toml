@@ -14,6 +14,7 @@ gv_core = { path = "../core" }
 uuid = { workspace = true }
 futures-util = "0.3.31"
 tokio = { version = "1", features = ["time"] } 
+tracing = { workspace = true }
 
 [features]
 default = ["mobile"]

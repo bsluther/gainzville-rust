@@ -3165,6 +3165,7 @@ dependencies = [
  "gv_core",
  "gv_sqlite",
  "tokio",
+ "tracing",
  "uuid",
 ]
 

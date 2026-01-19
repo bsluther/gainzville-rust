@@ -1,3 +1,4 @@
+use sqlx::Executor;
 use uuid::Uuid;
 
 use crate::{
