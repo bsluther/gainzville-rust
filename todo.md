@@ -28,9 +28,27 @@ Actions to add:
     AddValueToEntry
     UpdateValue
 
+- [ ] Add initializers to model types, migrate to using those.
+
 - [ ] Consider refactoring repo `context`.
     - Take transaction as an argument?
     - Can I wrap a Sqlite and Postgres transaction in an enum?
+
+- [ ] Consider extracting repo queries as functions that return the query without calling fetch.
+    - Allows caller to choose executor (pool vs transaction) and fetch method.
+    - Example:
+    ```rust
+    fn find_activity_by_id_query(id: Uuid) -> sqlx::QueryAs<'static, sqlx::Sqlite, Activity, SqliteArguments<'static>> {
+        sqlx::query_as::<_, Activity>(
+            "SELECT id, owner_id, source_activity_id, name, description FROM activities WHERE id = ?",
+        )
+        .bind(id)
+    }
+
+    // Usage:
+    find_activity_by_id_query(id).fetch_optional(&pool).await?;
+    find_activity_by_id_query(id).fetch_optional(&mut *tx).await?;
+    ```
 
 - [ ] Consider refactoring `Position` to have a `Root` variant (rather than `Option<Position>`).
 

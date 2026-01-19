@@ -81,6 +81,16 @@ impl<'c, 't> ActivityRepo for PgContext<'c, 't> {
 
         Ok(activity)
     }
+
+    async fn all_activities(&mut self) -> Result<Vec<Activity>> {
+        let activities = sqlx::query_as::<_, Activity>(
+            "SELECT id, owner_id, source_activity_id, name, description FROM activities",
+        )
+        .fetch_all(&mut **self.tx)
+        .await?;
+
+        Ok(activities)
+    }
 }
 
 impl<'c, 't> EntryRepo for PgContext<'c, 't> {

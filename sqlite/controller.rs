@@ -7,6 +7,7 @@ use gv_core::{
     error::Result,
 };
 
+#[derive(Debug, Clone)]
 pub struct SqliteController {
     pub pool: SqlitePool,
 }

@@ -13,6 +13,8 @@ path = "bin/sqlite_sandbox.rs"
 [dependencies]
 # Core dependency
 gv_core = { path = "../core" }
+futures-core = "0.3"
+async-stream = "0.3"
 
 # Workspace deps
 sqlx = { workspace = true }

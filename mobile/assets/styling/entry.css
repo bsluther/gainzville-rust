@@ -1,0 +1,22 @@
+:root {
+    --entry-color: gray;
+    --sequence-color: white;
+}
+
+#entry {
+    font-size: 16px;
+}
+
+#entry .header {
+    padding-block: var(--spacing-sm);
+    padding-inline: var(--spacing-md);
+    border-radius: 4px;
+}
+
+#entry.scalar .header {
+    background-color: var(--entry-color);
+}
+
+#entry.sequence .header {
+    border: 1px solid var(--sequence-color);
+}

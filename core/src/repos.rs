@@ -17,6 +17,7 @@ pub trait AuthnRepo {
 #[allow(async_fn_in_trait)]
 pub trait ActivityRepo {
     async fn find_activity_by_id(&mut self, id: Uuid) -> Result<Option<Activity>>;
+    async fn all_activities(&mut self) -> Result<Vec<Activity>>;
 }
 
 #[allow(async_fn_in_trait)]

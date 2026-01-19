@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
-use rand::Rng;
 use sqlx::prelude::FromRow;
 use uuid::Uuid;
 
@@ -54,7 +53,7 @@ pub struct EntryRow {
 }
 
 impl EntryRow {
-    /// Convert this EntryRow to an Entry, may fail if constraints are violated.
+    /// Convert this EntryRow to an Entry. May fail if constraints are violated.
     // Implement TryFrom instead?
     pub fn to_entry(self) -> Result<Entry> {
         let duration_ms: Option<u64> =
@@ -72,7 +71,7 @@ impl EntryRow {
             id: self.id,
             activity_id: self.activity_id,
             owner_id: self.owner_id,
-            position: Position::parse_optional(self.parent_id, self.frac_index)?,
+            position: Position::parse(self.parent_id, self.frac_index)?,
             is_template: self.is_template,
             is_sequence: self.is_sequence,
             display_as_sets: self.display_as_sets,
@@ -88,10 +87,7 @@ pub struct Position {
 }
 
 impl Position {
-    pub fn parse_optional(
-        parent_id: Option<Uuid>,
-        frac_index: Option<String>,
-    ) -> Result<Option<Position>> {
+    pub fn parse(parent_id: Option<Uuid>, frac_index: Option<String>) -> Result<Option<Position>> {
         if (parent_id.is_none() && frac_index.is_some())
             || (parent_id.is_some() && frac_index.is_none())
         {
@@ -255,8 +251,6 @@ impl EntryUpdater {
 
     pub fn to_delta(self) -> Delta<Entry> {
         assert_eq!(self.old.id, self.new.id, "update should not mutate id");
-        // YOU ARE HERE
-        // convert updater to a delta to use in action
         Delta::Update {
             id: self.old.id,
             old: self.old,

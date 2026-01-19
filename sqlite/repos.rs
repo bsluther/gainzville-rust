@@ -1,13 +1,44 @@
 use itertools::Itertools;
-use sqlx::{Sqlite, Transaction};
+use sqlx::{FromRow, Sqlite, Transaction};
+use uuid::Uuid;
 
 use gv_core::{
     error::{DomainError, Result},
+    models::activity::{Activity, ActivityName},
     models::entry::{Entry, EntryRow},
-    models::{activity::Activity, user::User},
+    models::user::User,
     repos::{ActivityRepo, AuthnRepo, EntryRepo},
     validation::{Email, Username},
 };
+
+/// SQLite-specific row type for Activity.
+/// SQLite stores UUIDs as TEXT, so we need to parse them from strings.
+#[derive(FromRow)]
+struct ActivitySqliteRow {
+    id: String,
+    owner_id: String,
+    source_activity_id: Option<String>,
+    name: ActivityName,
+    description: Option<String>,
+}
+
+impl ActivitySqliteRow {
+    fn to_activity(self) -> Result<Activity> {
+        Ok(Activity {
+            id: Uuid::parse_str(&self.id)
+                .map_err(|e| DomainError::Other(format!("invalid activity id: {e}")))?,
+            owner_id: Uuid::parse_str(&self.owner_id)
+                .map_err(|e| DomainError::Other(format!("invalid owner_id: {e}")))?,
+            source_activity_id: self
+                .source_activity_id
+                .map(|s| Uuid::parse_str(&s))
+                .transpose()
+                .map_err(|e| DomainError::Other(format!("invalid source_activity_id: {e}")))?,
+            name: self.name,
+            description: self.description,
+        })
+    }
+}
 
 // The Repo lives only as long as the Transaction borrow.
 // Need to borrow as mutable because we are going to mutate the transaction.
@@ -66,15 +97,26 @@ impl<'c, 't> AuthnRepo for SqliteContext<'c, 't> {
 }
 
 impl<'c, 't> ActivityRepo for SqliteContext<'c, 't> {
-    async fn find_activity_by_id(&mut self, id: uuid::Uuid) -> Result<Option<Activity>> {
-        let activity = sqlx::query_as::<_, Activity>(
+    async fn find_activity_by_id(&mut self, id: Uuid) -> Result<Option<Activity>> {
+        sqlx::query_as::<_, ActivitySqliteRow>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities WHERE id = ?",
         )
-        .bind(id)
+        .bind(id.to_string())
         .fetch_optional(&mut **self.tx)
-        .await?;
+        .await?
+        .map(|r| r.to_activity())
+        .transpose()
+    }
 
-        Ok(activity)
+    async fn all_activities(&mut self) -> Result<Vec<Activity>> {
+        sqlx::query_as::<_, ActivitySqliteRow>(
+            "SELECT id, owner_id, source_activity_id, name, description FROM activities",
+        )
+        .fetch_all(&mut **self.tx)
+        .await?
+        .into_iter()
+        .map(|r| r.to_activity())
+        .collect()
     }
 }
 
