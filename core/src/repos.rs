@@ -1,4 +1,4 @@
-use sqlx::Executor;
+use sqlx::{AnyExecutor, Executor};
 use uuid::Uuid;
 
 use crate::{
@@ -6,6 +6,14 @@ use crate::{
     models::{activity::Activity, entry::Entry, user::User},
     validation::{Email, Username},
 };
+
+// Considering going with this approach for now.
+#[allow(async_fn_in_trait)]
+pub trait Repo<DB: sqlx::Database> {
+    async fn all_activities<'e>(
+        executor: impl Executor<'e, Database = DB>,
+    ) -> Result<Vec<Activity>>;
+}
 
 #[allow(async_fn_in_trait)]
 pub trait AuthnRepo {
@@ -19,6 +27,15 @@ pub trait AuthnRepo {
 pub trait ActivityRepo {
     async fn find_activity_by_id(&mut self, id: Uuid) -> Result<Option<Activity>>;
     async fn all_activities(&mut self) -> Result<Vec<Activity>>;
+}
+
+#[allow(async_fn_in_trait)]
+pub trait ActivityRepo2<DB: sqlx::Database> {
+    // TODO remove the &mut self, it's a static method now. Or maybe I want it be an instance method
+    // for some reason?
+    async fn all_activities<'e, E>(&mut self, executor: E) -> Result<Vec<Activity>>
+    where
+        E: Executor<'e, Database = DB>;
 }
 
 #[allow(async_fn_in_trait)]

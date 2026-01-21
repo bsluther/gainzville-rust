@@ -6,4 +6,5 @@ pub mod error;
 pub mod models;
 pub mod proptest;
 pub mod repos;
+pub mod sandbox;
 pub mod validation;

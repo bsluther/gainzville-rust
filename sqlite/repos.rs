@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use sqlx::{FromRow, Sqlite, Transaction};
+use sqlx::{Executor, FromRow, Sqlite, Transaction};
 use uuid::Uuid;
 
 use gv_core::{
@@ -9,7 +9,7 @@ use gv_core::{
         entry::{Entry, EntryRow},
         user::User,
     },
-    repos::{ActivityRepo, AuthnRepo, EntryRepo},
+    repos::{ActivityRepo, ActivityRepo2, AuthnRepo, EntryRepo},
     validation::{Email, Username},
 };
 
@@ -115,6 +115,22 @@ impl<'c, 't> ActivityRepo for SqliteContext<'c, 't> {
             "SELECT id, owner_id, source_activity_id, name, description FROM activities",
         )
         .fetch_all(&mut **self.tx)
+        .await?
+        .into_iter()
+        .map(|r| r.to_activity())
+        .collect()
+    }
+}
+pub struct SqliteRepo2 {}
+impl ActivityRepo2<sqlx::Sqlite> for SqliteRepo2 {
+    async fn all_activities<'e, E>(&mut self, executor: E) -> Result<Vec<Activity>>
+    where
+        E: Executor<'e, Database = Sqlite>,
+    {
+        sqlx::query_as::<_, ActivitySqliteRow>(
+            "SELECT id, owner_id, source_activity_id, name, description FROM activities",
+        )
+        .fetch_all(executor)
         .await?
         .into_iter()
         .map(|r| r.to_activity())

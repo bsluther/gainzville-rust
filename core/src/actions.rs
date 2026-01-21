@@ -1,6 +1,7 @@
 use std::ops::RangeBounds;
 
 use chrono::{DateTime, Utc};
+use sqlx::{Database, Executor};
 use uuid::Uuid;
 
 use crate::{
@@ -12,7 +13,7 @@ use crate::{
         entry::{Entry, Position, Temporal},
         user::User,
     },
-    repos::{ActivityRepo, AuthnRepo, EntryRepo},
+    repos::{ActivityRepo, ActivityRepo2, AuthnRepo, EntryRepo},
 };
 
 #[derive(Debug, Clone)]
@@ -95,6 +96,10 @@ pub struct Mutation {
 
 pub struct ActionService {}
 
+// Note: the naming of the "mutators" defined here is a bit confusing. create_user for example
+// does *not* write to the database, it just returns the Mutation which can be written to the db.
+// But create_user *does* read from the database, which is why it takes a repo (or executor in the
+// refactored version) - that's what repo methods take.
 impl ActionService {
     /// Action handler for CreateUser.
     /// ctx contains the DB transaction we're operating in.
@@ -147,6 +152,37 @@ impl ActionService {
         mut ctx: impl AuthnRepo,
         action: CreateActivity,
     ) -> Result<Mutation> {
+        let activity = action.activity.clone();
+        // Check if actor has permission to create activities for owner.
+        // For now, only allow if actor == owner.
+        if action.actor_id != activity.owner_id {
+            return Err(DomainError::Unauthorized(format!(
+                "actor '{}' is not authorized to create activities for owner '{}'",
+                action.actor_id, activity.owner_id
+            )));
+        }
+
+        let insert_activity = Delta::Insert {
+            id: activity.id,
+            new: activity,
+        };
+
+        Ok(Mutation {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            action: Action::CreateActivity(action.clone()),
+            changes: vec![insert_activity.into()],
+        })
+    }
+
+    pub async fn create_activity2<'e, E, DB: sqlx::Database>(
+        executor: E,
+        _repo: impl ActivityRepo2<DB>,
+        action: CreateActivity,
+    ) -> Result<Mutation>
+    where
+        E: Executor<'e, Database = DB>,
+    {
         let activity = action.activity.clone();
         // Check if actor has permission to create activities for owner.
         // For now, only allow if actor == owner.

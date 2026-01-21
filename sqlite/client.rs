@@ -1,9 +1,17 @@
 use futures_core::Stream;
-use gv_core::{actions::Action, error::Result, models::activity::Activity, repos::ActivityRepo};
+use gv_core::{
+    actions::Action,
+    error::Result,
+    models::activity::Activity,
+    repos::{ActivityRepo, ActivityRepo2},
+};
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use tokio::sync::broadcast;
 
-use crate::{controller::SqliteController, repos::SqliteContext};
+use crate::{
+    controller::SqliteController,
+    repos::{SqliteContext, SqliteRepo2},
+};
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -32,6 +40,14 @@ impl Client {
         let _ = self.change_sender.send(());
         Ok(())
     }
+    // YOU ARE HERE: use this!
+    pub async fn run_action2(&self, action: Action) -> Result<()> {
+        let mut tx = self.controller.pool.begin().await?;
+        self.controller.compute_mutation2(&mut tx, action).await?;
+        tx.commit().await?;
+        let _ = self.change_sender.send(());
+        Ok(())
+    }
 
     /// Run migrations on the database. Safe to call multiple times -
     /// sqlx tracks which migrations have already been applied.
@@ -51,6 +67,19 @@ impl Client {
 
             while let Ok(()) = change_rx.recv().await {
                 yield Self::query_all_activities(&pool).await;
+            }
+        }
+    }
+    pub fn stream_activities2(&self) -> impl Stream<Item = Result<Vec<Activity>>> + use<> {
+        let pool = self.controller.pool.clone();
+        let mut change_rx = self.change_sender.subscribe();
+
+        async_stream::stream! {
+            let mut repo = SqliteRepo2 {};
+            yield repo.all_activities(&pool).await;
+
+            while let Ok(()) = change_rx.recv().await {
+                yield repo.all_activities(&pool).await;
             }
         }
     }
