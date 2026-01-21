@@ -7,24 +7,29 @@ use gv_core::{
         entry::{Entry, Position, Temporal},
     },
     repos::AuthnRepo,
+    sandbox::Reader,
 };
-use gv_postgres::{controller::PgController, repos::PgContext};
+use gv_postgres::{
+    controller::PgController,
+    repos::PgContext,
+    sandbox::{PostgresReader, PostgresServer},
+};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 #[sqlx::test(migrations = "../postgres/migrations")]
 async fn test_move_entry_no_cycles(pool: PgPool) {
-    let pg_controller = PgController { pool: pool.clone() };
-    let mut tx = pg_controller
+    let server = PostgresServer::new(pool);
+    let mut tx = server
         .pool
         .begin()
         .await
         .expect("begin transaction should not fail");
-    let mut repo = PgContext::new(&mut tx);
+    // let mut repo = PgContext::new(&mut tx);
     let mut rng = rand::rng();
     let context = SimulationContext {};
 
-    let actor_ids = repo.all_actor_ids().await.unwrap();
+    let actor_ids = PostgresReader::all_actor_ids(&mut *tx).await.unwrap();
     let actor_id = actor_ids[0];
 
     let mut entry_a = Entry::arbitrary(&mut rng, &context);
@@ -53,25 +58,17 @@ async fn test_move_entry_no_cycles(pool: PgPool) {
         }),
         temporal: Temporal::None,
     });
-    // YOU ARE HERE
-    // Need to make this better.
-    // 1. Should be able to run in the same transaction, althought this is less critical.
-    // 2. Provide a run_action_commit to deal with all the calls.
-    pg_controller
+
+    server
         .run_action(Action::CreateEntry(entry_a.into()))
         .await
-        .unwrap()
-        .commit()
-        .await
         .unwrap();
-    pg_controller
+    server
         .run_action(Action::CreateEntry(entry_b.into()))
         .await
-        .unwrap()
-        .commit()
-        .await
         .unwrap();
-    let result = pg_controller.run_action(move_action).await;
+    let result = server.run_action(move_action).await;
+
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(matches!(err, gv_core::error::DomainError::Consistency(_)));
@@ -79,18 +76,16 @@ async fn test_move_entry_no_cycles(pool: PgPool) {
 
 #[sqlx::test(migrations = "../postgres/migrations")]
 async fn test_arbitrary_create_entry(pool: PgPool) {
-    let pg_controller = PgController { pool: pool.clone() };
-    let mut tx = pg_controller
+    let server = PostgresServer::new(pool);
+    let mut tx = server
         .pool
         .begin()
         .await
         .expect("begin transaction should not fail");
-    let mut repo = PgContext::new(&mut tx);
-
     let mut rng = rand::rng();
     let context = SimulationContext {};
 
-    let actor_ids = repo.all_actor_ids().await.unwrap();
+    let actor_ids = PostgresReader::all_actor_ids(&mut *tx).await.unwrap();
     let activities = (0..100)
         .map(|_| Activity::arbitrary_from(&mut rng, &context, &actor_ids))
         .collect();
@@ -102,23 +97,11 @@ async fn test_arbitrary_create_entry(pool: PgPool) {
 
     for activity in activities {
         let create_activity: CreateActivity = activity.into();
-        let _tx = pg_controller
-            .run_action(create_activity.into())
-            .await
-            .unwrap()
-            .commit()
-            .await
-            .unwrap();
+        let _tx = server.run_action(create_activity.into()).await.unwrap();
     }
 
     for entry in entries {
         let create_entry: CreateEntry = entry.into();
-        let _tx = pg_controller
-            .run_action(create_entry.into())
-            .await
-            .unwrap()
-            .commit()
-            .await
-            .unwrap();
+        let _tx = server.run_action(create_entry.into()).await.unwrap();
     }
 }
