@@ -2,6 +2,7 @@ pub mod apply;
 pub mod client;
 pub mod controller;
 pub mod repos;
+pub mod sandbox;
 use controller::SqliteController;
 use sqlx::sqlite::SqlitePoolOptions;
 

@@ -1,4 +1,4 @@
-use sqlx::{AnyExecutor, Executor};
+use sqlx::Executor;
 use uuid::Uuid;
 
 use crate::{
@@ -6,14 +6,6 @@ use crate::{
     models::{activity::Activity, entry::Entry, user::User},
     validation::{Email, Username},
 };
-
-// Considering going with this approach for now.
-#[allow(async_fn_in_trait)]
-pub trait Repo<DB: sqlx::Database> {
-    async fn all_activities<'e>(
-        executor: impl Executor<'e, Database = DB>,
-    ) -> Result<Vec<Activity>>;
-}
 
 #[allow(async_fn_in_trait)]
 pub trait AuthnRepo {
