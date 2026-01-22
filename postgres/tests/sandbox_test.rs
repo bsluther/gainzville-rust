@@ -7,7 +7,8 @@ use gv_core::{
     },
     validation::{Email, Username},
 };
-use gv_postgres::sandbox::PostgresServer;
+
+use gv_postgres::server::PostgresServer;
 use sqlx::PgPool;
 use uuid::Uuid;
 

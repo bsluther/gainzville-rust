@@ -5,7 +5,7 @@ use gv_core::{
     models::user::User,
     validation::{Email, Username},
 };
-use gv_sqlite::sandbox::SqliteClient;
+use gv_sqlite::client::SqliteClient;
 
 use uuid::Uuid;
 

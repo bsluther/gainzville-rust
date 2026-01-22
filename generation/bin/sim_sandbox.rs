@@ -4,9 +4,9 @@ use generation::{ArbitraryFrom, SimulationContext};
 use gv_core::{
     actions::{CreateActivity, CreateEntry},
     models::{activity::Activity, entry::Entry},
-    sandbox::Reader,
+    reader::Reader,
 };
-use gv_postgres::sandbox::{PostgresReader, PostgresServer};
+use gv_postgres::{reader::PostgresReader, server::PostgresServer};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]

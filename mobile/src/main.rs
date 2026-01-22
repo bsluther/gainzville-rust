@@ -2,7 +2,7 @@ use std::fs;
 
 use dioxus::prelude::*;
 
-use gv_sqlite::sandbox::SqliteClient;
+use gv_sqlite::client::SqliteClient;
 use views::{Blog, EntrySandbox, Home, Navbar};
 
 mod components;

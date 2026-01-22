@@ -7,7 +7,7 @@ use gv_core::{
     models::activity::{Activity, ActivityName},
     SYSTEM_ACTOR_ID,
 };
-use gv_sqlite::sandbox::SqliteClient;
+use gv_sqlite::client::SqliteClient;
 use uuid::Uuid;
 
 /// Custom hook that streams activities from the database
