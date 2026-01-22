@@ -1,10 +1,10 @@
-use chrono::Utc;
-use sqlx::{Executor, Transaction};
+use chrono::{DateTime, Utc};
+use sqlx::{Database, Executor, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    actions::{Action, CreateActivity, CreateEntry, CreateUser, MoveEntry, Mutation},
-    delta::Delta,
+    actions::{Action, CreateActivity, CreateEntry, CreateUser, MoveEntry},
+    delta::{Delta, ModelDelta},
     error::{DomainError, Result},
     models::{
         actor::{Actor, ActorKind},
@@ -13,14 +13,22 @@ use crate::{
     reader::Reader,
 };
 
+#[derive(Debug, Clone)]
+pub struct Mutation {
+    pub id: Uuid,
+    pub timestamp: DateTime<Utc>,
+    pub action: Action,
+    pub changes: Vec<ModelDelta>,
+}
+
 pub async fn create_user<'t, DB, R>(
     tx: &mut Transaction<'t, DB>,
     action: CreateUser,
 ) -> Result<Mutation>
 where
-    DB: sqlx::Database,
+    DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as sqlx::Database>::Connection: Executor<'e, Database = DB>,
+    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     let user = action.user;
     // Check if email is already registered.
@@ -73,9 +81,9 @@ pub async fn create_activity<'t, DB, R>(
     action: CreateActivity,
 ) -> Result<Mutation>
 where
-    DB: sqlx::Database,
+    DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as sqlx::Database>::Connection: Executor<'e, Database = DB>,
+    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     let _all_activities = R::all_activities(&mut **tx);
     let activity = action.activity.clone();
@@ -106,9 +114,9 @@ pub async fn create_entry<'t, DB, R>(
     action: CreateEntry,
 ) -> Result<Mutation>
 where
-    DB: sqlx::Database,
+    DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as sqlx::Database>::Connection: Executor<'e, Database = DB>,
+    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     // Check if actor has permission to create entry at the given position.
     // For now, only allow the owner to create.
@@ -155,9 +163,9 @@ pub async fn move_entry<'t, DB, R>(
     action: MoveEntry,
 ) -> Result<Mutation>
 where
-    DB: sqlx::Database,
+    DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as sqlx::Database>::Connection: Executor<'e, Database = DB>,
+    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     // Moving entry should exist.
     let Some(entry) = R::find_entry_by_id(&mut **tx, action.entry_id).await? else {

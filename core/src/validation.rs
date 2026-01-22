@@ -25,11 +25,12 @@ impl Email {
         }
         if !local
             .chars()
-            .all(|c| c.is_alphanumeric() || c == '.' || c == '_')
+            .all(|c| c.is_alphanumeric() || c == '.' || c == '_' || c == '-')
         {
-            return Err(
-                ValidationError::InvalidEmail("invalid characters in local part".into()).into(),
-            );
+            return Err(ValidationError::InvalidEmail(
+                format!("invalid characters in local part '{local}'").into(),
+            )
+            .into());
         }
 
         // Domain: alphanumeric with dots and dashes, must have a dot

@@ -1,4 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
+use gv_core::validation::{Email, Username};
 use rand::{Rng, rand_core};
 use uuid::Uuid;
 
@@ -42,8 +43,8 @@ pub fn pick_index<R: Rng>(choices: usize, rng: &mut R) -> usize {
     rng.random_range(0..choices)
 }
 
-pub fn gen_random_name<R: Rng>(rng: &mut R) -> String {
-    anarchist_readable_name_generator_lib::readable_name_custom(" ", rng)
+pub fn gen_random_name<R: Rng>(rng: &mut R, separator: &str) -> String {
+    anarchist_readable_name_generator_lib::readable_name_custom(separator, rng)
 }
 
 pub fn gen_random_text<R: Rng + rand::RngCore + rand_core::RngCore>(
@@ -73,14 +74,30 @@ pub fn gen_random_text<R: Rng + rand::RngCore + rand_core::RngCore>(
     text
 }
 
+impl Arbitrary for Email {
+    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+        let username = gen_random_name(rng, "-");
+        let domain = gen_random_name(rng, "-");
+        let tld = ".com";
+        Email::parse(username + "@" + &domain + &tld)
+            .expect("generated string should be a valid email")
+    }
+}
+
 impl Arbitrary for Uuid {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         uuid::Builder::from_random_bytes(rng.random()).into_uuid()
     }
 }
 
+impl Arbitrary for Username {
+    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+        Username::parse(gen_random_name(rng, "-")).expect("generated username should be valid")
+    }
+}
+
 impl Arbitrary for DateTime<Utc> {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         let min = chrono::DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z")
             .expect("RFC3339 string must be valid");
         let max = chrono::DateTime::parse_from_rfc3339("2050-12-12T23:59:59Z")
@@ -122,11 +139,20 @@ mod tests {
 
     #[test]
     /// Check DateTime<Utc> generation doesn't fail.
-    fn test_arbitrary_datetime() {
+    fn test_arbitrary_datetime_shouldnt_panic() {
         let context = SimulationContext {};
         let mut rng = rand::rng();
         for _ in 0..10_000 {
             DateTime::<Utc>::arbitrary(&mut rng, &context);
+        }
+    }
+
+    #[test]
+    fn test_arbitrary_email_shouldnt_panic() {
+        let context = SimulationContext {};
+        let mut rng = rand::rng();
+        for _ in 0..10_000 {
+            Email::arbitrary(&mut rng, &context);
         }
     }
 }

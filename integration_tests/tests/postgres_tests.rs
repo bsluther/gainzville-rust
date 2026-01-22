@@ -1,10 +1,11 @@
 use fractional_index::FractionalIndex;
 use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
 use gv_core::{
-    actions::{Action, CreateActivity, CreateEntry, MoveEntry},
+    actions::{Action, CreateActivity, CreateEntry, CreateUser, MoveEntry},
     models::{
         activity::Activity,
         entry::{Entry, Position, Temporal},
+        user::User,
     },
     reader::Reader,
 };
@@ -12,7 +13,7 @@ use gv_postgres::{reader::PostgresReader, server::PostgresServer};
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = "../postgres/migrations")]
-async fn test_move_entry_no_cycles(pool: PgPool) {
+async fn test_move_entry_disallows_cycles(pool: PgPool) {
     let server = PostgresServer::new(pool);
     let mut tx = server
         .pool
@@ -66,6 +67,20 @@ async fn test_move_entry_no_cycles(pool: PgPool) {
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(matches!(err, gv_core::error::DomainError::Consistency(_)));
+}
+
+#[sqlx::test(migrations = "../postgres/migrations")]
+async fn test_arbitrary_create_user(pool: PgPool) {
+    let server = PostgresServer::new(pool);
+    let mut rng = rand::rng();
+    let context = SimulationContext {};
+
+    let action: Action = CreateUser::arbitrary(&mut rng, &context).into();
+
+    server
+        .run_action(action)
+        .await
+        .expect("create_user action should succeed");
 }
 
 #[sqlx::test(migrations = "../postgres/migrations")]

@@ -1,19 +1,13 @@
-use std::ops::RangeBounds;
-
-use chrono::{DateTime, Utc};
-use sqlx::{Database, Executor};
 use uuid::Uuid;
 
-use crate::{
-    delta::{Delta, ModelDelta},
-    error::{DomainError, Result},
-    models::{
-        activity::Activity,
-        actor::{Actor, ActorKind},
-        entry::{Entry, Position, Temporal},
-        user::User,
-    },
+use crate::models::{
+    activity::Activity,
+    entry::{Entry, Position, Temporal},
+    user::User,
 };
+
+// TODO: consider adding more structure to the action.
+// Action { actor_id, data: { ... }}
 
 #[derive(Debug, Clone)]
 pub enum Action {
@@ -41,6 +35,12 @@ impl From<CreateEntry> for Action {
     }
 }
 
+impl From<MoveEntry> for Action {
+    fn from(value: MoveEntry) -> Self {
+        Action::MoveEntry(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CreateActivity {
     pub actor_id: Uuid,
@@ -59,6 +59,12 @@ impl From<Activity> for CreateActivity {
 #[derive(Debug, Clone)]
 pub struct CreateUser {
     pub user: User,
+}
+
+impl From<User> for CreateUser {
+    fn from(user: User) -> Self {
+        CreateUser { user: user }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -82,13 +88,4 @@ pub struct MoveEntry {
     pub entry_id: Uuid,
     pub position: Option<Position>,
     pub temporal: Temporal,
-}
-
-// TODO: relocate.
-#[derive(Debug, Clone)]
-pub struct Mutation {
-    pub id: Uuid,
-    pub timestamp: DateTime<Utc>,
-    pub action: Action,
-    pub changes: Vec<ModelDelta>,
 }

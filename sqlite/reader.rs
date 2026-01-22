@@ -152,7 +152,7 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
             "root must have no parent"
         );
 
-        // Extract IDs - SQLite returns UUIDs as strings, so parse them back
+        // SQLite stores UUIDs as strings, parse them back
         let ancestors = results
             .into_iter()
             .map(|r| Uuid::parse_str(&r.id).expect("all entries must have valid UUID ids"))
