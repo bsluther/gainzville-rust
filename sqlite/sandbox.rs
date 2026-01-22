@@ -1,3 +1,4 @@
+use futures_core::Stream;
 use gv_core::{
     actions::Action,
     error::{DomainError, Result},
@@ -10,18 +11,52 @@ use gv_core::{
     validation::{Email, Username},
 };
 use itertools::Itertools;
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, SqlitePool, sqlite::SqlitePoolOptions};
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::apply::SqliteApply;
 
 ///////////// CLIENT /////////////
 
+#[derive(Debug, Clone)]
 pub struct SqliteClient {
     pub pool: SqlitePool,
+    change_transmitter: broadcast::Sender<()>,
 }
 
 impl SqliteClient {
+    pub async fn init(db_path: &str) -> Result<Self> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect(db_path)
+            .await?;
+        let (change_transmitter, _rx) = broadcast::channel::<()>(16);
+        let client = SqliteClient {
+            pool,
+            change_transmitter,
+        };
+        client.run_migrations().await?;
+        Ok(client)
+    }
+
+    pub fn from_pool(pool: SqlitePool) -> Self {
+        let (change_transmitter, _rx) = broadcast::channel::<()>(16);
+        SqliteClient {
+            pool: pool,
+            change_transmitter,
+        }
+    }
+
+    /// Run migrations on the database. Safe to call multiple times - sqlx tracks which migrations
+    /// have already been applied.
+    async fn run_migrations(&self) -> Result<()> {
+        sqlx::migrate!("./migrations")
+            .run(&self.pool)
+            .await
+            .map_err(|e| gv_core::error::DomainError::Other(e.to_string()))
+    }
+
     pub async fn run_action(&self, action: Action) -> Result<()> {
         // Begin Sqlite transaction.
         let mut tx = self.pool.begin().await?;
@@ -55,10 +90,28 @@ impl SqliteClient {
         // Commit the transaction.
         tx.commit().await?;
 
+        // Broadcast notification that the database changed.
+        let _ = self.change_transmitter.send(());
+
         // TODO: send mutation to service (or add to a pending_mutations queue).
         // sync_service.append_applied_mutation(mx);
 
         Ok(())
+    }
+
+    // TODO: move out of top-level, try generalizing to stream(query: <Fn...>) -> impl Stream<...>.
+    // Perhaps a macro? #[stream]
+    pub fn stream_activities(&self) -> impl Stream<Item = Result<Vec<Activity>>> + use<> {
+        let pool = self.pool.clone();
+        let mut change_rx = self.change_transmitter.subscribe();
+
+        async_stream::stream! {
+            yield SqliteReader::all_activities(&pool).await;
+
+            while let Ok(()) = change_rx.recv().await {
+                yield SqliteReader::all_activities(&pool).await;
+            }
+        }
     }
 }
 
@@ -273,7 +326,7 @@ pub mod tests {
 
     #[sqlx::test(migrations = "./migrations")]
     fn test_create_activity(pool: SqlitePool) {
-        let sqlite_client = SqliteClient { pool };
+        let sqlite_client = SqliteClient::from_pool(pool);
 
         let id = Uuid::new_v4();
         let activity = Activity {
