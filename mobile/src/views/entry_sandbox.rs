@@ -7,31 +7,31 @@ use gv_core::{
     models::activity::{Activity, ActivityName},
     SYSTEM_ACTOR_ID,
 };
-use gv_sqlite::client::Client;
+use gv_sqlite::sandbox::SqliteClient;
 use uuid::Uuid;
 
 /// Custom hook that streams activities from the database
-fn use_activities_stream() -> Signal<Vec<Activity>> {
-    let mut signal = use_signal(Vec::new);
-    let client = use_context::<Client>();
+// fn use_activities_stream() -> Signal<Vec<Activity>> {
+//     let mut signal = use_signal(Vec::new);
+//     let client = use_context::<Client>();
 
-    use_resource(move || {
-        let client = client.clone();
-        async move {
-            let stream = client.stream_activities();
-            tokio::pin!(stream);
+//     use_resource(move || {
+//         let client = client.clone();
+//         async move {
+//             let stream = client.stream_activities();
+//             tokio::pin!(stream);
 
-            while let Some(result) = stream.next().await {
-                match result {
-                    Ok(activities) => signal.set(activities),
-                    Err(e) => eprintln!("Error fetching activities: {e}"),
-                }
-            }
-        }
-    });
+//             while let Some(result) = stream.next().await {
+//                 match result {
+//                     Ok(activities) => signal.set(activities),
+//                     Err(e) => eprintln!("Error fetching activities: {e}"),
+//                 }
+//             }
+//         }
+//     });
 
-    signal
-}
+//     signal
+// }
 
 /// Create a signal that reads from a stream. The stream must return a result, which will be mapped
 /// into an option. The stream returns None before the first item is pulled from the stream or if
@@ -63,7 +63,7 @@ where
 
 #[component]
 pub fn EntrySandbox() -> Element {
-    let client = consume_context::<Client>();
+    let client = consume_context::<SqliteClient>();
     let activities = use_stream(move || client.stream_activities());
 
     rsx! {
@@ -109,7 +109,9 @@ pub fn CreateActivityComponent() -> Element {
                     description: None,
                 };
                 let create_activity: CreateActivity = activity.into();
-                let _ = consume_context::<Client>().run_action(create_activity.into()).await;
+                let _ = consume_context::<SqliteClient>()
+                    .run_action(create_activity.into())
+                    .await;
                 println!("creating activity with name: {}", name_signal());
             },
             "Save activity"

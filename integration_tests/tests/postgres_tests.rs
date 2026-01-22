@@ -6,16 +6,10 @@ use gv_core::{
         activity::Activity,
         entry::{Entry, Position, Temporal},
     },
-    repos::AuthnRepo,
     sandbox::Reader,
 };
-use gv_postgres::{
-    controller::PgController,
-    repos::PgContext,
-    sandbox::{PostgresReader, PostgresServer},
-};
+use gv_postgres::sandbox::{PostgresReader, PostgresServer};
 use sqlx::PgPool;
-use uuid::Uuid;
 
 #[sqlx::test(migrations = "../postgres/migrations")]
 async fn test_move_entry_no_cycles(pool: PgPool) {
@@ -25,7 +19,7 @@ async fn test_move_entry_no_cycles(pool: PgPool) {
         .begin()
         .await
         .expect("begin transaction should not fail");
-    // let mut repo = PgContext::new(&mut tx);
+
     let mut rng = rand::rng();
     let context = SimulationContext {};
 

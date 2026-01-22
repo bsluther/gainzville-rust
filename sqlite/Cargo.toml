@@ -6,9 +6,9 @@ edition = "2024"
 [lib]
 path = "lib.rs"
 
-[[bin]]
-name = "sqlite_sandbox"
-path = "bin/sqlite_sandbox.rs"
+[[test]]
+name = "sqlite_tests"
+path = "tests/tests.rs"
 
 [dependencies]
 # Core dependency

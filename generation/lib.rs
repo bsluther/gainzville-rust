@@ -1,18 +1,6 @@
-use std::num::NonZeroUsize;
-
-use chrono::{DateTime, Duration, NaiveDateTime, Utc};
-use fractional_index::FractionalIndex;
+use chrono::{DateTime, Duration, Utc};
 use rand::{Rng, rand_core};
 use uuid::Uuid;
-
-use gv_core::{
-    actions::CreateEntry,
-    models::{
-        activity::Activity,
-        entry::{Entry, Position},
-        user::User,
-    },
-};
 
 pub mod actions;
 pub mod activity;

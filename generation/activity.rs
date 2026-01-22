@@ -1,10 +1,10 @@
 use uuid::Uuid;
 
-use gv_core::models::activity::{Activity, ActivityName};
 use crate::{Arbitrary, ArbitraryFrom, gen_random_text, pick};
+use gv_core::models::activity::{Activity, ActivityName};
 
 impl Arbitrary for ActivityName {
-    fn arbitrary<R: rand::Rng, C: super::GenerationContext>(rng: &mut R, context: &C) -> Self {
+    fn arbitrary<R: rand::Rng, C: super::GenerationContext>(rng: &mut R, _context: &C) -> Self {
         ActivityName::parse(gen_random_text(rng, 1..5).to_string())
             .expect("failed to parse randomly generated text")
     }

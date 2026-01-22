@@ -3,7 +3,7 @@ use fractional_index::FractionalIndex;
 use rand::Rng;
 use uuid::Uuid;
 
-use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick, pick_index};
+use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick};
 use gv_core::{
     actions::CreateEntry,
     models::{
@@ -16,6 +16,7 @@ use gv_core::{
 // implement ForestNode, but so can a collection of Positions.
 struct Forest {}
 impl Forest {
+    #[allow(unused)]
     pub fn siblings<'a>(entry: &Entry, entries: &'a [Entry]) -> Vec<&'a Entry> {
         // CONSIDER:
         // Currently this returns an empty array if the entry is at the root. In some sense this is

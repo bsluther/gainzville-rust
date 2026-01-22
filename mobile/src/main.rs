@@ -2,7 +2,7 @@ use std::fs;
 
 use dioxus::prelude::*;
 
-use gv_sqlite::client::Client;
+use gv_sqlite::sandbox::SqliteClient;
 use views::{Blog, EntrySandbox, Home, Navbar};
 
 mod components;
@@ -44,7 +44,10 @@ async fn main() {
     // Create the database file if it doesn't exist.
     let db_url = format!("sqlite:{}?mode=rwc", db_file_path.display());
 
-    let client = Client::init(&db_url).await.expect("failed to init client");
+    // let client = Client::init(&db_url).await.expect("failed to init client");
+    let client = SqliteClient::init(&db_url)
+        .await
+        .expect("failed to init client");
 
     dioxus::LaunchBuilder::new()
         .with_context(client)

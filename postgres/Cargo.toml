@@ -11,8 +11,8 @@ name = "pg_sandbox"
 path = "bin/pg_sandbox.rs"
 
 [[test]]
-name = "postgres"
-path = "tests/postgres.rs"
+name = "sandbox_test"
+path = "tests/sandbox_test.rs"
 
 [dependencies]
 # Core dependency

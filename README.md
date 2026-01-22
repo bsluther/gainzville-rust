@@ -46,11 +46,3 @@ Run pg_sandbox with test DB
 
 ### Sqlite
 
-Sqlite isn't setup to use migrations or sqlx compiled queries, for now just a proof of concept.
-sqlite_sandbox.rs assumes a root level test.db file.
-
-Create tables for ./test.db
-```sh
-sqlite3 test.db < src/sqlite/sqlite-schema.sql
-```
-- There's a good chance this schema will be out of date as I evolve the PG schema!
