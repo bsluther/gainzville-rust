@@ -1,11 +1,5 @@
-Decisions:
-- Do users duplicate activites added from another library?
-    - Always consider the sequence case first, it's more complcated.
-    - Should profiles be separate from activites? Again, consider the sequence case...
 
 Features to add:
-- Time
-    - Attribute or built-in?
 - Sets
 - Attributes
 - Categories
@@ -27,19 +21,16 @@ Actions to add:
 
 - [ ] Add initializers to model types, migrate to using those.
 
-- [ ] Consider refactoring repo `context`.
-    - Take transaction as an argument?
-    - Can I wrap a Sqlite and Postgres transaction in an enum?
-
 - [ ] Consider refactoring `Position` to have a `Root` variant (rather than `Option<Position>`).
 
-- [ ] Consider wrapping actions in a struct that provides actor_id.
+- [ ] Reads currently assume a global scope: need to parameterized by actor.
 
-- [ ] Refactor `ArbitraryFrom` impls to take slices rather an vec refs.
+- [ ] Consider wrapping actions in a struct that provides actor_id.
+    - Perhaps the same for reads.
 
 - [ ] Log mutations and implement undo/redo.
 
-- [ ] Use seeded rng for determinism (e.g. for generating Uuid's).
+- [ ] Use seeded rng for determinism in application code (e.g. for generating Uuid's).
 
 - [ ] Implement Delete* actions.
     - Should I use tombstones for soft-deletes? If I log all mutations/deltas, then I techincally
@@ -49,15 +40,4 @@ Actions to add:
 - [ ] Consider using a SortedFractionalIndices type to avoid having to defensively copy/sort
 lists of fractional indices.
 
-- [ ] There is going to be an issue when I want to run a test which runs multiple actions. The
-execute_action function on the controllers returns a tx but doesn't take one as an argument. Will
-need to pass the tx as an argument to be able to rollback the transaction, which allows for
-parallel tests because it isolated each test from each other through the transaction boundary and
-never commits.
-    - Is it as easy creating an alternate constructor which takes tx as an arg instead of pool?
-    
 - [ ] Use `garde` to validate types like Email, Username, etc.
-
-- [ ] Maybe: write macros to do one or both of
-    - [ ] Create model updater.
-    - [ ] Create model apply_delta functions.
