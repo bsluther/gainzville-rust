@@ -101,6 +101,17 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
 
     ///////////// Entry /////////////
 
+    async fn all_entries<'e>(
+        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    ) -> Result<Vec<Entry>> {
+        sqlx::query_as::<_, EntryRow>("SELECT * FROM entries")
+            .fetch_all(executor)
+            .await?
+            .into_iter()
+            .map(|r| r.to_entry())
+            .collect()
+    }
+
     async fn find_ancestors<'e>(
         executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
         entry_id: Uuid,

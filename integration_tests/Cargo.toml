@@ -18,3 +18,4 @@ uuid = { workspace = true }
 rand = { workspace = true }
 tracing-subscriber = { workspace = true }
 fractional_index = { workspace = true }
+rand_chacha.workspace = true

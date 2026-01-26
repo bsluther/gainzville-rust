@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
 use rand::Rng;
+use rand_distr::{Distribution, Normal};
 use uuid::Uuid;
 
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick};
 use gv_core::{
-    actions::CreateEntry,
+    SYSTEM_ACTOR_ID,
     models::{
         activity::Activity,
         entry::{Entry, Position, Temporal},
@@ -42,7 +43,7 @@ impl Forest {
 }
 
 impl Arbitrary for FractionalIndex {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         // Found the terminator in the fractional_index internals, seems to work.
         const TERMINATOR: u8 = 0b1000_0000;
         let n_bytes = rng.random_range(1..128);
@@ -82,7 +83,7 @@ impl ArbitraryFrom<&[FractionalIndex]> for FractionalIndex {
     /// element, between adjacent elements, and after the last element; generate one at random.
     fn arbitrary_from<R: Rng, C: GenerationContext>(
         rng: &mut R,
-        context: &C,
+        _context: &C,
         frac_indices: &[FractionalIndex],
     ) -> Self {
         if frac_indices.is_empty() {
@@ -132,40 +133,57 @@ impl ArbitraryFrom<&[Entry]> for Option<Position> {
         })
     }
 }
-
-impl ArbitraryFrom<(&Vec<Activity>, &Vec<Entry>)> for Entry {
+// CONSIDER: taking Option<&[...]> to let the caller omit options.
+impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry])> for Entry {
     fn arbitrary_from<R: Rng, C: GenerationContext>(
         rng: &mut R,
         context: &C,
-        (activities, entries): (&Vec<Activity>, &Vec<Entry>),
+        (actor_ids, activities, entries): (&[Uuid], &[Activity], &[Entry]),
     ) -> Self {
-        // This unwrap is not great, but for now I need to get the owner_id from somewhere.
-        let activity_choice = pick(&activities, rng).expect("activities must not be empty");
-
-        // Maybe move this into Option::<Position>::arbitrary_from, if we're producing options of
-        // positions it kinda seems like that would include the probability defined here.
-        let position = match rng.random_bool(0.5) {
-            true => None,
-            false => Option::<Position>::arbitrary_from(rng, context, entries),
+        let choose_anonymous = rng.random_bool(0.1);
+        let activity_choice = if choose_anonymous || activities.is_empty() {
+            None
+        } else {
+            Some(pick(&activities, rng).unwrap())
         };
 
+        let owner_id = activity_choice
+            // If we chose an actvitity, make the genereted activity owned by the activity's owner.
+            // - Once library's are implemented, should relax ths condition and just pick any valid
+            // owner (i.e. allow creating an entry of another user's activity).
+            .map(|a| a.owner_id)
+            .unwrap_or_else(|| {
+                // Choose from the provided actor ids.
+                pick(actor_ids, rng)
+                    // If there are no actors, default to SYSTEM actor.
+                    .unwrap_or_else(|| &SYSTEM_ACTOR_ID)
+                    .clone()
+            });
+
         Entry {
-            owner_id: activity_choice.owner_id,
-            activity_id: Some(activity_choice.id),
+            owner_id: owner_id,
+            activity_id: activity_choice.map(|a| a.id),
             id: Uuid::arbitrary(rng, context),
             display_as_sets: rng.random_bool(0.5),
             is_sequence: rng.random_bool(0.5),
             is_template: false,
-            position,
-            // TODO: generate arbitrarily
+            position: Option::<Position>::arbitrary_from(rng, context, entries),
             temporal: Temporal::arbitrary(rng, context),
         }
     }
 }
 
+/// Generate a random duration in milliseconds by sampling from a random distribution with mean
+/// 20 minutes and standard deviation 40 mins and setting all negatives values to 0.
+pub fn gen_random_exercise_duration_ms<R: Rng>(rng: &mut R) -> u32 {
+    let distribution = Normal::new(20. * 60_000., 40. * 60_000.).unwrap();
+    (distribution.sample(rng) as f32).max(0.) as u32
+}
+
+// TODO: this doesn't enforce that start <= end. Should impl ArbitraryFrom<Range>
 impl Arbitrary for Temporal {
     fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
-        match rng.random_range(0..=6) {
+        let t = match rng.random_range(0..=6) {
             0 => Temporal::None,
             1 => Temporal::Start {
                 start: DateTime::<Utc>::arbitrary(rng, context),
@@ -184,22 +202,18 @@ impl Arbitrary for Temporal {
                 start: DateTime::<Utc>::arbitrary(rng, context),
                 duration_ms: rng.random(),
             },
-            6 => Temporal::DurationAndEnd {
-                duration_ms: rng.random(),
-                end: DateTime::<Utc>::arbitrary(rng, context),
-            },
-            _ => unreachable!(),
-        }
-    }
-}
+            6 => {
+                let d = gen_random_exercise_duration_ms(rng);
 
-impl ArbitraryFrom<(Vec<Activity>, Vec<Entry>)> for CreateEntry {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
-        rng: &mut R,
-        context: &C,
-        t: (Vec<Activity>, Vec<Entry>),
-    ) -> Self {
-        unimplemented!()
+                Temporal::DurationAndEnd {
+                    duration_ms: d,
+                    end: DateTime::<Utc>::arbitrary(rng, context),
+                }
+            }
+            _ => unreachable!(),
+        };
+
+        t
     }
 }
 
@@ -300,6 +314,6 @@ mod tests {
             .map(|_| Entry::arbitrary(&mut rng, &context))
             .collect();
 
-        let position = Option::<Position>::arbitrary_from(&mut rng, &context, entries.as_slice());
+        let _position = Option::<Position>::arbitrary_from(&mut rng, &context, entries.as_slice());
     }
 }

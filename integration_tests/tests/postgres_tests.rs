@@ -5,12 +5,14 @@ use gv_core::{
     models::{
         activity::Activity,
         entry::{Entry, Position, Temporal},
-        user::User,
     },
     reader::Reader,
 };
 use gv_postgres::{reader::PostgresReader, server::PostgresServer};
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 use sqlx::PgPool;
+use tracing::info;
 
 #[sqlx::test(migrations = "../postgres/migrations")]
 async fn test_move_entry_disallows_cycles(pool: PgPool) {
@@ -97,20 +99,51 @@ async fn test_arbitrary_create_entry(pool: PgPool) {
     let actor_ids = PostgresReader::all_actor_ids(&mut *tx).await.unwrap();
     let activities = (0..100)
         .map(|_| Activity::arbitrary_from(&mut rng, &context, &actor_ids))
-        .collect();
+        .collect::<Vec<_>>();
     let entries = (0..100).fold(vec![], |mut acc, _| {
-        let entry = Entry::arbitrary_from(&mut rng, &context, (&activities, &acc));
+        let entry = Entry::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &acc));
         acc.push(entry);
         acc
     });
 
     for activity in activities {
         let create_activity: CreateActivity = activity.into();
-        let _tx = server.run_action(create_activity.into()).await.unwrap();
+        server.run_action(create_activity.into()).await.unwrap();
     }
 
     for entry in entries {
         let create_entry: CreateEntry = entry.into();
-        let _tx = server.run_action(create_entry.into()).await.unwrap();
+        server.run_action(create_entry.into()).await.unwrap();
+    }
+}
+
+#[sqlx::test(migrations = "../postgres/migrations")]
+async fn test_arbitrary_actions(pool: PgPool) {
+    let _ = tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(tracing::Level::WARN)
+        .with_test_writer()
+        .try_init();
+
+    let seed: u64 = 15287082126695428488; // random();
+    info!("seed={}", seed);
+    let server = PostgresServer::new(pool);
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    let context = SimulationContext {};
+
+    for _ in 0..1_000_000 {
+        let actor_ids = PostgresReader::all_actor_ids(&server.pool).await.unwrap();
+        let activities = PostgresReader::all_activities(&server.pool).await.unwrap();
+        let entries = PostgresReader::all_entries(&server.pool).await.unwrap();
+        let action =
+            Action::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &entries));
+        // info!("Running action:\n{:?}", action);
+
+        // Problem: running a MoveEntry action which tries to move into a non-sequence entry fails
+        // as it should, but here that looks like a failure. I want to test that the system can
+        // handle invalid inputs, so it seems that I need a way to differentiate between correct
+        // errors and incorrect errors. But then, how do I determine if I correctly disallowed
+        // some action, or incorrectly diallowed some action?
+
+        let _result = server.run_action(action.clone()).await;
     }
 }

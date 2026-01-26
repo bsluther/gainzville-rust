@@ -38,11 +38,13 @@ impl Activity {
 }
 
 #[derive(Debug)]
+#[allow(unused)]
 pub struct ActivityUpdater {
     old: Activity,
     new: Activity,
 }
 
+#[allow(unused)]
 impl ActivityUpdater {
     fn source_activity_id(mut self, source_activity_id: Option<Uuid>) -> Self {
         self.new.source_activity_id = source_activity_id;

@@ -10,11 +10,11 @@ impl Arbitrary for ActivityName {
     }
 }
 
-impl ArbitraryFrom<&Vec<Uuid>> for Activity {
+impl ArbitraryFrom<&[Uuid]> for Activity {
     fn arbitrary_from<R: rand::Rng, C: super::GenerationContext>(
         rng: &mut R,
         context: &C,
-        actor_ids: &Vec<Uuid>,
+        actor_ids: &[Uuid],
     ) -> Self {
         let desc = if rng.random_bool(0.8) {
             Some(gen_random_text(rng, 0..100))

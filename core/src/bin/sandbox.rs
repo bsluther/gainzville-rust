@@ -5,8 +5,6 @@ fn main() {
     let default_fi = FractionalIndex::default();
     println!("default: {:?}", default_fi.to_string());
 
-    fn arbitrary_frac_index<R: Rng>(rng: &mut R) {}
-
     const TERMINATOR: u8 = 0b1000_0000;
     let mut rng = rand::rng();
     const SZ: usize = 1;

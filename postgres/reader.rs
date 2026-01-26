@@ -102,6 +102,17 @@ impl Reader<sqlx::Postgres> for PostgresReader {
 
     ///////////// Entry /////////////
 
+    async fn all_entries<'e>(
+        executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+    ) -> Result<Vec<Entry>> {
+        sqlx::query_as::<_, EntryRow>("SELECT * FROM entries")
+            .fetch_all(executor)
+            .await?
+            .into_iter()
+            .map(|r| r.to_entry())
+            .collect()
+    }
+
     async fn find_ancestors<'e>(
         executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
         entry_id: Uuid,

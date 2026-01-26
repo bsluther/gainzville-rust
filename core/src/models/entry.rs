@@ -56,13 +56,13 @@ impl EntryRow {
     /// Convert this EntryRow to an Entry. May fail if constraints are violated.
     // Implement TryFrom instead?
     pub fn to_entry(self) -> Result<Entry> {
-        let duration_ms: Option<u64> =
+        let duration_ms: Option<u32> =
             self.duration_ms
                 .map(|d| d.try_into())
                 .transpose()
                 .map_err(|_| {
                     ValidationError::Other(
-                        "duration must be positive, failed to cast i64 to u64"
+                        "duration must fit in a u32, failed to convert i64 to u32"
                             .to_string()
                             .into(),
                     )
@@ -121,7 +121,7 @@ pub enum Temporal {
         end: DateTime<Utc>,
     },
     Duration {
-        duration: u64,
+        duration: u32,
     },
     StartAndEnd {
         start: DateTime<Utc>,
@@ -129,19 +129,19 @@ pub enum Temporal {
     },
     StartAndDuration {
         start: DateTime<Utc>,
-        duration_ms: u64,
+        duration_ms: u32,
     },
     DurationAndEnd {
-        duration_ms: u64,
+        duration_ms: u32,
         end: DateTime<Utc>,
     },
 }
-
+// TODO: should enforce that start <= end.
 impl Temporal {
     pub fn parse(
         start: Option<DateTime<Utc>>,
         end: Option<DateTime<Utc>>,
-        duration_ms: Option<u64>,
+        duration_ms: Option<u32>,
     ) -> Result<Temporal> {
         match (start, end, duration_ms) {
             (None, None, None) => Ok(Temporal::None),
@@ -198,7 +198,7 @@ impl Temporal {
         }
     }
 
-    pub fn duration(&self) -> Option<u64> {
+    pub fn duration(&self) -> Option<u32> {
         match self {
             Temporal::None
             | Temporal::Start { start: _ }

@@ -40,6 +40,8 @@ pub trait Reader<DB: sqlx::Database> {
 
     // Entry methods
 
+    async fn all_entries<'e>(executor: impl Executor<'e, Database = DB>) -> Result<Vec<Entry>>;
+
     /// Get the ids of the provided entry's ancestors.
     /// Returns ancestor ids in ascending order including the provided entry,
     /// i.e. [entry, parent, grandparent, ..., root].

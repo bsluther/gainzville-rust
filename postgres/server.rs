@@ -1,6 +1,7 @@
 use gv_core::{actions::Action, error::Result, mutators};
 
 use sqlx::PgPool;
+use tracing::instrument;
 
 use crate::{apply::PgApply, reader::PostgresReader};
 
@@ -13,6 +14,7 @@ impl PostgresServer {
         PostgresServer { pool }
     }
 
+    #[instrument(skip(self), level = "info", err(level = "warn"))]
     pub async fn run_action(&self, action: Action) -> Result<()> {
         // Begin Postgres transaction.
         let mut tx = self.pool.begin().await?;

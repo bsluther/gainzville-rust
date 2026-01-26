@@ -9,7 +9,9 @@ pub mod entry;
 
 pub trait GenerationContext {}
 
-pub struct SimulationContext {}
+pub struct SimulationContext {
+    // rng: rand_chacha::ChaCha8Rng,
+}
 impl GenerationContext for SimulationContext {}
 
 pub trait Arbitrary {

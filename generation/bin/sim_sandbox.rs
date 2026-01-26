@@ -25,9 +25,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let activities = (0..100)
         .map(|_| Activity::arbitrary_from(&mut rng, &context, &actor_ids))
-        .collect();
+        .collect::<Vec<_>>();
     let entries = (0..100).fold(vec![], |mut acc, _| {
-        let entry = Entry::arbitrary_from(&mut rng, &context, (&activities, &acc));
+        let entry = Entry::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &acc));
         acc.push(entry);
         acc
     });
