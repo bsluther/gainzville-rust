@@ -1,6 +1,10 @@
 use futures_core::Stream;
 use gv_core::{
-    actions::Action, error::Result, models::activity::Activity, mutators, reader::Reader,
+    actions::Action,
+    error::Result,
+    models::{activity::Activity, entry::Entry},
+    mutators,
+    reader::Reader,
 };
 
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
@@ -97,6 +101,19 @@ impl SqliteClient {
 
             while let Ok(()) = change_rx.recv().await {
                 yield SqliteReader::all_activities(&pool).await;
+            }
+        }
+    }
+
+    pub fn stream_entries(&self) -> impl Stream<Item = Result<Vec<Entry>>> + use<> {
+        let pool = self.pool.clone();
+        let mut change_rx = self.change_transmitter.subscribe();
+
+        async_stream::stream! {
+            yield SqliteReader::all_entries(&pool).await;
+
+            while let Ok(()) = change_rx.recv().await {
+                yield SqliteReader::all_entries(&pool).await;
             }
         }
     }

@@ -3,7 +3,7 @@ use std::fs;
 use dioxus::prelude::*;
 
 use gv_sqlite::client::SqliteClient;
-use views::{Blog, EntrySandbox, Home, Navbar};
+use views::{ActivitySandbox, Blog, Home, Log, Navbar};
 
 mod components;
 mod views;
@@ -20,7 +20,10 @@ enum Route {
         Blog { id: i32 },
 
         #[route("/sandbox/entry")]
-        EntrySandbox {}
+        ActivitySandbox {},
+
+        #[route("/log")]
+        Log {}
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");

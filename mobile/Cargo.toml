@@ -7,11 +7,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dioxus = { version = "0.7.1", features = ["router"] }
-directories = "6.0.0"
 gv_sqlite = { path = "../sqlite" }
 gv_core = { path = "../core" }
+generation = { path = "../generation" }
+
+dioxus = { version = "0.7.1", features = ["router"] }
+directories = "6.0.0"
 uuid = { workspace = true }
+rand = { workspace = true }
 futures-util = "0.3.31"
 tokio = { version = "1", features = ["time"] } 
 tracing = { workspace = true }

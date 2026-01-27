@@ -6,6 +6,6 @@ mod hero;
 pub use hero::Hero;
 
 mod entry;
-pub use entry::Entry;
+pub use entry::EntryView;
 
 mod log;

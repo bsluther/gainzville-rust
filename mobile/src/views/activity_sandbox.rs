@@ -1,4 +1,4 @@
-use crate::components::Entry;
+use crate::components::EntryView;
 use dioxus::prelude::*;
 use futures_util::{Stream, StreamExt};
 use gv_core::{
@@ -36,7 +36,7 @@ use uuid::Uuid;
 /// Create a signal that reads from a stream. The stream must return a result, which will be mapped
 /// into an option. The stream returns None before the first item is pulled from the stream or if
 /// there is an error.
-fn use_stream<T, S, F>(stream_fn: F) -> Signal<Option<T>>
+pub fn use_stream<T, S, F>(stream_fn: F) -> Signal<Option<T>>
 where
     T: 'static + Clone,
     S: 'static + Stream<Item = Result<T>>,
@@ -62,15 +62,11 @@ where
 }
 
 #[component]
-pub fn EntrySandbox() -> Element {
+pub fn ActivitySandbox() -> Element {
     let client = consume_context::<SqliteClient>();
     let activities = use_stream(move || client.stream_activities());
 
     rsx! {
-        div { class: "entry-list",
-            Entry { is_sequence: true }
-            Entry { is_sequence: false }
-        }
         CreateActivityComponent {}
         div { class: "p-4",
             h3 { "Activities ({activities.read().as_ref().map_or(0, |a| a.len())}):" }

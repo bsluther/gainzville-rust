@@ -19,6 +19,13 @@ Actions to add:
     AddValueToEntry
     UpdateValue
 
+- [ ] Consider using an Edge trait to have a generic interface to the Entry forest.
+
+- [ ] Consider adding a *Row type for all models.
+    - Could implement Arbitrary for both, e.g. Entry and EntryRow. The Entry is always valid,
+    the EntryRow may violate domain constraints.
+    - If Model == RowModel, can just newtype for consistency, or not implement the row type.
+
 - [ ] Add initializers to model types, migrate to using those.
 
 - [ ] Consider refactoring `Position` to have a `Root` variant (rather than `Option<Position>`).

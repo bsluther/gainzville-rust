@@ -17,5 +17,8 @@ pub use blog::Blog;
 mod navbar;
 pub use navbar::Navbar;
 
-mod entry_sandbox;
-pub use entry_sandbox::EntrySandbox;
+mod activity_sandbox;
+pub use activity_sandbox::ActivitySandbox;
+
+mod log;
+pub use log::Log;

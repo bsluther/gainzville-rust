@@ -5,10 +5,17 @@ Reads (reader methods) all need to be authorized.
 
 Grants are stored explicitly in a table.
 
+A grant must be accepted by the grantee before it is applied.
+
+Entry's which are granted to but not owned by a user do *not* appear in that user's Log, rather they
+appear in the a separate "Other users logs" section. The same applies to Activitys, Attributes, and
+Values - they do not appear in the user's Log/Library, but rather in separate sections of the app.
+
 ### Grant Scopes
 Entry
 Activity
-
+Attribute
+Category
 
 ### Grant Types
 Read
@@ -34,9 +41,10 @@ Granting permission to an Entry grants permission to:
 - The Entry's Activity (if it exists).
     - What about it's Categories?
 - Any Attribute and Value used by that Entry.
-- Activity Template? Would simplify the rule: it's just like they got access to the Activity.
-- Looks like we have a permissions graph - any constraints beyond a general graph? It could be
-acyclic since it's directed - two reasons for one user to have permission to read Entry A. So maybe
-it's a DAG?
 
 Every Entry tree must only contain Entries owned by the same actor.
+
+### Activities
+
+Granting permission to an Entry grants permission to:
+- That Activity's template and any Attributes/Values used 
