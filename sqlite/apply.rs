@@ -27,7 +27,7 @@ impl SqliteApply for Delta<Actor> {
         match self {
             Delta::Insert { id, new } => {
                 sqlx::query("INSERT INTO actors (id, actor_kind, created_at) VALUES (?, ?, ?)")
-                    .bind(id.to_string())
+                    .bind(id)
                     .bind(new.actor_kind.to_string())
                     .bind(new.created_at.to_rfc3339())
                     .execute(&mut **tx)
@@ -36,7 +36,7 @@ impl SqliteApply for Delta<Actor> {
             Delta::Update { .. } => {} // No-op
             Delta::Delete { id, .. } => {
                 sqlx::query("DELETE FROM actors WHERE id = ?")
-                    .bind(id.to_string())
+                    .bind(id)
                     .execute(&mut **tx)
                     .await?;
             }
@@ -50,7 +50,7 @@ impl SqliteApply for Delta<User> {
         match self {
             Delta::Insert { id, new } => {
                 sqlx::query("INSERT INTO users (actor_id, username, email) VALUES (?, ?, ?)")
-                    .bind(id.to_string())
+                    .bind(id)
                     .bind(new.username.as_str())
                     .bind(new.email.as_str())
                     .execute(&mut **tx)
@@ -61,15 +61,15 @@ impl SqliteApply for Delta<User> {
                 sqlx::query(
                     "UPDATE users SET username = COALESCE(?, username), email = COALESCE(?, email) WHERE actor_id = ?"
                 )
-                .bind(new.username.as_str().to_string())
-                .bind(new.email.as_str().to_string())
-                .bind(id.to_string())
+                .bind(new.username.as_str())
+                .bind(new.email.as_str())
+                .bind(id)
                 .execute(&mut **tx)
                 .await?;
             }
             Delta::Delete { id, .. } => {
                 sqlx::query("DELETE FROM users WHERE actor_id = ?")
-                    .bind(id.to_string())
+                    .bind(id)
                     .execute(&mut **tx)
                     .await?;
             }
@@ -83,8 +83,8 @@ impl SqliteApply for Delta<Activity> {
         match self {
             Delta::Insert { id, new } => {
                 sqlx::query("INSERT INTO activities (id, owner_id, source_activity_id, name, description) VALUES (?, ?, ?, ?, ?)")
-                    .bind(id.to_string())
-                    .bind(new.owner_id.to_string())
+                    .bind(id)
+                    .bind(new.owner_id)
                     .bind(new.source_activity_id)
                     .bind(new.name.to_string())
                     .bind(new.description)
@@ -119,24 +119,24 @@ impl SqliteApply for Delta<Entry> {
                 sqlx::query(
                     r#"
                     INSERT INTO entries (
-                        id, activity_id, 
-                        owner_id, 
-                        parent_id, 
+                        id, activity_id,
+                        owner_id,
+                        parent_id,
                         frac_index,
-                        is_template, 
-                        display_as_sets, 
+                        is_template,
+                        display_as_sets,
                         is_sequence,
-                        start_time, 
-                        end_time, 
+                        start_time,
+                        end_time,
                         duration_ms
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     "#,
                 )
-                .bind(id.to_string())
-                .bind(new.activity_id.map(|u| u.to_string()))
-                .bind(new.owner_id.to_string())
-                .bind(new.parent_id().map(|u| u.to_string()))
+                .bind(id)
+                .bind(new.activity_id)
+                .bind(new.owner_id)
+                .bind(new.parent_id())
                 .bind(new.frac_index().map(|f| f.to_string()))
                 .bind(new.is_template)
                 .bind(new.display_as_sets)
@@ -151,32 +151,32 @@ impl SqliteApply for Delta<Entry> {
                 sqlx::query(
                     r#"
                     UPDATE entries SET
-                        activity_id = ?, 
+                        activity_id = ?,
                         parent_id = ?,
                         frac_index = ?,
-                        display_as_sets = ?, 
+                        display_as_sets = ?,
                         is_sequence = ?,
-                        start_time = ?, 
+                        start_time = ?,
                         end_time = ?,
                         duration_ms = ?
                     WHERE id = ?
                     "#,
                 )
-                .bind(new.activity_id.map(|u| u.to_string()))
-                .bind(new.parent_id().map(|u| u.to_string()))
+                .bind(new.activity_id)
+                .bind(new.parent_id())
                 .bind(new.frac_index().map(|f| f.to_string()))
                 .bind(new.display_as_sets)
                 .bind(new.is_sequence)
                 .bind(new.temporal.start().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.end().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.duration().map(|d| d as i64))
-                .bind(id.to_string())
+                .bind(id)
                 .execute(&mut **tx)
                 .await?;
             }
             Delta::Delete { id, .. } => {
                 sqlx::query("DELETE FROM entries WHERE id = ?")
-                    .bind(id.to_string())
+                    .bind(id)
                     .execute(&mut **tx)
                     .await?;
             }

@@ -46,3 +46,5 @@ Run pg_sandbox with test DB
 
 ### Sqlite
 
+Run migrations (if in sqlite dir)
+`sqlx migrate run --database-url "sqlite:test.db" `

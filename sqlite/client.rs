@@ -139,7 +139,7 @@ pub mod tests {
         let create_activity: CreateActivity = activity.into();
         let action: Action = create_activity.into();
 
-        let _ = sqlite_client.run_action(action).await;
+        sqlite_client.run_action(action).await.unwrap();
 
         let queried_activity = SqliteReader::find_activity_by_id(&sqlite_client.pool, id)
             .await

@@ -44,6 +44,10 @@ async fn main() {
     fs::create_dir_all(data_dir).expect("failed to create data dir");
 
     let db_file_path = data_dir.join("gv.db");
+
+    // To wipe the existing database, uncomment the next line.
+    // let _ = fs::remove_file(&db_file_path);
+
     // Create the database file if it doesn't exist.
     let db_url = format!("sqlite:{}?mode=rwc", db_file_path.display());
 

@@ -1,7 +1,7 @@
 use gv_core::{
     error::{DomainError, Result},
     models::{
-        activity::{Activity, ActivityName},
+        activity::Activity,
         entry::{Entry, EntryRow},
         user::User,
     },
@@ -76,27 +76,25 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
         executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
         id: Uuid,
     ) -> Result<Option<Activity>> {
-        sqlx::query_as::<_, ActivitySqliteRow>(
+        let activity = sqlx::query_as::<_, Activity>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities WHERE id = ?",
         )
-        .bind(id.to_string())
+        .bind(id)
         .fetch_optional(executor)
-        .await?
-        .map(|r| r.to_activity())
-        .transpose()
+        .await?;
+        Ok(activity)
     }
 
     async fn all_activities<'e>(
         executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
     ) -> Result<Vec<Activity>> {
-        sqlx::query_as::<_, ActivitySqliteRow>(
+        let activities = sqlx::query_as::<_, Activity>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities",
         )
         .fetch_all(executor)
-        .await?
-        .into_iter()
-        .map(|r| r.to_activity())
-        .collect()
+        .await?;
+        println!("all activites.len={}", activities.len());
+        Ok(activities)
     }
 
     ///////////// Entry /////////////
@@ -116,8 +114,6 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
         executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
         entry_id: Uuid,
     ) -> Result<Vec<Uuid>> {
-        let entry_id_str = entry_id.to_string();
-
         // Note: Can't use query! macro here because it requires a concrete connection at compile time.
         // Using query_as with a manual struct instead.
         let results: Vec<AncestorRow> = sqlx::query_as(
@@ -135,7 +131,7 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
             ORDER BY dist
             "#,
         )
-        .bind(entry_id_str)
+        .bind(entry_id)
         .fetch_all(executor)
         .await?;
 
@@ -163,11 +159,7 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
             "root must have no parent"
         );
 
-        // SQLite stores UUIDs as strings, parse them back
-        let ancestors = results
-            .into_iter()
-            .map(|r| Uuid::parse_str(&r.id).expect("all entries must have valid UUID ids"))
-            .collect();
+        let ancestors = results.into_iter().map(|r| r.id).collect();
 
         Ok(ancestors)
     }
@@ -183,7 +175,7 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
             WHERE id = ?
             "#,
         )
-        .bind(entry_id.to_string())
+        .bind(entry_id)
         .fetch_optional(executor)
         .await?
         .map(|e| e.to_entry())
@@ -191,38 +183,13 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
     }
 }
 
-/// SQLite-specific row type for Activity.
-/// SQLite stores UUIDs as TEXT, so we need to parse them from strings.
-#[derive(FromRow)]
-struct ActivitySqliteRow {
-    id: String,
-    owner_id: String,
-    source_activity_id: Option<String>,
-    name: ActivityName,
-    description: Option<String>,
-}
-
-impl ActivitySqliteRow {
-    fn to_activity(self) -> Result<Activity> {
-        Ok(Activity {
-            id: Uuid::parse_str(&self.id)
-                .map_err(|e| DomainError::Other(format!("invalid activity id: {e}")))?,
-            owner_id: Uuid::parse_str(&self.owner_id)
-                .map_err(|e| DomainError::Other(format!("invalid owner_id: {e}")))?,
-            source_activity_id: self
-                .source_activity_id
-                .map(|s| Uuid::parse_str(&s))
-                .transpose()
-                .map_err(|e| DomainError::Other(format!("invalid source_activity_id: {e}")))?,
-            name: self.name,
-            description: self.description,
-        })
-    }
-}
-
 /// Helper struct for ancestor query results.
 #[derive(FromRow)]
 struct AncestorRow {
-    id: String,
-    parent_id: Option<String>,
+    id: Uuid,
+    parent_id: Option<Uuid>,
+}
+
+mod tests {
+    use super::*;
 }
