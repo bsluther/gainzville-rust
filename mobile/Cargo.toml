@@ -18,9 +18,12 @@ rand = { workspace = true }
 futures-util = "0.3.31"
 tokio = { version = "1", features = ["time"] } 
 tracing = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json.workspace = true
 
 [features]
-default = ["mobile"]
+default = ["desktop"]
 # The feature that are only required for the web = ["dioxus/web"] build target should be optional and only enabled in the web = ["dioxus/web"] feature
 web = ["dioxus/web"]
 # The feature that are only required for the desktop = ["dioxus/desktop"] build target should be optional and only enabled in the desktop = ["dioxus/desktop"] feature

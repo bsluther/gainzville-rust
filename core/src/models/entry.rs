@@ -8,7 +8,7 @@ use crate::{
     error::{DomainError, Result, ValidationError},
 };
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct Entry {
     pub id: Uuid,
     pub activity_id: Option<Uuid>,
@@ -37,7 +37,7 @@ impl Entry {
     }
 }
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct EntryRow {
     pub id: Uuid,
     pub activity_id: Option<Uuid>,
@@ -80,7 +80,7 @@ impl EntryRow {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Position {
     pub parent_id: Uuid,
     pub frac_index: FractionalIndex,
@@ -111,7 +111,7 @@ impl Position {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Temporal {
     None,
     Start {

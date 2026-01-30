@@ -3,6 +3,7 @@ use gv_core::{
     models::{
         activity::Activity,
         entry::{Entry, EntryRow},
+        entry_view::{EntryView, EntryViewRow},
         user::User,
     },
     reader::Reader,
@@ -188,6 +189,31 @@ impl Reader<sqlx::Postgres> for PostgresReader {
         .fetch_optional(executor)
         .await?
         .map(|e| e.to_entry())
+        .transpose()
+    }
+
+    async fn find_entry_view_by_id<'e>(
+        executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+        entry_id: Uuid,
+    ) -> Result<Option<EntryView>> {
+        sqlx::query_as::<_, EntryViewRow>(
+            r#"
+            SELECT
+                e.id, e.activity_id, e.owner_id, e.parent_id, e.frac_index,
+                e.is_template, e.display_as_sets, e.is_sequence,
+                e.start_time, e.end_time, e.duration_ms,
+                a.id as act_id, a.owner_id as act_owner_id,
+                a.source_activity_id as act_source_activity_id,
+                a.name as act_name, a.description as act_description
+            FROM entries e
+            LEFT JOIN activities a ON e.activity_id = a.id
+            WHERE e.id = $1
+            "#,
+        )
+        .bind(entry_id)
+        .fetch_optional(executor)
+        .await?
+        .map(|row| row.to_entry_view())
         .transpose()
     }
 }

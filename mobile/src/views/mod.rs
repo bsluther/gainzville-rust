@@ -17,7 +17,7 @@ pub use blog::Blog;
 mod navbar;
 pub use navbar::Navbar;
 
-mod activity_sandbox;
+pub mod activity_sandbox;
 pub use activity_sandbox::ActivitySandbox;
 
 mod log;

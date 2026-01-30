@@ -3,6 +3,7 @@ pub mod constants;
 pub use constants::SYSTEM_ACTOR_ID;
 pub mod delta;
 pub mod error;
+pub mod forest;
 pub mod models;
 pub mod mutators;
 pub mod reader;

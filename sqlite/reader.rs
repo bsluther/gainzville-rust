@@ -3,13 +3,17 @@ use gv_core::{
     models::{
         activity::Activity,
         entry::{Entry, EntryRow},
+        entry_view::{EntryView, EntryViewRow},
         user::User,
     },
     reader::Reader,
     validation::Username,
 };
 use itertools::Itertools;
-use sqlx::FromRow;
+use sqlx::{
+    FromRow,
+    types::chrono::{DateTime, Utc},
+};
 
 use uuid::Uuid;
 
@@ -181,6 +185,58 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
         .map(|e| e.to_entry())
         .transpose()
     }
+
+    async fn find_entry_view_by_id<'e>(
+        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+        entry_id: Uuid,
+    ) -> Result<Option<EntryView>> {
+        sqlx::query_as::<_, EntryViewRow>(
+            r#"
+            SELECT
+                e.id, e.activity_id, e.owner_id, e.parent_id, e.frac_index,
+                e.is_template, e.display_as_sets, e.is_sequence,
+                e.start_time, e.end_time, e.duration_ms,
+                a.id as act_id, a.owner_id as act_owner_id,
+                a.source_activity_id as act_source_activity_id,
+                a.name as act_name, a.description as act_description
+            FROM entries e
+            LEFT JOIN activities a ON e.activity_id = a.id
+            WHERE e.id = ?
+            "#,
+        )
+        .bind(entry_id)
+        .fetch_optional(executor)
+        .await?
+        .map(|row| row.to_entry_view())
+        .transpose()
+    }
+}
+// TODO: move into Reader.
+pub async fn entries_rooted_in_time_interval<'e>(
+    executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+) -> Result<Vec<Entry>> {
+    sqlx::query_as::<sqlx::Sqlite, EntryRow>(
+        r#"
+        WITH RECURSIVE forest AS (
+            SELECT * FROM entries e
+            WHERE e.start_time BETWEEN ? AND ?
+                AND e.parent_id IS NULL
+            UNION ALL
+            SELECT * FROM entries c
+                INNER JOIN forest ON c.parent_id = forest.id
+        )
+        SELECT * FROM forest
+        "#,
+    )
+    .bind(from)
+    .bind(to)
+    .fetch_all(executor)
+    .await?
+    .into_iter()
+    .map(|r| r.to_entry())
+    .collect()
 }
 
 /// Helper struct for ancestor query results.
@@ -191,5 +247,5 @@ struct AncestorRow {
 }
 
 mod tests {
-    use super::*;
+    // use super::*;
 }

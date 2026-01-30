@@ -2,10 +2,13 @@
 //! They can be used to defined common UI elements like buttons, forms, and modals. In this template, we define a Hero
 //! component  to be used in our app.
 
+mod command_palette;
+pub use command_palette::CommandPalette;
+
 mod hero;
 pub use hero::Hero;
 
-mod entry;
-pub use entry::EntryView;
+mod entry_node;
+pub use entry_node::EntryNode;
 
 mod log;

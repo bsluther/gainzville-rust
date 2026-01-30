@@ -1,4 +1,3 @@
-use crate::components::EntryView;
 use dioxus::prelude::*;
 use futures_util::{Stream, StreamExt};
 use gv_core::{
@@ -46,7 +45,6 @@ where
 
     use_resource(move || {
         let stream = stream_fn();
-        tracing::debug!("Test");
         async move {
             tokio::pin!(stream);
 

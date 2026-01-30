@@ -2,15 +2,23 @@ use futures_core::Stream;
 use gv_core::{
     actions::Action,
     error::Result,
-    models::{activity::Activity, entry::Entry},
+    models::{activity::Activity, entry::Entry, entry_view::EntryView},
     mutators,
     reader::Reader,
 };
 
-use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
+use sqlx::{
+    SqlitePool,
+    sqlite::SqlitePoolOptions,
+    types::chrono::{DateTime, Utc},
+};
 use tokio::sync::broadcast;
+use uuid::Uuid;
 
-use crate::{apply::SqliteApply, reader::SqliteReader};
+use crate::{
+    apply::SqliteApply,
+    reader::{SqliteReader, entries_rooted_in_time_interval},
+};
 
 #[derive(Debug, Clone)]
 pub struct SqliteClient {
@@ -114,6 +122,45 @@ impl SqliteClient {
 
             while let Ok(()) = change_rx.recv().await {
                 yield SqliteReader::all_entries(&pool).await;
+            }
+        }
+    }
+
+    pub fn stream_entries_rooted_in_time_interval(
+        &self,
+        min: DateTime<Utc>,
+        max: DateTime<Utc>,
+    ) -> impl Stream<Item = Result<Vec<Entry>>> + use<> {
+        let pool = self.pool.clone();
+        let mut change_rx = self.change_transmitter.subscribe();
+
+        async_stream::stream! {
+            yield entries_rooted_in_time_interval(&pool, min, max).await;
+
+            while let Ok(()) = change_rx.recv().await {
+                yield entries_rooted_in_time_interval(&pool, min, max).await;
+            }
+        }
+    }
+
+    pub fn stream_entry_view_by_id(
+        &self,
+        id: Uuid,
+    ) -> impl Stream<Item = Result<EntryView>> + use<> {
+        use gv_core::error::DomainError;
+
+        let pool = self.pool.clone();
+        let mut change_rx = self.change_transmitter.subscribe();
+
+        async_stream::stream! {
+            yield SqliteReader::find_entry_view_by_id(&pool, id)
+                .await
+                .and_then(|opt| opt.ok_or_else(|| DomainError::Other(format!("Entry not found: {}", id))));
+
+            while let Ok(()) = change_rx.recv().await {
+                yield SqliteReader::find_entry_view_by_id(&pool, id)
+                    .await
+                    .and_then(|opt| opt.ok_or_else(|| DomainError::Other(format!("Entry not found: {}", id))));
             }
         }
     }

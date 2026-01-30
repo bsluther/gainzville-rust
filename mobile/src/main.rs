@@ -55,9 +55,16 @@ async fn main() {
     let client = SqliteClient::init(&db_url)
         .await
         .expect("failed to init client");
-
     dioxus::LaunchBuilder::new()
         .with_context(client)
+        .with_cfg(desktop! {
+            dioxus::desktop::Config::new()
+                .with_window(
+                    dioxus::desktop::WindowBuilder::new()
+                        .with_title("Gainzville")
+                        .with_inner_size(dioxus::desktop::LogicalSize::new(1200.0, 800.0))
+                )
+        })
         .launch(App);
 }
 #[component]

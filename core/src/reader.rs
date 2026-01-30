@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::{
     error::Result,
-    models::{activity::Activity, entry::Entry, user::User},
+    models::{activity::Activity, entry::Entry, entry_view::EntryView, user::User},
     validation::{Email, Username},
 };
 
@@ -55,4 +55,9 @@ pub trait Reader<DB: sqlx::Database> {
         executor: impl Executor<'e, Database = DB>,
         entry_id: Uuid,
     ) -> Result<Option<Entry>>;
+
+    async fn find_entry_view_by_id<'e>(
+        executor: impl Executor<'e, Database = DB>,
+        entry_id: Uuid,
+    ) -> Result<Option<EntryView>>;
 }

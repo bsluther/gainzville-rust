@@ -2,4 +2,10 @@
     --spacing-sm: 4px;
     --spacing-md: 8px;
     --spacing-lg: 12px;
+
+    --gray-1100: rgb(12, 13, 13);
+    --gray-1200: rgb(10, 10, 10);
+
+    --bg-app: var(--gray-1200);
+    --bg-log: var(--gray-1100);
 }
