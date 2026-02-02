@@ -37,6 +37,13 @@ sync logs.
 - Manually maintain global seq_num + delta_offset, store in all rows. Why store in rows? We know
 when that row was updated, like an updated_at column. Not sure but it could be useful.
 
+### Hybrid Logical Clocks for client sequence numbers
+Why hybrid logical clocks?
+If Alice edits Entry A while offline on her computer, then later that day edits Entry A on her
+phone, then the next day goes back online on her computer, we want the server to disregard the
+earlier write from her computer.
+Hybrid logical clocks provide a principled way of supporting this, and they're cheap and easy.
+
 
 ### Electric Inspiration
 

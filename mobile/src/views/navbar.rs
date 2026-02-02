@@ -9,7 +9,6 @@ pub fn Navbar() -> Element {
     let mut palette_open = use_signal(|| false);
     let nav = use_navigator();
 
-    // Debug: log active element
     let log_focus = move || {
         spawn(async move {
             let result = eval(

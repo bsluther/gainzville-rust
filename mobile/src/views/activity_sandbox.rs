@@ -1,63 +1,13 @@
 use dioxus::prelude::*;
-use futures_util::{Stream, StreamExt};
 use gv_core::{
     actions::CreateActivity,
-    error::Result,
     models::activity::{Activity, ActivityName},
     SYSTEM_ACTOR_ID,
 };
 use gv_sqlite::client::SqliteClient;
 use uuid::Uuid;
 
-/// Custom hook that streams activities from the database
-// fn use_activities_stream() -> Signal<Vec<Activity>> {
-//     let mut signal = use_signal(Vec::new);
-//     let client = use_context::<Client>();
-
-//     use_resource(move || {
-//         let client = client.clone();
-//         async move {
-//             let stream = client.stream_activities();
-//             tokio::pin!(stream);
-
-//             while let Some(result) = stream.next().await {
-//                 match result {
-//                     Ok(activities) => signal.set(activities),
-//                     Err(e) => eprintln!("Error fetching activities: {e}"),
-//                 }
-//             }
-//         }
-//     });
-
-//     signal
-// }
-
-/// Create a signal that reads from a stream. The stream must return a result, which will be mapped
-/// into an option. The stream returns None before the first item is pulled from the stream or if
-/// there is an error.
-pub fn use_stream<T, S, F>(stream_fn: F) -> Signal<Option<T>>
-where
-    T: 'static + Clone,
-    S: 'static + Stream<Item = Result<T>>,
-    F: Fn() -> S + 'static,
-{
-    let mut signal = use_signal(|| None);
-
-    use_resource(move || {
-        let stream = stream_fn();
-        async move {
-            tokio::pin!(stream);
-
-            while let Some(result) = stream.next().await {
-                match result {
-                    Ok(result) => signal.set(Some(result)),
-                    Err(e) => eprintln!("Error reading stream in use_stream: {e}"),
-                }
-            }
-        }
-    });
-    signal
-}
+use crate::hooks::use_stream::use_stream;
 
 #[component]
 pub fn ActivitySandbox() -> Element {

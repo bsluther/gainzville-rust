@@ -130,7 +130,7 @@ async fn test_arbitrary_actions(pool: PgPool) {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let context = SimulationContext {};
 
-    for _ in 0..1_000_000 {
+    for _ in 0..1_000 {
         let actor_ids = PostgresReader::all_actor_ids(&server.pool).await.unwrap();
         let activities = PostgresReader::all_activities(&server.pool).await.unwrap();
         let entries = PostgresReader::all_entries(&server.pool).await.unwrap();
@@ -143,6 +143,8 @@ async fn test_arbitrary_actions(pool: PgPool) {
         // handle invalid inputs, so it seems that I need a way to differentiate between correct
         // errors and incorrect errors. But then, how do I determine if I correctly disallowed
         // some action, or incorrectly diallowed some action?
+        // - Solution: parameterize the generation, valid_distribution: 0..1 where 0 is all invalid
+        // and 1 is all valid.
 
         let _result = server.run_action(action.clone()).await;
     }

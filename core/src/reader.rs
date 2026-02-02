@@ -60,4 +60,11 @@ pub trait Reader<DB: sqlx::Database> {
         executor: impl Executor<'e, Database = DB>,
         entry_id: Uuid,
     ) -> Result<Option<EntryView>>;
+
+    /// Find entry and all descendants recursively, result includes the queried entry. An empty
+    /// result vector is returned if the queried entry is not found.
+    async fn find_descendants<'e>(
+        executor: impl Executor<'e, Database = DB>,
+        entry_id: Uuid,
+    ) -> Result<Vec<Entry>>;
 }

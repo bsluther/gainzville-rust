@@ -10,10 +10,7 @@ pub fn find_by_id(id: Uuid, entries: &[Entry]) -> Option<&Entry> {
 /// Returns the root entries (entries with no parent entry) ordered by time;
 /// entries without a definite time are placed at the start.
 pub fn roots(entries: &[Entry]) -> Vec<&Entry> {
-    let mut roots: Vec<_> = entries
-        .iter()
-        .filter(|e| e.parent_id().is_none())
-        .collect();
+    let mut roots: Vec<_> = entries.iter().filter(|e| e.parent_id().is_none()).collect();
     roots.sort_by(|a, b| match (a.temporal.start(), b.temporal.start()) {
         (None, None) => Ordering::Equal,
         (None, Some(_)) => Ordering::Less,

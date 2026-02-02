@@ -33,10 +33,19 @@ impl PostgresServer {
             Action::MoveEntry(action) => {
                 mutators::move_entry::<sqlx::Postgres, PostgresReader>(&mut tx, action).await?
             }
+            Action::DeleteEntryRecursive(action) => {
+                mutators::delete_entry_recursive::<sqlx::Postgres, PostgresReader>(&mut tx, action)
+                    .await?
+            }
         };
 
         // TODO: log mutation in this transaction.
         // sync_service.log_mutation(mx);
+
+        // Defer FK constraint checking until commit so delta order doesn't matter.
+        sqlx::query("SET CONSTRAINTS ALL DEFERRED")
+            .execute(&mut *tx)
+            .await?;
 
         // Apply deltas.
         for delta in mx.changes {

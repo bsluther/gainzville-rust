@@ -3,9 +3,11 @@ use std::fs;
 use dioxus::prelude::*;
 
 use gv_sqlite::client::SqliteClient;
+use tracing::Level;
 use views::{ActivitySandbox, Blog, Home, Log, Navbar};
 
 mod components;
+mod hooks;
 mod views;
 
 #[derive(Debug, Clone, Routable, PartialEq)]
@@ -32,8 +34,7 @@ const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const TOKENS_CSS: Asset = asset!("/assets/styling/tokens.css");
 const LOG_CSS: Asset = asset!("/assets/styling/log.css");
 
-#[tokio::main]
-async fn main() {
+fn main() {
     // On iOS we only have permission to access certain directories in the filesystem.
     // ProjectDirs is a utility for working with standard locations on a given plaform.
     // The iOS directory structure is similar to that for macOS, so this works to find a place
@@ -51,10 +52,18 @@ async fn main() {
     // Create the database file if it doesn't exist.
     let db_url = format!("sqlite:{}?mode=rwc", db_file_path.display());
 
-    // let client = Client::init(&db_url).await.expect("failed to init client");
-    let client = SqliteClient::init(&db_url)
-        .await
+    // Create a short-lived Tokio runtime for initialization
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to build tokio runtime");
+
+    let client = rt
+        .block_on(async { SqliteClient::init(&db_url).await })
         .expect("failed to init client");
+
+    dioxus::logger::init(Level::DEBUG).expect("failed to init logger");
+
     dioxus::LaunchBuilder::new()
         .with_context(client)
         .with_cfg(desktop! {

@@ -7,12 +7,14 @@ use gv_core::{
     reader::Reader,
 };
 
+use gv_core::error::DomainError;
 use sqlx::{
     SqlitePool,
     sqlite::SqlitePoolOptions,
     types::chrono::{DateTime, Utc},
 };
 use tokio::sync::broadcast;
+use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use crate::{
@@ -29,7 +31,7 @@ pub struct SqliteClient {
 impl SqliteClient {
     pub async fn init(db_path: &str) -> Result<Self> {
         let pool = SqlitePoolOptions::new()
-            .max_connections(5)
+            .max_connections(20)
             .connect(db_path)
             .await?;
         let (change_transmitter, _rx) = broadcast::channel::<()>(16);
@@ -58,7 +60,14 @@ impl SqliteClient {
             .map_err(|e| gv_core::error::DomainError::Other(e.to_string()))
     }
 
+    #[instrument(skip_all)]
     pub async fn run_action(&self, action: Action) -> Result<()> {
+        debug!("Began running action = {:?}", action);
+        debug!(
+            "Active broadcast receivers: {}",
+            self.change_transmitter.receiver_count()
+        );
+
         // Begin Sqlite transaction.
         let mut tx = self.pool.begin().await?;
 
@@ -76,11 +85,21 @@ impl SqliteClient {
             Action::MoveEntry(action) => {
                 mutators::move_entry::<sqlx::Sqlite, SqliteReader>(&mut tx, action).await?
             }
+            Action::DeleteEntryRecursive(action) => {
+                mutators::delete_entry_recursive::<sqlx::Sqlite, SqliteReader>(&mut tx, action)
+                    .await?
+            }
         };
 
-        // TODO: log mutation in this transaction.
+        // TODO: write this mutation into the local mutation log.
         // sync_service.log_mutation(mx);
 
+        // Defer FK constraint checking until commit so delta order doesn't matter.
+        sqlx::query("PRAGMA defer_foreign_keys = ON")
+            .execute(&mut *tx)
+            .await?;
+
+        info!("delta count = {}", mx.changes.len());
         // Apply deltas.
         for delta in mx.changes {
             delta.apply_delta(&mut tx).await?;
@@ -91,8 +110,9 @@ impl SqliteClient {
 
         // Broadcast notification that the database changed.
         let _ = self.change_transmitter.send(());
+        debug!("Broadcast sent, returning from run_action");
 
-        // TODO: send mutation to service (or add to a pending_mutations queue).
+        // TODO: send mutation to service (or to a pending_mutations queue).
         // sync_service.append_applied_mutation(mx);
 
         Ok(())
@@ -147,8 +167,6 @@ impl SqliteClient {
         &self,
         id: Uuid,
     ) -> impl Stream<Item = Result<EntryView>> + use<> {
-        use gv_core::error::DomainError;
-
         let pool = self.pool.clone();
         let mut change_rx = self.change_transmitter.subscribe();
 

@@ -210,6 +210,30 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
         .map(|row| row.to_entry_view())
         .transpose()
     }
+
+    async fn find_descendants<'e>(
+        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+        entry_id: Uuid,
+    ) -> Result<Vec<Entry>> {
+        sqlx::query_as::<sqlx::Sqlite, EntryRow>(
+            r#"
+            WITH RECURSIVE tree AS (
+                SELECT * FROM entries e
+                WHERE e.id = ?
+                UNION ALL
+                SELECT c.* FROM entries c
+                    INNER JOIN tree ON c.parent_id = tree.id
+            )
+            SELECT * FROM tree
+            "#,
+        )
+        .bind(entry_id)
+        .fetch_all(executor)
+        .await?
+        .into_iter()
+        .map(|e| e.to_entry())
+        .collect()
+    }
 }
 // TODO: move into Reader.
 pub async fn entries_rooted_in_time_interval<'e>(

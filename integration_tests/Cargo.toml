@@ -9,6 +9,7 @@ edition = "2024"
 [dependencies]
 gv_core = { path = "../core" }
 gv_postgres = { path = "../postgres" }
+gv_sqlite = { path = "../sqlite" }
 generation = { path = "../generation" }
 sqlx = { workspace = true }
 tracing = { workspace = true }

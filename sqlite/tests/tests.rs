@@ -1,8 +1,13 @@
 use sqlx::SqlitePool;
 
 use gv_core::{
+    SYSTEM_ACTOR_ID,
     actions::{Action, CreateUser},
-    models::user::User,
+    models::{
+        activity,
+        entry::{Entry, Position, Temporal},
+        user::User,
+    },
     validation::{Email, Username},
 };
 use gv_sqlite::client::SqliteClient;
@@ -26,7 +31,7 @@ async fn test_create_user_roundtrip(pool: SqlitePool) {
         .unwrap();
 
     sqlx::query("SELECT username, email FROM users WHERE actor_id = ?")
-        .bind(new_id.to_string())
+        .bind(new_id)
         .fetch_optional(&sqlite_client.pool)
         .await
         .unwrap()

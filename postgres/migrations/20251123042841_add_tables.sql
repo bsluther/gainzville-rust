@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     activity_id UUID REFERENCES activities(id),
     owner_id UUID NOT NULL REFERENCES actors(id),
-    parent_id UUID REFERENCES entries(id),
+    parent_id UUID REFERENCES entries(id) DEFERRABLE INITIALLY IMMEDIATE,
     frac_index TEXT,
     is_template BOOLEAN,
     display_as_sets BOOLEAN,

@@ -118,11 +118,17 @@ impl ArbitraryFrom<&[Entry]> for Option<Position> {
         entries: &[Entry],
     ) -> Self {
         if rng.random_bool(0.5) {
-            // Choose a root position.
+            // Choose a root position half the time.
             return None;
         }
-        // Choose a child position, if possible.
-        let parent_choice = pick(entries, rng)?;
+        let sequence_entries: Vec<&Entry> = entries.into_iter().filter(|e| e.is_sequence).collect();
+        if sequence_entries.is_empty() {
+            // If there are no possible parents, choose a root position.
+            return None;
+        }
+
+        // Choose a child position.
+        let parent_choice = pick(&sequence_entries, rng)?;
         let sibling_findices: Vec<FractionalIndex> = Forest::children_of(parent_choice, entries)
             .iter()
             .filter_map(|e| e.frac_index().cloned())

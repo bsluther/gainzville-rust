@@ -5,6 +5,20 @@
 2. When open, palette commands (arrows, escape, enter) always work
 3. When open, keyboard events only fire to palette elements (not underlying page)
 
+## Commands
+
+Create arbitrary... (entry, activity, attribute, value)
+Create arbitrary with...
+- Choose non-arbitrary values (is_sequence, position, etc.)
+Entry: Create root
+Entry: Create in...
+Entry: Search
+Entry: Move
+Entry: Find
+Entry: Delete recursive
+Entry: Delete and keep children
+
+
 ## Approach: Focus Trap
 
 The palette uses a full-screen overlay (`position: fixed; inset: 0`) with a focus trap:

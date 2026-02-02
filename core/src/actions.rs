@@ -14,6 +14,7 @@ pub enum Action {
     CreateUser(CreateUser),
     CreateActivity(CreateActivity),
     CreateEntry(CreateEntry),
+    DeleteEntryRecursive(DeleteEntryRecursive),
     MoveEntry(MoveEntry),
 }
 
@@ -38,6 +39,12 @@ impl From<CreateEntry> for Action {
 impl From<MoveEntry> for Action {
     fn from(value: MoveEntry) -> Self {
         Action::MoveEntry(value)
+    }
+}
+
+impl From<DeleteEntryRecursive> for Action {
+    fn from(value: DeleteEntryRecursive) -> Self {
+        Action::DeleteEntryRecursive(value)
     }
 }
 
@@ -88,4 +95,10 @@ pub struct MoveEntry {
     pub entry_id: Uuid,
     pub position: Option<Position>,
     pub temporal: Temporal,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteEntryRecursive {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
 }

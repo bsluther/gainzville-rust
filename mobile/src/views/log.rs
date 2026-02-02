@@ -3,38 +3,30 @@ use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
 use gv_core::{actions::CreateEntry, forest, models::entry::Entry, SYSTEM_ACTOR_ID};
 use gv_sqlite::client::SqliteClient;
 
-use crate::{components::EntryNode, views::activity_sandbox::use_stream};
+use crate::{components::EntryNode, hooks::use_stream::use_stream};
 
 #[component]
 pub fn Log() -> Element {
     let entries_opt = use_stream(move || consume_context::<SqliteClient>().stream_entries());
     let activities = use_stream(move || consume_context::<SqliteClient>().stream_activities());
+    let entries = use_memo(move || entries_opt.read().cloned().unwrap_or(Vec::new()));
 
-    // Create unwrapped signal for children (avoids PartialEq requirement of use_memo)
-    let mut entries = use_signal(Vec::<Entry>::new);
-    use_effect(move || {
-        if let Some(e) = entries_opt() {
-            entries.set(e);
-        }
-    });
-
-    // Provide the unwrapped Signal<Vec<Entry>> to children
     use_context_provider(|| entries);
 
-    // Handle loading state
-    if entries_opt().is_none() {
-        return rsx! {
-            div { class: "p-4", "Loading entries..." }
-        };
-    }
+    let roots = use_memo(move || {
+        forest::roots(&entries.read())
+            .into_iter()
+            .cloned()
+            .collect::<Vec<Entry>>()
+    });
 
     rsx! {
         div { class: "flex flex-col w-full",
 
             div { class: "bg-[var(--gray-1200)] flex flex-1 flex-row justify-center h-full",
                 ul { class: "entry-list",
-                    for entry in forest::roots(&entries()) {
-                        EntryNode { id: entry.id }
+                    for entry in roots() {
+                        EntryNode { key: "{entry.id}", id: entry.id }
                     }
                 }
             
@@ -43,7 +35,7 @@ pub fn Log() -> Element {
                 button {
                     class: "border-1 rounded-sm px-2 border-gray-500 ",
                     onclick: move |_e| async move {
-                        if let (Some(activities), Some(entries)) = (activities(), entries_opt()) {
+                        if let (Some(activities), entries) = (activities(), entries()) {
                             let mut rng = rand::rng();
                             let context = SimulationContext {};
 

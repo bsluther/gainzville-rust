@@ -1,9 +1,10 @@
 use chrono::{DateTime, Utc};
 use sqlx::{Database, Executor, Transaction};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::{
-    actions::{Action, CreateActivity, CreateEntry, CreateUser, MoveEntry},
+    actions::{Action, CreateActivity, CreateEntry, CreateUser, DeleteEntryRecursive, MoveEntry},
     delta::{Delta, ModelDelta},
     error::{DomainError, Result},
     models::{
@@ -12,6 +13,8 @@ use crate::{
     },
     reader::Reader,
 };
+
+// FIXME: make randomness/time deterministic when creating mutations.
 
 #[derive(Debug, Clone)]
 pub struct Mutation {
@@ -225,5 +228,52 @@ where
         timestamp: Utc::now(),
         action: Action::MoveEntry(action),
         changes: vec![update_delta.into()],
+    })
+}
+
+pub async fn delete_entry_recursive<'t, DB, R>(
+    tx: &mut Transaction<'t, DB>,
+    action: DeleteEntryRecursive,
+) -> Result<Mutation>
+where
+    DB: Database,
+    R: Reader<DB>,
+    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
+{
+    // Get entry and all descendants.
+    // - Once attributes are in place, will need get/delete them as well.
+    let tree = R::find_descendants(&mut **tx, action.entry_id).await?;
+    // YOU ARE HERE
+    // Debugging what's wrong with delete_entry_recursive
+    debug!("descendants len={} {:?}", tree.len(), tree);
+    let Some(root) = tree.iter().find(|e| e.id == action.entry_id) else {
+        assert!(
+            tree.is_empty(),
+            "descendants query must include the root entry or be null, 
+            found a non-empty tree which does not contain the root"
+        );
+        return Err(DomainError::Other(
+            "delete_entry_recursive failed: entry not found in database".into(),
+        ));
+    };
+
+    // Check if actor has permission to delete.
+    if action.actor_id != root.owner_id {
+        return Err(DomainError::Unauthorized(
+            "delete_entry_recursive actor is not the owner of the deleting entry".to_string(),
+        ));
+    }
+
+    // Create delete deltas for entry and descendants.
+    let deltas: Vec<ModelDelta> = tree
+        .into_iter()
+        .map(|e| Delta::Delete { id: e.id, old: e }.into())
+        .collect();
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: action.into(),
+        changes: deltas,
     })
 }

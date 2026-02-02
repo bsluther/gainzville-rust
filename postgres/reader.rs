@@ -216,4 +216,28 @@ impl Reader<sqlx::Postgres> for PostgresReader {
         .map(|row| row.to_entry_view())
         .transpose()
     }
+
+    async fn find_descendants<'e>(
+        executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+        entry_id: Uuid,
+    ) -> Result<Vec<Entry>> {
+        sqlx::query_as::<sqlx::Postgres, EntryRow>(
+            r#"
+            WITH RECURSIVE tree AS (
+                SELECT * FROM entries e
+                WHERE e.id = $1
+                UNION ALL
+                SELECT c.* FROM entries c
+                    INNER JOIN tree ON c.parent_id = tree.id
+            )
+            SELECT * FROM tree
+            "#,
+        )
+        .bind(entry_id)
+        .fetch_all(executor)
+        .await?
+        .into_iter()
+        .map(|e| e.to_entry())
+        .collect()
+    }
 }

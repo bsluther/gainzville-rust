@@ -1,3 +1,19 @@
+Additional docs on Gainzville: `/docs/*`
+
+Additional Dioxus information can be found in (use for answering UI questions about Dioxus)
+`/mobile/AGENTS.md`
+`/mobile/docs/00-OVERVIEW.md`
+`/mobile/docs/01-CORE.md`
+`/mobile/docs/02-CLI.md`
+`/mobile/docs/03-RSX.md`
+`/mobile/docs/04-SIGNALS.md`
+`/mobile/docs/05-FULLSTACK.md`
+`/mobile/docs/06-RENDERERS.md`
+`/mobile/docs/07-HOTRELOAD.md`
+`/mobile/docs/08-ASSETS.md`
+`/mobile/docs/09-ROUTER.md`
+`/mobile/docs/10-WASM-SPLIT.md`
+
 # Gainzville Backend - Project Overview
 
 ## Project Goal
