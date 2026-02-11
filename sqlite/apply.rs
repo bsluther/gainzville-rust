@@ -6,6 +6,9 @@ use gv_core::{
     models::{activity::Activity, actor::Actor, entry::Entry, user::User},
 };
 
+// TODO: update impls update all columns, even those that haven't changed. Fine for now, but could
+// be optimized.
+
 #[allow(async_fn_in_trait)]
 pub trait SqliteApply: Sized {
     async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()>;
@@ -56,8 +59,11 @@ impl SqliteApply for Delta<User> {
                     .execute(&mut **tx)
                     .await?;
             }
-            Delta::Update { new, .. } => {
-                // TODO: this updates all fields, even those that haven't changed.
+            Delta::Update { old, new } => {
+                assert_eq!(
+                    old.actor_id, new.actor_id,
+                    "update must not mutate primary key"
+                );
                 sqlx::query(
                     "UPDATE users SET username = COALESCE(?, username), email = COALESCE(?, email) WHERE actor_id = ?"
                 )
@@ -91,7 +97,8 @@ impl SqliteApply for Delta<Activity> {
                     .execute(&mut **tx)
                     .await?;
             }
-            Delta::Update { new, .. } => {
+            Delta::Update { old, new } => {
+                assert_eq!(old.id, new.id, "update must not mutate primary key");
                 sqlx::query("UPDATE activities SET owner_id = ?, source_activity_id = ?, name = ?, description = ? WHERE id = ?")
                     .bind(new.owner_id)
                     .bind(new.source_activity_id)
@@ -147,7 +154,8 @@ impl SqliteApply for Delta<Entry> {
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Update { new, .. } => {
+            Delta::Update { old, new } => {
+                assert_eq!(old.id, new.id, "update must not mutate primary key");
                 sqlx::query(
                     r#"
                     UPDATE entries SET

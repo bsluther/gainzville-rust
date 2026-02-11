@@ -76,7 +76,8 @@ impl PgApply for Delta<User> {
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Update { new, .. } => {
+            Delta::Update { old, new } => {
+                assert_eq!(old.actor_id, new.actor_id, "update must not mutate primary key");
                 // TODO: this updates all fields, even those that haven't changed.
                 sqlx::query!(
                     r#"
@@ -127,7 +128,8 @@ impl PgApply for Delta<Activity> {
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Update { new, .. } => {
+            Delta::Update { old, new } => {
+                assert_eq!(old.id, new.id, "update must not mutate primary key");
                 sqlx::query!(
                     r#"
                     UPDATE activities
@@ -198,7 +200,8 @@ impl PgApply for Delta<Entry> {
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Update { new, .. } => {
+            Delta::Update { old, new } => {
+                assert_eq!(old.id, new.id, "update must not mutate primary key");
                 sqlx::query!(
                     r#"
                     UPDATE entries
