@@ -1,34 +1,68 @@
-Additional docs on Gainzville: `/docs/*`
+Primary docs on the Gainzville project are in `/docs/*`.
+- [Domain model](./docs/model.md), this is the primary high-level description of the domain model.
+- [Domain model diagram](./docs/2025-11-23-core-model.png)
+- [Permissions](./docs/permissions.md)
+- [Sync](./docs/sync.md)
+- [Features](./docs/features.md)
+- [Generation](./docs/generation.md)
+- [Properties](./docs/properties.md)
+- [Attributes/Values design decisions](./docs/attributes-design.md)
 
-Additional Dioxus information can be found in (use for answering UI questions about Dioxus)
-`/mobile/AGENTS.md`
-`/mobile/docs/00-OVERVIEW.md`
-`/mobile/docs/01-CORE.md`
-`/mobile/docs/02-CLI.md`
-`/mobile/docs/03-RSX.md`
-`/mobile/docs/04-SIGNALS.md`
-`/mobile/docs/05-FULLSTACK.md`
-`/mobile/docs/06-RENDERERS.md`
-`/mobile/docs/07-HOTRELOAD.md`
-`/mobile/docs/08-ASSETS.md`
-`/mobile/docs/09-ROUTER.md`
-`/mobile/docs/10-WASM-SPLIT.md`
+Additional Dioxus information can be found in the following files.
+`/desktop/AGENTS.md`
+`/desktop/docs/00-OVERVIEW.md`
+`/desktop/docs/01-CORE.md`
+`/desktop/docs/02-CLI.md`
+`/desktop/docs/03-RSX.md`
+`/desktop/docs/04-SIGNALS.md`
+`/desktop/docs/05-FULLSTACK.md`
+`/desktop/docs/06-RENDERERS.md`
+`/desktop/docs/07-HOTRELOAD.md`
+`/desktop/docs/08-ASSETS.md`
+`/desktop/docs/09-ROUTER.md`
+`/desktop/docs/10-WASM-SPLIT.md`
 
-# Gainzville Backend - Project Overview
+# Project Overview
 
-## Project Goal
-Build a Rust backend for Gainzville, a fitness tracking application with offline-first sync capabilities. The initial focus is on processing markdown training logs using an LLM to generate database operations.
+`./core`
+Contains the domain model and core business logic implemented via database-agnostic reads
+via the `Reader` trait and writes via `Actions`. Writes to the database are reified as `Mutation`s
+which contain the action (user intent), the actor, and the insert/update/delete deltas.
+
+`./generation`
+Traits for generating arbitrary test data. Intended to be used for deterministic simulation testing,
+eventually, but very helpful for integration and unit tests.
+
+`./postgres`
+Gainzville server which implements `Reader` and `Apply` traits for Postgres and processes `Actions`.
+Planned to support both an HTTP API as well as offline-first sync.
+
+`./sqlite`
+Gainzville client. Implements `Reader` and `Apply` traits for Sqlite and processes `Actions`.
+Planned to support offline-first sync.
+
+`./desktop`
+Desktop app using Dioxus. Supports a single codebase and easy shared logic + standard web primitives.
+If development goes well, will use Dioxus for mobile and web apps.
+
+`./ivm`
+Experimentation with the DBSP library for incremental view maintenance to potentially support sync.
+
+## Project Goals
+- Offline-first sync.
+- HTTP API.
+- Utilize LLM to process unstructured training log data (markdown files, handwritten notes) into Gainzville.
+- Desktop app (roadmap to come).
+- Deterministic simulation testing.
 
 ## Domain Model
-
-**See**: [`docs/domain-model.md`](docs/domain-model.md) and the [abstract model diagram](docs/2025-11-23-gv-abstract-model.png) for full details.
 
 **Summary**: Gainzville uses an **ordered forest** data structure where nodes are `Entries`:
 - Entries represent events (past or planned) and form tree structures
 - Root entries are ordered by user-set timestamps
 - Each entry can optionally instantiate an `Activity` (exercise template)
 - Entries are described by typed `Attributes` with `Planned` and `Actual` values
-- Non-leaf entries are `EntrySequences` that contain ordered child entries
+- Non-leaf entries are sequences that contain ordered child entries
 
 **Key implementation details**:
 - **Sets**: Stored as sequences of homogeneous entries with `display_as_sets` flag for UI rendering. Each set is its own entry with its own values.
@@ -48,242 +82,118 @@ Build a Rust backend for Gainzville, a fitness tracking application with offline
 - **Why**: Compile-time query verification, raw SQL flexibility, solid connection pooling
 - **Tradeoff**: Requires running database during development, but provides excellent type safety without fighting an ORM
 
-### Web Framework: axum
+### Web Framework (eventual): axum
 - **Chosen over**: actix-web, rocket, warp
 - **Why**: Clean extractor pattern, seamless tokio integration, minimal magic, Tower middleware ecosystem
 - **Tradeoff**: Requires learning Tower, but aligns with "transparent, not too much abstraction" philosophy
 
-### Authentication Strategy
+### Authentication Strategy (eventual)
 - **Approach**: OAuth (Google/GitHub) + custom JWT-based sessions + custom authorization
 - **Why**: Skips password management complexity while maintaining full control over permissions
-- **Development workflow**:
-  - `/auth/dev-login` endpoint (dev-only) for quick token generation
-  - Pre-seeded test users (Alice, Bob) with auto-generated tokens
-  - Real OAuth only tested when needed, not for daily API development
 
 ### Error Handling
-- **Primary**: thiserror for API-level errors
+- **Primary**: thiserror for domain errors
 - **Future**: anyhow for internal operations if needed
-- **Pattern**: Define `ApiError` enum that maps to HTTP status codes via `IntoResponse`
 
 ## Core Architecture Philosophy
 
-### Operation-Based Design (Not REST-First)
+### Action-Based Design (Not REST-First)
 
 The project uses **hexagonal architecture** - business logic at the core, transport layers (REST, batch sync, LLM commands) as adapters.
 
-**Key insight**: Operations like `create_activity`, `update_entry`, `create_attribute` are the domain model. They should work identically whether invoked via:
+**Key insight**: Actions like `CreateActivity`, `CreateEntry`, `MoveEntry` are the domain model. They should work identically whether invoked via:
 - HTTP POST from REST client
-- Batch of operations from Swift sync protocol
+- Batch of operations from sync protocol
 - JSON array generated by LLM parsing markdown
-
-### Layered Architecture
-
-```
-src/
-├── domain/              # Business logic layer (public API)
-│   ├── models/         # Domain models (User, Activity, Entry)
-│   ├── operations.rs   # Operation enum
-│   ├── service.rs      # DomainService
-│   └── values/         # Value objects (Email, Username)
-│
-├── repositories/        # Persistence layer (internal)
-│   ├── models.rs       # Database models (UserRow, ActivityRow) - private
-│   ├── users.rs        # UserRepository
-│   ├── activities.rs   # ActivityRepository
-│   └── entries.rs      # EntryRepository
-│
-└── api/                # Transport layer (future)
-    └── handlers/       # HTTP handlers
-```
-
-**Key principle**: Domain layer is the public API. Repositories are implementation details.
-
-### Structure
-
-```rust
-// Core domain operations
-pub enum Operation {
-    CreateUser { email: Email, username: Option<Username> },
-    CreateActivity { id: Uuid, name: String, activity_type: String },
-    CreateEntry { id: Uuid, activity_id: Uuid, timestamp: DateTime<Utc>, ... },
-    CreateAttribute { id: Uuid, name: String, value_type: String },
-    SetEntryAttribute { entry_id: Uuid, attribute_id: Uuid, value: Value },
-    // ...
-}
-
-// Domain service executes operations
-pub struct DomainService {
-    pool: PgPool,
-    user_repo: UserRepository,
-    activity_repo: ActivityRepository,
-    entry_repo: EntryRepository,
-}
-
-impl DomainService {
-    pub async fn execute(&self, op: Operation) -> Result<OperationResult, Error> {
-        // Dispatch to specific handlers, managing transactions
-    }
-
-    pub async fn get_database_snapshot(&self) -> Result<DatabaseSnapshot, Error> {
-        // For LLM context: current activities, attributes, etc.
-    }
-}
-```
 
 ## Implementation Patterns
 
-### Repository Pattern with Transaction Support
+### Reader Trait and Mutators
 
-Repositories abstract database access and support both transactional and non-transactional operations via sqlx's `Executor` trait.
-
-**Pattern**: Repository methods accept generic `Executor` that works with both `&PgPool` and `&mut Transaction`:
+**Reader**: Database-agnostic trait providing read methods. Implementations are pure functions which accept sqlx `Executor`s as parameters, giving the caller transaction control.
 
 ```rust
-pub struct UserRepository {
-    pool: PgPool,
-}
-
-impl UserRepository {
-    // Generic executor - works with pool OR transaction
-    pub async fn insert<'e, E>(
-        &self,
-        executor: E,
+#[allow(async_fn_in_trait)]
+pub trait Reader<DB: sqlx::Database> {
+    async fn find_user_by_id<'e>(
+        executor: impl Executor<'e, Database = DB>,
         actor_id: Uuid,
-        email: &Email,
-        username: Option<&Username>,
-    ) -> Result<()>
-    where
-        E: Executor<'e, Database = Postgres>,
-    {
-        sqlx::query!(
-            "INSERT INTO users (actor_id, email, username) VALUES ($1, $2, $3)",
-            actor_id,
-            email.as_str(),
-            username.map(|u| u.as_str())
-        )
-        .execute(executor)
-        .await?;
-        Ok(())
-    }
+    ) -> Result<Option<User>>;
+
+    async fn find_entry_by_id<'e>(
+        executor: impl Executor<'e, Database = DB>,
+        entry_id: Uuid,
+    ) -> Result<Option<Entry>>;
+    // ...
 }
 ```
 
-**Usage - Atomic multi-repository transactions**:
+**Mutators**: Database-agnostic functions that validate actions and produce `Mutation`s containing deltas. Each mutator function takes a transaction and an action, performs validation, and returns a `Mutation` with the changes to apply.
 
 ```rust
-impl DomainService {
-    async fn create_user(&self, email: Email, username: Option<Username>) -> Result<Uuid> {
-        // Start transaction
-        let mut tx = self.pool.begin().await?;
-
-        let user_id = Uuid::new_v4();
-
-        // Multiple repository calls in one transaction
-        self.actor_repo.insert(&mut *tx, user_id, "user").await?;
-        self.user_repo.insert(&mut *tx, user_id, &email, username.as_ref()).await?;
-
-        // Commit transaction (or auto-rollback on error)
-        tx.commit().await?;
-
-        Ok(user_id)
-    }
+pub async fn create_entry<'t, DB, R>(
+    tx: &mut Transaction<'t, DB>,
+    action: CreateEntry,
+) -> Result<Mutation>
+where
+    DB: Database,
+    R: Reader<DB>,
+{
+    // Validate action...
+    // Return Mutation with deltas
 }
 ```
 
-**Why this pattern**:
-- DomainService controls transaction boundaries (correct layer for business logic)
-- Repositories don't know if they're in a transaction
-- Same repository method works both ways: `repo.insert(&pool, ...)` or `repo.insert(&mut tx, ...)`
+**Execution**: `client.run_action(action)` and `server.run_action(action)` execute actions through the appropriate `Reader` implementation.
 
-### Domain Models vs Database Models
+### Delta Tracking
 
-**Separation of concerns**: Database models (persistence) are separate from domain models (business logic).
+**Pattern**: Two-level design for tracking database changes that balances type safety with flexibility.
 
-**Database models** (in `repositories/models.rs`):
-- Map 1:1 to database tables
-- Simple data containers with `sqlx::FromRow`
-- Private to repositories module (`pub(crate)` or `pub(super)`)
-- Used only for SQL queries
+**Level 1 - Generic `Delta<T>`**: Type-safe operations for specific models.
 
 ```rust
-// src/repositories/models.rs
-#[derive(sqlx::FromRow)]
-pub(super) struct UserRow {
-    pub actor_id: Uuid,
-    pub email: String,
-    pub username: Option<String>,
+pub enum Delta<M> {
+    Insert { id: Uuid, new: M },
+    Update { id: Uuid, old: M, new: M },
+    Delete { id: Uuid, old: M },
 }
 ```
 
-**Domain models** (in `domain/models/`):
-- Represent business concepts
-- Rich with behavior, validation, invariants
-- Public API of the application
-- May have different structure than database (loaded relationships, value objects)
+**Level 2 - `ModelDelta` enum**: Concrete enum with one variant per model, enabling heterogeneous collections.
 
 ```rust
-// src/domain/models/user.rs
-pub struct User {
-    id: Uuid,
-    email: Email,           // Value object, not String
-    username: Option<Username>,
-}
-
-impl User {
-    pub fn id(&self) -> Uuid { self.id }
-    pub fn email(&self) -> &Email { &self.email }
-
-    // Business methods
-    pub fn update_username(&mut self, username: Username) {
-        self.username = Some(username);
-    }
+pub enum ModelDelta {
+    User(Delta<User>),
+    Actor(Delta<Actor>),
+    Activity(Delta<Activity>),
+    Entry(Delta<Entry>),
 }
 ```
 
-**Conversion happens in repositories**:
+**Mutations** bundle an action with its resulting deltas:
 
 ```rust
-impl UserRepository {
-    fn row_to_domain(&self, row: UserRow) -> User {
-        User::new(
-            row.actor_id,
-            Email::parse(row.email).expect("DB contains invalid email"),
-            row.username.and_then(|u| Username::parse(u).ok()),
-        )
-    }
-
-    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<User>> {
-        let row = sqlx::query_as!(UserRow, "SELECT * FROM users WHERE actor_id = $1", id)
-            .fetch_optional(&self.pool)
-            .await?;
-
-        Ok(row.map(|r| self.row_to_domain(r)))
-    }
+pub struct Mutation {
+    pub id: Uuid,
+    pub timestamp: DateTime<Utc>,
+    pub action: Action,
+    pub changes: Vec<ModelDelta>,
 }
 ```
-
-**Benefits**:
-- Domain models can evolve independently of database schema
-- Business logic doesn't couple to database structure
-- Can have rich domain models (loaded children, aggregates) that don't match flat tables
 
 ### Parse, Don't Validate
 
 **Pattern**: Use type-safe value objects instead of primitive types. Validation happens once at construction, then types guarantee correctness.
 
-**Value objects** (in `domain/values/`):
+**Value objects** (in `core/src/validation.rs`):
 
 ```rust
-// src/domain/values/email.rs
 pub struct Email(String);
 
 impl Email {
-    /// Parse and validate - this is the ONLY place email validation happens
     pub fn parse(email: String) -> Result<Self, DomainError> {
-        if !email.contains('@') || email.len() > 255 {
-            return Err(DomainError::InvalidEmail);
-        }
+        // Validation logic...
         Ok(Self(email.to_lowercase()))
     }
 
@@ -293,41 +203,17 @@ impl Email {
 }
 ```
 
-**Usage throughout the stack**:
-
-```rust
-// API layer: Parse raw input
-let email = Email::parse(request.email)?;
-
-// Domain layer: Work with validated types
-pub enum Operation {
-    CreateUser { email: Email, ... }, // Can't be invalid!
-}
-
-// Repository layer: No validation needed
-pub async fn insert(&self, email: &Email) -> Result<()> {
-    sqlx::query!("INSERT INTO users (email) VALUES ($1)", email.as_str())
-    // email is guaranteed valid
-}
-```
-
 **Benefits**:
 - Validation happens once at system boundaries
 - No shotgun validation scattered throughout codebase
 - Types make invalid states unrepresentable
 - Compiler enforces correctness
 
-**Validation layers**:
-1. **API/Input boundary**: Parse strings into value objects (`Email::parse()`)
-2. **Domain layer**: Use value objects, enforce business rules
-3. **Database**: Constraints as safety net (catch bugs, not normal flow)
-
 ### Database Design Patterns
 
 **Weak entity for 1:1 relationships**: When two tables have a strict 1:1 relationship, use the foreign key as the primary key.
 
 ```sql
--- Actors and Users have 1:1 relationship
 CREATE TABLE actors (
     id UUID PRIMARY KEY,
     actor_type VARCHAR(50) NOT NULL
@@ -340,141 +226,7 @@ CREATE TABLE users (
 );
 ```
 
-**Benefits**:
-- One ID to manage (simpler API, less confusion)
-- Enforces 1:1 at database level
-- No need to coordinate separate ID generation
-
-**When to use**: Strict 1:1 relationships that won't become 1:many (e.g., actor/user, entry/entry_metadata).
-
-### Delta Tracking with Type Erasure
-
-**Pattern**: Two-level design for tracking database changes that balances type safety with flexibility.
-
-**Level 1 - Generic `Delta<T>`**: Type-safe operations for specific tables. Uses a `Table` trait with associated types for insert/update/delete data. The delta enum variants (`Insert`, `Update`, `Delete`) hold the appropriate associated type. Table metadata like `TABLE_NAME` is accessed via the type parameter, not stored as fields.
-
-**Level 2 - `TableDelta` enum**: Concrete enum with one variant per table (e.g., `Users(Delta<UsersTable>)`, `Activities(Delta<ActivitiesTable>)`). This "type erasure" replaces the generic type parameter with runtime discrimination via enum variants, enabling heterogeneous collections like `Vec<TableDelta>`.
-
-**Usage pattern**:
-- Repositories work with `Delta<SpecificTable>` for type-safe operations
-- Wrap to `TableDelta` only when building heterogeneous collections
-- Transactions naturally contain mixed tables/operations, so use `Vec<TableDelta>`
-- Pattern matching on `TableDelta` recovers the concrete type for execution
-
-**Benefits**: Type safety where possible (generic operations), flexibility where needed (heterogeneous transactions), compiler-enforced exhaustiveness (must handle all tables), no redundant field storage (table name derived from type).
-
-### Current Development Priority
-
-**Focus**: Business logic and database layer, NOT REST endpoints
-
-**Workflow**:
-1. Define `Operation` enum with all domain operations
-2. Implement `DomainService` with business logic for each operation
-3. Write tests that construct operations and verify results
-4. Build markdown import tool that uses Claude API + domain service
-5. **Later**: Add REST when needed (2-3 hours of work)
-
-## Testing Strategy
-
-### Direct Operation Testing (No HTTP Required)
-
-Tests directly construct `Operation` enums and execute them through `DomainService`. No web server, no HTTP requests, no auth overhead.
-
-**Basic operation test**:
-```rust
-#[tokio::test]
-async fn test_create_activity() {
-    let pool = create_test_pool().await;
-    let service = DomainService::new(pool);
-
-    let op = Operation::CreateActivity {
-        id: Uuid::new_v4(),
-        name: "Squat".into(),
-        activity_type: "strength".into(),
-    };
-
-    let result = service.execute(op).await.unwrap();
-    assert!(matches!(result, OperationResult::Success { .. }));
-}
-```
-
-**Testing operation sequences**:
-```rust
-#[tokio::test]
-async fn test_operation_sequence() {
-    let pool = create_test_pool().await;
-    let service = DomainService::new(pool);
-
-    // Create activity
-    let activity_id = Uuid::new_v4();
-    service.execute(Operation::CreateActivity {
-        id: activity_id,
-        name: "Bench Press".into(),
-        activity_type: "strength".into(),
-    }).await.unwrap();
-
-    // Create entry for that activity
-    let entry_id = Uuid::new_v4();
-    service.execute(Operation::CreateEntry {
-        id: entry_id,
-        activity_id,
-        timestamp: Utc::now(),
-        notes: None,
-    }).await.unwrap();
-
-    // Add attribute to the entry
-    service.execute(Operation::SetEntryAttribute {
-        entry_id,
-        attribute_id: get_weight_attribute_id(&pool).await,
-        value: serde_json::json!(185),
-    }).await.unwrap();
-
-    // Verify the entire sequence worked
-    let entry = get_entry(&pool, entry_id).await.unwrap();
-    assert_eq!(entry.activity_id, activity_id);
-}
-```
-
-### Benefits of This Testing Approach
-
-- **Fast**: No HTTP server startup, no network overhead
-- **Simple**: Just construct Rust enums and call methods
-- **Focused**: Tests business logic without transport layer concerns
-- **Debuggable**: Step through actual business logic in debugger
-- **Deterministic**: No auth tokens, no HTTP parsing edge cases
-
-### Future: HTTP Handler Testing
-
-When REST endpoints are added later, tests will bypass auth middleware:
-
-```rust
-#[tokio::test]
-async fn test_workout_creation() {
-    let state = create_test_state().await;
-
-    // Router without auth middleware for tests
-    let app = Router::new()
-        .route("/api/workouts", post(create_workout))
-        .with_state(state);
-
-    let request = Request::builder()
-        .method("POST")
-        .uri("/api/workouts")
-        .header("Content-Type", "application/json")
-        .extension("test-user-123".to_string())  // Inject user_id directly
-        .body(Body::from(r#"{"name":"Test workout"}"#))
-        .unwrap();
-
-    let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
-}
-```
-
-**How auth bypass works**:
-- Production: Auth middleware validates JWT and adds `user_id` to request extensions
-- Tests: Skip middleware, inject `user_id` directly into request extensions
-- Handlers receive `Extension(user_id)` the same way in both cases
-- Business logic stays completely decoupled from auth mechanism
+**When to use**: Strict 1:1 relationships that won't become 1:many (e.g., actor/user).
 
 ## Near-Term Use Case: Markdown Training Log Import
 
@@ -483,8 +235,8 @@ async fn test_workout_creation() {
 **Process**:
 1. Export database snapshot (activities, attributes) as JSON
 2. Provide snapshot + markdown to Claude API
-3. Claude generates array of `Operation` objects
-4. Execute operations through `DomainService`
+3. Claude generates array of `Action` objects
+4. Execute actions via `client.run_action()` or `server.run_action()`
 
 **Example**:
 ```markdown
@@ -493,45 +245,16 @@ async fn test_workout_creation() {
 - New exercise: Romanian Deadlift
 ```
 
-Generates:
-```json
-[
-  {
-    "type": "create_entry",
-    "id": "...",
-    "activity_id": "<back-squat-id>",
-    "timestamp": "2025-11-20T00:00:00Z"
-  },
-  {
-    "type": "create_activity",
-    "id": "...",
-    "name": "Romanian Deadlift",
-    "activity_type": "strength"
-  }
-]
-```
+## Sync System
 
-## Benefits of This Approach
-
-1. **Fast iteration**: Test business logic directly, no HTTP overhead
-2. **Reusable**: Same operations work from LLM, REST, batch sync, CLI
-3. **Easy testing**: Unit tests just construct `Operation` enums
-4. **Clean architecture**: Business logic has no dependency on transport layer
-5. **Flexible**: Can add GraphQL, gRPC, WebSocket later without touching core
-
-## Future: Sync System
-
-Eventually will implement:
-- Transaction IDs and event ordering
-- Batch operation processing from mobile clients
-- Acknowledge/reject messages
-- Linear event stream construction
-
-But the same core operations will be used - they'll just be invoked through a sync protocol instead of directly.
+See [./docs/sync.md](./docs/sync.md) for detailed sync design notes including:
+- Rebasing strategy for offline writes
+- Global sequence numbers
+- Hybrid logical clocks for client ordering
+- Electric-inspired patterns (durable streams, per-client change logs)
 
 ## Development Environment
 
 - **Database**: PostgreSQL via docker-compose
 - **Migrations**: sqlx migrations
 - **Testing**: Integration tests with test database
-- **Auth (dev)**: Pre-generated tokens in `dev-tokens.env`

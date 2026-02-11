@@ -28,13 +28,13 @@ impl PgApply for ModelDelta {
 impl PgApply for Delta<Actor> {
     async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
         match self {
-            Delta::Insert { id, new } => {
+            Delta::Insert { new } => {
                 sqlx::query!(
                     r#"
                     INSERT INTO actors (id, actor_kind, created_at)
                     VALUES ($1, $2, $3)
                     "#,
-                    id,
+                    new.actor_id,
                     new.actor_kind.to_string(),
                     new.created_at,
                 )
@@ -45,12 +45,12 @@ impl PgApply for Delta<Actor> {
                 // No-op, shouldn't happen.
                 warn!("Applying update delta to Actor table which does not support updates");
             }
-            Delta::Delete { id, .. } => {
+            Delta::Delete { old } => {
                 sqlx::query!(
                     r#"
                     DELETE FROM actors WHERE id = $1
                     "#,
-                    id
+                    old.actor_id
                 )
                 .execute(&mut **tx)
                 .await?;
@@ -63,20 +63,20 @@ impl PgApply for Delta<Actor> {
 impl PgApply for Delta<User> {
     async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
         match self {
-            Delta::Insert { id, new } => {
+            Delta::Insert { new } => {
                 sqlx::query!(
                     r#"
                     INSERT INTO users (actor_id, username, email)
                     VALUES ($1, $2, $3)
                     "#,
-                    id,
+                    new.actor_id,
                     new.username.as_str(),
                     new.email.as_str(),
                 )
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Update { id, new, .. } => {
+            Delta::Update { new, .. } => {
                 // TODO: this updates all fields, even those that haven't changed.
                 sqlx::query!(
                     r#"
@@ -89,17 +89,17 @@ impl PgApply for Delta<User> {
                     "#,
                     new.username.as_str().to_string(),
                     new.email.as_str().to_string(),
-                    id
+                    new.actor_id
                 )
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Delete { id, .. } => {
+            Delta::Delete { old } => {
                 sqlx::query!(
                     r#"
                     DELETE FROM users WHERE actor_id = $1
                     "#,
-                    id
+                    old.actor_id
                 )
                 .execute(&mut **tx)
                 .await?;
@@ -112,13 +112,13 @@ impl PgApply for Delta<User> {
 impl PgApply for Delta<Activity> {
     async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
         match self {
-            Delta::Insert { id, new } => {
+            Delta::Insert { new } => {
                 sqlx::query!(
                     r#"
                     INSERT INTO activities (id, owner_id, source_activity_id, name, description)
                     VALUES ($1, $2, $3, $4, $5)
                     "#,
-                    id,
+                    new.id,
                     new.owner_id,
                     new.source_activity_id,
                     new.name.to_string(),
@@ -127,7 +127,7 @@ impl PgApply for Delta<Activity> {
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Update { id, new, .. } => {
+            Delta::Update { new, .. } => {
                 sqlx::query!(
                     r#"
                     UPDATE activities
@@ -142,17 +142,17 @@ impl PgApply for Delta<Activity> {
                     new.source_activity_id,
                     new.name.to_string(),
                     new.description,
-                    id
+                    new.id
                 )
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Delete { id, .. } => {
+            Delta::Delete { old } => {
                 sqlx::query!(
                     r#"
                     DELETE FROM activities WHERE id = $1
                     "#,
-                    id
+                    old.id
                 )
                 .execute(&mut **tx)
                 .await?;
@@ -165,14 +165,14 @@ impl PgApply for Delta<Activity> {
 impl PgApply for Delta<Entry> {
     async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
         match self {
-            Delta::Insert { id, new } => {
+            Delta::Insert { new } => {
                 sqlx::query!(
                     r#"
                     INSERT INTO entries (
                         id,
                         activity_id,
                         owner_id,
-                        parent_id, 
+                        parent_id,
                         frac_index,
                         is_template,
                         display_as_sets,
@@ -183,7 +183,7 @@ impl PgApply for Delta<Entry> {
                     )
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                     "#,
-                    id,
+                    new.id,
                     new.activity_id,
                     new.owner_id,
                     new.parent_id(),
@@ -198,7 +198,7 @@ impl PgApply for Delta<Entry> {
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Update { id, new, .. } => {
+            Delta::Update { new, .. } => {
                 sqlx::query!(
                     r#"
                     UPDATE entries
@@ -221,17 +221,17 @@ impl PgApply for Delta<Entry> {
                     new.temporal.start(),
                     new.temporal.end(),
                     new.temporal.duration().map(|d| d as i64),
-                    id
+                    new.id
                 )
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Delete { id, .. } => {
+            Delta::Delete { old } => {
                 sqlx::query!(
                     r#"
                     DELETE FROM entries WHERE id = $1
                     "#,
-                    id
+                    old.id
                 )
                 .execute(&mut **tx)
                 .await?;

@@ -15,7 +15,6 @@ pub struct User {
 impl User {
     pub fn update(&self) -> UserUpdater {
         UserUpdater {
-            id: self.actor_id,
             old: self.clone(),
             new: self.clone(),
         }
@@ -24,7 +23,6 @@ impl User {
 
 #[derive(Debug)]
 pub struct UserUpdater {
-    id: Uuid,
     old: User,
     new: User,
 }
@@ -42,7 +40,6 @@ impl UserUpdater {
 
     pub fn build(self) -> Delta<User> {
         Delta::<User>::Update {
-            id: self.id,
             old: self.old,
             new: self.new,
         }

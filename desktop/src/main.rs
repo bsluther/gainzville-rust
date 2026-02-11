@@ -33,6 +33,7 @@ const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const TOKENS_CSS: Asset = asset!("/assets/styling/tokens.css");
 const LOG_CSS: Asset = asset!("/assets/styling/log.css");
+const DX_COMPONENTS_CSS: Asset = asset!("/assets/dx-components-theme.css");
 
 fn main() {
     // On iOS we only have permission to access certain directories in the filesystem.
@@ -84,6 +85,7 @@ fn App() -> Element {
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         document::Link { rel: "stylesheet", href: TOKENS_CSS }
         document::Link { rel: "stylesheet", href: LOG_CSS }
+        document::Link { rel: "stylesheet", href: DX_COMPONENTS_CSS }
 
         Router::<Route> {}
     }

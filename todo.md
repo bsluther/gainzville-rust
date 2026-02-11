@@ -18,7 +18,7 @@ Actions to add:
     CreateAttribute
     AddValueToEntry
     UpdateValue
-
+    
 - [ ] Consider using an Edge trait to have a generic interface to the Entry forest.
 
 - [ ] Consider adding a *Row type for all models.

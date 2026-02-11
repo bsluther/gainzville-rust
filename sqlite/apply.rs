@@ -25,18 +25,18 @@ impl SqliteApply for ModelDelta {
 impl SqliteApply for Delta<Actor> {
     async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
         match self {
-            Delta::Insert { id, new } => {
+            Delta::Insert { new } => {
                 sqlx::query("INSERT INTO actors (id, actor_kind, created_at) VALUES (?, ?, ?)")
-                    .bind(id)
+                    .bind(new.actor_id)
                     .bind(new.actor_kind.to_string())
                     .bind(new.created_at.to_rfc3339())
                     .execute(&mut **tx)
                     .await?;
             }
             Delta::Update { .. } => {} // No-op
-            Delta::Delete { id, .. } => {
+            Delta::Delete { old } => {
                 sqlx::query("DELETE FROM actors WHERE id = ?")
-                    .bind(id)
+                    .bind(old.actor_id)
                     .execute(&mut **tx)
                     .await?;
             }
@@ -48,28 +48,28 @@ impl SqliteApply for Delta<Actor> {
 impl SqliteApply for Delta<User> {
     async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
         match self {
-            Delta::Insert { id, new } => {
+            Delta::Insert { new } => {
                 sqlx::query("INSERT INTO users (actor_id, username, email) VALUES (?, ?, ?)")
-                    .bind(id)
+                    .bind(new.actor_id)
                     .bind(new.username.as_str())
                     .bind(new.email.as_str())
                     .execute(&mut **tx)
                     .await?;
             }
-            Delta::Update { id, new, .. } => {
+            Delta::Update { new, .. } => {
                 // TODO: this updates all fields, even those that haven't changed.
                 sqlx::query(
                     "UPDATE users SET username = COALESCE(?, username), email = COALESCE(?, email) WHERE actor_id = ?"
                 )
                 .bind(new.username.as_str())
                 .bind(new.email.as_str())
-                .bind(id)
+                .bind(new.actor_id)
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Delete { id, .. } => {
+            Delta::Delete { old } => {
                 sqlx::query("DELETE FROM users WHERE actor_id = ?")
-                    .bind(id)
+                    .bind(old.actor_id)
                     .execute(&mut **tx)
                     .await?;
             }
@@ -81,9 +81,9 @@ impl SqliteApply for Delta<User> {
 impl SqliteApply for Delta<Activity> {
     async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
         match self {
-            Delta::Insert { id, new } => {
+            Delta::Insert { new } => {
                 sqlx::query("INSERT INTO activities (id, owner_id, source_activity_id, name, description) VALUES (?, ?, ?, ?, ?)")
-                    .bind(id)
+                    .bind(new.id)
                     .bind(new.owner_id)
                     .bind(new.source_activity_id)
                     .bind(new.name.to_string())
@@ -91,19 +91,19 @@ impl SqliteApply for Delta<Activity> {
                     .execute(&mut **tx)
                     .await?;
             }
-            Delta::Update { id, new, .. } => {
+            Delta::Update { new, .. } => {
                 sqlx::query("UPDATE activities SET owner_id = ?, source_activity_id = ?, name = ?, description = ? WHERE id = ?")
                     .bind(new.owner_id)
                     .bind(new.source_activity_id)
                     .bind(new.name.to_string())
                     .bind(new.description)
-                    .bind(id)
+                    .bind(new.id)
                     .execute(&mut **tx)
                     .await?;
             }
-            Delta::Delete { id, .. } => {
+            Delta::Delete { old } => {
                 sqlx::query("DELETE FROM activities WHERE id = ?")
-                    .bind(id)
+                    .bind(old.id)
                     .execute(&mut **tx)
                     .await?;
             }
@@ -115,7 +115,7 @@ impl SqliteApply for Delta<Activity> {
 impl SqliteApply for Delta<Entry> {
     async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
         match self {
-            Delta::Insert { id, new } => {
+            Delta::Insert { new } => {
                 sqlx::query(
                     r#"
                     INSERT INTO entries (
@@ -133,7 +133,7 @@ impl SqliteApply for Delta<Entry> {
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     "#,
                 )
-                .bind(id)
+                .bind(new.id)
                 .bind(new.activity_id)
                 .bind(new.owner_id)
                 .bind(new.parent_id())
@@ -147,7 +147,7 @@ impl SqliteApply for Delta<Entry> {
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Update { id, new, .. } => {
+            Delta::Update { new, .. } => {
                 sqlx::query(
                     r#"
                     UPDATE entries SET
@@ -170,13 +170,13 @@ impl SqliteApply for Delta<Entry> {
                 .bind(new.temporal.start().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.end().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.duration().map(|d| d as i64))
-                .bind(id)
+                .bind(new.id)
                 .execute(&mut **tx)
                 .await?;
             }
-            Delta::Delete { id, .. } => {
+            Delta::Delete { old } => {
                 sqlx::query("DELETE FROM entries WHERE id = ?")
-                    .bind(id)
+                    .bind(old.id)
                     .execute(&mut **tx)
                     .await?;
             }

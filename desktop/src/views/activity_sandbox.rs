@@ -21,7 +21,7 @@ pub fn ActivitySandbox() -> Element {
             ul {
                 if let Some(activities) = activities() {
                     for activity in activities.iter() {
-                        li { "{activity.name.to_string()}" }
+                        li { key: "{activity.id}", "{activity.name.to_string()}" }
                     }
                 }
             }

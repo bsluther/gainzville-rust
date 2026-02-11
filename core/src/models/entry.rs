@@ -252,7 +252,6 @@ impl EntryUpdater {
     pub fn to_delta(self) -> Delta<Entry> {
         assert_eq!(self.old.id, self.new.id, "update should not mutate id");
         Delta::Update {
-            id: self.old.id,
             old: self.old,
             new: self.new,
         }

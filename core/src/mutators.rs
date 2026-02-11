@@ -57,7 +57,6 @@ where
 
     // Create user and actor insert deltas.
     let insert_actor = Delta::<Actor>::Insert {
-        id: user.actor_id,
         new: Actor {
             actor_id: user.actor_id,
             actor_kind: ActorKind::User,
@@ -65,7 +64,6 @@ where
         },
     };
     let insert_user = Delta::<User>::Insert {
-        id: user.actor_id,
         new: user.clone(),
     };
 
@@ -100,7 +98,6 @@ where
     }
 
     let insert_activity = Delta::Insert {
-        id: activity.id,
         new: activity,
     };
 
@@ -146,7 +143,6 @@ where
     };
 
     let insert_entry = Delta::Insert {
-        id: action.entry.id,
         new: action.entry.clone(),
     };
 
@@ -267,7 +263,7 @@ where
     // Create delete deltas for entry and descendants.
     let deltas: Vec<ModelDelta> = tree
         .into_iter()
-        .map(|e| Delta::Delete { id: e.id, old: e }.into())
+        .map(|e| Delta::Delete { old: e }.into())
         .collect();
 
     Ok(Mutation {

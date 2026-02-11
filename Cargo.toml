@@ -1,12 +1,12 @@
 [workspace]
 members = [
     "core",
+    "desktop",
     "generation",
     "integration_tests",
-    "mobile",
+    "ivm",
     "postgres",
     "sqlite",
-    "mobile", "ivm",
 ]
 resolver = "2"
 

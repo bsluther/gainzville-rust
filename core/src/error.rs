@@ -12,6 +12,8 @@ pub enum DomainError {
     Validation(#[from] ValidationError),
     #[error("Consistency error: {0}")]
     Consistency(String),
+    #[error("Attribute mismatch")]
+    AttributeMismatch,
 }
 
 #[derive(thiserror::Error, Debug)]

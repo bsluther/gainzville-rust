@@ -12,3 +12,4 @@ mod entry_node;
 pub use entry_node::EntryNode;
 
 mod log;
+pub mod context_menu;

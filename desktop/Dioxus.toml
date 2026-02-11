@@ -3,7 +3,7 @@
 [web.app]
 
 # HTML title tag content
-title = "mobile"
+title = "desktop"
 
 # include `assets` in web platform
 [web.resource]
