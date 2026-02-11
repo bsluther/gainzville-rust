@@ -2,7 +2,7 @@
 
 ### JSONB vs Normalized Tables
 
-**Decision**: Single `attributes` table and single `values` table using JSONB for type-specific data, with index columns for query performance.
+**Decision**: Single `attributes` table and single `values` table using JSON-as-TEXT for type-specific data, with index columns for query performance. TEXT is a simplifying measure for now; plan is to move to JSONB (Postgres) and JSONB BLOBs (SQLite) once the model stabilizes.
 
 **Considered**: One table per attribute type and one table per value type (fully normalized). Rejected because:
 - Repetitive schema and code (tried in a previous version of the project)
@@ -11,20 +11,20 @@
 - FK type safety (e.g. numeric value can't reference select attribute) is low-value since the attribute-value type relationship is immutable and validated in mutators
 - Index columns are needed regardless (e.g. measures need `index_float` alongside display representation)
 
-**JSONB works well here because**:
+**JSON works well here because**:
 - Rust enums provide strong application-level type safety
 - All writes go through mutator validation
-- Client-side attribute counts are small (thousands), so JSONB scanning is fine
-- Postgres GIN indexes on JSONB are available if needed later
+- Client-side attribute counts are small (thousands), so scanning is fine
+- Postgres GIN indexes available if upgraded to JSONB later
 
 ### Planned vs Actual Values
 
-**Decision**: Two nullable JSONB columns on a single row per entry-attribute pair.
+**Decision**: Two nullable JSON-as-TEXT columns on a single row per entry-attribute pair.
 
 **Considered**:
 - Splitting the entry itself into planned/actual: too disruptive, plan and actual need to live visually within a single entry
 - Two rows with a `kind` discriminator: more flexible but doubles rows and complicates the common "show both" query
-- Two JSONB columns (`planned`, `actual`): simpler, one row = one entry-attribute pair, one query gets both, storage efficient since most rows have only one populated
+- Two JSON columns (`plan`, `actual`): simpler, one row = one entry-attribute pair, one query gets both, storage efficient since most rows have only one populated
 
 **No CHECK constraint on planned/actual.** Both columns are independently nullable. The value row itself represents the entry-attribute relationship, giving three states:
 1. **No row** — entry does not have this attribute
@@ -39,39 +39,26 @@ State 2 is needed because users can add/remove attributes per entry independentl
 
 - Avoids conditional "which value do I index" logic in mutators
 - Hot-path queries (max load, longest run, etc.) are against actuals
-- Planning queries filter by entry timestamps and read JSONB directly, don't need indexed aggregation
+- Planning queries filter by entry timestamps and read JSON directly, don't need indexed aggregation
 - Can add `planned_index_float` / `planned_index_string` later if needed
 
 ### Multiselect Indexing
 
 **Decision**: Don't index multiselect values. Store the selection as a JSON array.
 
-- Containment queries (`data @> '["option"]'`) work on JSONB if needed
+- Containment queries work on JSON if needed (native on JSONB, via `json_extract` on TEXT)
 - At client-side volumes, scanning is fine
 - Avoids junction tables that would break the single-table approach
 
 ### Rust Model Structure
 
-**Decision**: Top-level `Attribute` struct with common fields + an `AttributeConfig` enum for type-specific data. Config variants wrap separate structs (e.g. `NumericConfig`, `SelectConfig`).
+**Decision**: Top-level `Attribute` struct with common fields + an `AttributeConfig` enum for type-specific data. Config variants wrap separate structs (e.g. `NumericConfig`, `SelectConfig`). See `core/src/models/attribute.rs`.
 
-```rust
-pub struct Attribute {
-    pub id: Uuid,
-    pub name: String,
-    pub config: AttributeConfig,
-}
-
-pub enum AttributeConfig {
-    Numeric(NumericConfig),
-    Select(SelectConfig),
-}
-```
-
-**Why struct + enum over top-level enum**: Common fields (`id`, `name`) are accessible without matching every variant. Maps directly to DB layout (common columns + JSONB config column).
+**Why struct + enum over top-level enum**: Common fields (`id`, `name`) are accessible without matching every variant. Maps directly to DB layout (common columns + JSON config column).
 
 **Why separate config structs**: Enables typed narrowing — `attribute.expect_numeric() -> Result<&NumericConfig>`. Also gives a place for config-specific validation methods.
 
-**No `attribute_type` field on the struct**: The enum variant is the discriminator. A separate field would create inconsistent states. Derive it when needed via `attribute.attribute_type()`.
+**No `attribute_type` field on the struct**: The enum variant is the discriminator. A separate field would create inconsistent states. Derive it when needed via `attribute.config.data_type()`.
 
 ### No owner_id on Values
 
@@ -102,25 +89,4 @@ pub enum AttributeConfig {
 - `AttributeConfig` uses serde's default external tagging: `{"Numeric": {"min": null, ...}}`. Originally used `#[serde(tag = "type")]` (internally tagged), but internally-tagged enums are incompatible with serde_json's `arbitrary_precision` feature (which is enabled workspace-wide via ivm/dbsp). External tagging avoids this by letting serde_json handle deserialization directly without going through serde's internal content buffer.
 - `data_type TEXT` column populated at write time from the variant, for SQL-level filtering without parsing JSON.
 - `#[serde(default)]` on new fields handles backward compatibility with existing JSON rows if variants evolve.
-
-### Sketch
-
-```sql
-attributes (
-    id UUID PRIMARY KEY,
-    name TEXT NOT NULL,
-    data_type TEXT NOT NULL,
-    config JSONB NOT NULL,       -- type-specific: options, constraints, unit_type, etc.
-    ...
-)
-
-attribute_values (
-    entry_id UUID NOT NULL REFERENCES entries(id),
-    attribute_id UUID NOT NULL REFERENCES attributes(id),
-    planned JSONB,
-    actual JSONB,
-    index_float FLOAT,           -- derived from actual only
-    index_string TEXT,            -- derived from actual only
-    PRIMARY KEY (entry_id, attribute_id)
-)
-```
+- See `sqlite/migrations/` and `postgres/migrations/` for table definitions.
