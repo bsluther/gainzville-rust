@@ -4,7 +4,10 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::{
-    actions::{Action, CreateActivity, CreateEntry, CreateUser, DeleteEntryRecursive, MoveEntry},
+    actions::{
+        Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
+        DeleteEntryRecursive, MoveEntry,
+    },
     delta::{Delta, ModelDelta},
     error::{DomainError, Result},
     models::{
@@ -271,5 +274,84 @@ where
         timestamp: Utc::now(),
         action: action.into(),
         changes: deltas,
+    })
+}
+
+pub async fn create_attribute<'t, DB, R>(
+    _tx: &mut Transaction<'t, DB>,
+    action: CreateAttribute,
+) -> Result<Mutation>
+where
+    DB: Database,
+    R: Reader<DB>,
+    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
+{
+    let attribute = action.attribute.clone();
+
+    // Only the owner can create attributes for themselves (for now).
+    if action.actor_id != attribute.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "actor '{}' is not authorized to create attributes for owner '{}'",
+            action.actor_id, attribute.owner_id
+        )));
+    }
+
+    let insert_attribute = Delta::Insert { new: attribute };
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: Action::CreateAttribute(action),
+        changes: vec![insert_attribute.into()],
+    })
+}
+
+pub async fn create_value<'t, DB, R>(
+    tx: &mut Transaction<'t, DB>,
+    action: CreateValue,
+) -> Result<Mutation>
+where
+    DB: Database,
+    R: Reader<DB>,
+    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
+{
+    let value = action.value.clone();
+
+    // The entry must exist.
+    let entry = R::find_entry_by_id(&mut **tx, value.entry_id)
+        .await?
+        .ok_or_else(|| {
+            DomainError::Other(format!("entry '{}' not found", value.entry_id))
+        })?;
+
+    // Only the entry owner can create values on it.
+    if action.actor_id != entry.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "actor '{}' is not authorized to create values on entry owned by '{}'",
+            action.actor_id, entry.owner_id
+        )));
+    }
+
+    // The attribute must exist and be owned by the same actor as the entry.
+    let attribute = R::find_attribute_by_id(&mut **tx, value.attribute_id)
+        .await?
+        .ok_or_else(|| {
+            DomainError::Other(format!("attribute '{}' not found", value.attribute_id))
+        })?;
+
+    if attribute.owner_id != entry.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "attribute owner '{}' does not match entry owner '{}'",
+            attribute.owner_id, entry.owner_id
+        )));
+    }
+
+    let insert_value = Delta::Insert { new: value };
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: Action::CreateValue(action),
+        changes: vec![insert_value.into()],
     })
 }

@@ -37,6 +37,13 @@ impl PostgresServer {
                 mutators::delete_entry_recursive::<sqlx::Postgres, PostgresReader>(&mut tx, action)
                     .await?
             }
+            Action::CreateAttribute(action) => {
+                mutators::create_attribute::<sqlx::Postgres, PostgresReader>(&mut tx, action)
+                    .await?
+            }
+            Action::CreateValue(action) => {
+                mutators::create_value::<sqlx::Postgres, PostgresReader>(&mut tx, action).await?
+            }
         };
 
         // TODO: log mutation in this transaction.

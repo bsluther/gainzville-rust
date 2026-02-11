@@ -89,6 +89,12 @@ impl SqliteClient {
                 mutators::delete_entry_recursive::<sqlx::Sqlite, SqliteReader>(&mut tx, action)
                     .await?
             }
+            Action::CreateAttribute(action) => {
+                mutators::create_attribute::<sqlx::Sqlite, SqliteReader>(&mut tx, action).await?
+            }
+            Action::CreateValue(action) => {
+                mutators::create_value::<sqlx::Sqlite, SqliteReader>(&mut tx, action).await?
+            }
         };
 
         // TODO: write this mutation into the local mutation log.

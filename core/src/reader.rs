@@ -3,7 +3,13 @@ use uuid::Uuid;
 
 use crate::{
     error::Result,
-    models::{activity::Activity, entry::Entry, entry_view::EntryView, user::User},
+    models::{
+        activity::Activity,
+        attribute::{Attribute, Value},
+        entry::Entry,
+        entry_view::EntryView,
+        user::User,
+    },
     validation::{Email, Username},
 };
 
@@ -67,4 +73,24 @@ pub trait Reader<DB: sqlx::Database> {
         executor: impl Executor<'e, Database = DB>,
         entry_id: Uuid,
     ) -> Result<Vec<Entry>>;
+
+    // Attribute methods
+
+    async fn find_attribute_by_id<'e>(
+        executor: impl Executor<'e, Database = DB>,
+        attribute_id: Uuid,
+    ) -> Result<Option<Attribute>>;
+
+    async fn find_attributes_by_owner<'e>(
+        executor: impl Executor<'e, Database = DB>,
+        owner_id: Uuid,
+    ) -> Result<Vec<Attribute>>;
+
+    // Value methods
+
+    async fn find_value_by_key<'e>(
+        executor: impl Executor<'e, Database = DB>,
+        entry_id: Uuid,
+        attribute_id: Uuid,
+    ) -> Result<Option<Value>>;
 }

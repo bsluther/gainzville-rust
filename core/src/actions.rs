@@ -2,6 +2,7 @@ use uuid::Uuid;
 
 use crate::models::{
     activity::Activity,
+    attribute::{Attribute, Value},
     entry::{Entry, Position, Temporal},
     user::User,
 };
@@ -13,6 +14,8 @@ use crate::models::{
 pub enum Action {
     CreateUser(CreateUser),
     CreateActivity(CreateActivity),
+    CreateAttribute(CreateAttribute),
+    CreateValue(CreateValue),
     CreateEntry(CreateEntry),
     DeleteEntryRecursive(DeleteEntryRecursive),
     MoveEntry(MoveEntry),
@@ -45,6 +48,18 @@ impl From<MoveEntry> for Action {
 impl From<DeleteEntryRecursive> for Action {
     fn from(value: DeleteEntryRecursive) -> Self {
         Action::DeleteEntryRecursive(value)
+    }
+}
+
+impl From<CreateAttribute> for Action {
+    fn from(value: CreateAttribute) -> Self {
+        Action::CreateAttribute(value)
+    }
+}
+
+impl From<CreateValue> for Action {
+    fn from(value: CreateValue) -> Self {
+        Action::CreateValue(value)
     }
 }
 
@@ -101,4 +116,25 @@ pub struct MoveEntry {
 pub struct DeleteEntryRecursive {
     pub actor_id: Uuid,
     pub entry_id: Uuid,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateAttribute {
+    pub actor_id: Uuid,
+    pub attribute: Attribute,
+}
+
+impl From<Attribute> for CreateAttribute {
+    fn from(attribute: Attribute) -> Self {
+        CreateAttribute {
+            actor_id: attribute.owner_id,
+            attribute,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateValue {
+    pub actor_id: Uuid,
+    pub value: Value,
 }

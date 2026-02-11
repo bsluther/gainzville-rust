@@ -3,7 +3,13 @@ use sqlx::{Sqlite, Transaction};
 use gv_core::{
     delta::{Delta, ModelDelta},
     error::Result,
-    models::{activity::Activity, actor::Actor, entry::Entry, user::User},
+    models::{
+        activity::Activity,
+        actor::Actor,
+        attribute::{Attribute, AttributeRow, Value, ValueRow},
+        entry::Entry,
+        user::User,
+    },
 };
 
 // TODO: update impls update all columns, even those that haven't changed. Fine for now, but could
@@ -21,6 +27,8 @@ impl SqliteApply for ModelDelta {
             ModelDelta::User(delta) => delta.apply_delta(tx).await,
             ModelDelta::Activity(delta) => delta.apply_delta(tx).await,
             ModelDelta::Entry(delta) => delta.apply_delta(tx).await,
+            ModelDelta::Attribute(delta) => delta.apply_delta(tx).await,
+            ModelDelta::Value(delta) => delta.apply_delta(tx).await,
         }
     }
 }
@@ -185,6 +193,102 @@ impl SqliteApply for Delta<Entry> {
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM entries WHERE id = ?")
                     .bind(old.id)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl SqliteApply for Delta<Attribute> {
+    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
+        match self {
+            Delta::Insert { new } => {
+                let row = AttributeRow::from_attribute(&new)?;
+                sqlx::query(
+                    "INSERT INTO attributes (id, owner_id, name, data_type, config) VALUES (?, ?, ?, ?, ?)",
+                )
+                .bind(row.id)
+                .bind(row.owner_id)
+                .bind(row.name)
+                .bind(row.data_type)
+                .bind(row.config)
+                .execute(&mut **tx)
+                .await?;
+            }
+            Delta::Update { old, new } => {
+                assert_eq!(old.id, new.id, "update must not mutate primary key");
+                let row = AttributeRow::from_attribute(&new)?;
+                sqlx::query(
+                    "UPDATE attributes SET owner_id = ?, name = ?, data_type = ?, config = ? WHERE id = ?",
+                )
+                .bind(row.owner_id)
+                .bind(row.name)
+                .bind(row.data_type)
+                .bind(row.config)
+                .bind(row.id)
+                .execute(&mut **tx)
+                .await?;
+            }
+            Delta::Delete { old } => {
+                sqlx::query("DELETE FROM attributes WHERE id = ?")
+                    .bind(old.id)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl SqliteApply for Delta<Value> {
+    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
+        match self {
+            Delta::Insert { new } => {
+                let row = ValueRow::from_value(&new)?;
+                sqlx::query(
+                    r#"
+                    INSERT INTO attribute_values (entry_id, attribute_id, plan, actual, index_float, index_string)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    "#,
+                )
+                .bind(row.entry_id)
+                .bind(row.attribute_id)
+                .bind(row.plan)
+                .bind(row.actual)
+                .bind(row.index_float)
+                .bind(row.index_string)
+                .execute(&mut **tx)
+                .await?;
+            }
+            Delta::Update { old, new } => {
+                assert_eq!(
+                    (old.entry_id, old.attribute_id),
+                    (new.entry_id, new.attribute_id),
+                    "update must not mutate primary key"
+                );
+                let row = ValueRow::from_value(&new)?;
+                sqlx::query(
+                    r#"
+                    UPDATE attribute_values
+                    SET plan = ?, actual = ?, index_float = ?, index_string = ?
+                    WHERE entry_id = ? AND attribute_id = ?
+                    "#,
+                )
+                .bind(row.plan)
+                .bind(row.actual)
+                .bind(row.index_float)
+                .bind(row.index_string)
+                .bind(row.entry_id)
+                .bind(row.attribute_id)
+                .execute(&mut **tx)
+                .await?;
+            }
+            Delta::Delete { old } => {
+                sqlx::query("DELETE FROM attribute_values WHERE entry_id = ? AND attribute_id = ?")
+                    .bind(old.entry_id)
+                    .bind(old.attribute_id)
                     .execute(&mut **tx)
                     .await?;
             }

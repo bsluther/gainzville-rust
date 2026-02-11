@@ -99,10 +99,9 @@ pub enum AttributeConfig {
 
 ### Serde / DB Mapping
 
-- `#[serde(tag = "type")]` on `AttributeConfig` produces internally-tagged JSON: `{"type": "Numeric", "min": null}`.
+- `AttributeConfig` uses serde's default external tagging: `{"Numeric": {"min": null, ...}}`. Originally used `#[serde(tag = "type")]` (internally tagged), but internally-tagged enums are incompatible with serde_json's `arbitrary_precision` feature (which is enabled workspace-wide via ivm/dbsp). External tagging avoids this by letting serde_json handle deserialization directly without going through serde's internal content buffer.
 - `data_type TEXT` column populated at write time from the variant, for SQL-level filtering without parsing JSON.
-- Two layers of type discrimination (column + JSON tag) are intentionally redundant across different access patterns.
-- `#[serde(default)]` on new fields handles backward compatibility with existing JSONB rows if variants evolve.
+- `#[serde(default)]` on new fields handles backward compatibility with existing JSON rows if variants evolve.
 
 ### Sketch
 

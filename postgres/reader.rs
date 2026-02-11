@@ -2,6 +2,7 @@ use gv_core::{
     error::{DomainError, Result},
     models::{
         activity::Activity,
+        attribute::{Attribute, AttributeRow, Value, ValueRow},
         entry::{Entry, EntryRow},
         entry_view::{EntryView, EntryViewRow},
         user::User,
@@ -239,5 +240,54 @@ impl Reader<sqlx::Postgres> for PostgresReader {
         .into_iter()
         .map(|e| e.to_entry())
         .collect()
+    }
+
+    ///////////// Attribute /////////////
+
+    async fn find_attribute_by_id<'e>(
+        executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+        attribute_id: Uuid,
+    ) -> Result<Option<Attribute>> {
+        sqlx::query_as::<_, AttributeRow>(
+            "SELECT id, owner_id, name, data_type, config FROM attributes WHERE id = $1",
+        )
+        .bind(attribute_id)
+        .fetch_optional(executor)
+        .await?
+        .map(|row| row.to_attribute())
+        .transpose()
+    }
+
+    async fn find_attributes_by_owner<'e>(
+        executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+        owner_id: Uuid,
+    ) -> Result<Vec<Attribute>> {
+        sqlx::query_as::<_, AttributeRow>(
+            "SELECT id, owner_id, name, data_type, config FROM attributes WHERE owner_id = $1",
+        )
+        .bind(owner_id)
+        .fetch_all(executor)
+        .await?
+        .into_iter()
+        .map(|row| row.to_attribute())
+        .collect()
+    }
+
+    ///////////// Value /////////////
+
+    async fn find_value_by_key<'e>(
+        executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+        entry_id: Uuid,
+        attribute_id: Uuid,
+    ) -> Result<Option<Value>> {
+        sqlx::query_as::<_, ValueRow>(
+            "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id = $1 AND attribute_id = $2",
+        )
+        .bind(entry_id)
+        .bind(attribute_id)
+        .fetch_optional(executor)
+        .await?
+        .map(|row| row.to_value())
+        .transpose()
     }
 }

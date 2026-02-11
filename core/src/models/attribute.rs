@@ -3,21 +3,23 @@
 // Structure:
 // - Attribute: common fields + AttributeConfig enum for type-specific config.
 // - Value: entry-attribute pair with Optional plan/actual AttributeValue enums.
-// - Row structs (AttributeRow, ValueRow): flat DB representations using serde_json::Value
-//   for JSONB columns. Conversion methods handle serde round-tripping.
+// - Row structs (AttributeRow, ValueRow): flat DB representations using JSON-as-TEXT
+//   columns. Conversion methods handle serde round-tripping via to_string/from_str.
 // - Range values encoded in the value enums (Exact vs Range variants) rather than a
 //   separate boolean flag.
 //
 // Serde:
-// - AttributeConfig uses #[serde(tag = "type")] (internally tagged) since variants are structs.
-// - AttributeValue uses default external tagging since inner enums wrap primitives.
+// - All enums use default external tagging. Internally-tagged enums are incompatible with
+//   serde_json's arbitrary_precision feature (enabled workspace-wide via ivm/dbsp).
 // - All config/value types derive Serialize + Deserialize.
 
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::error::{DomainError, Result};
 
+#[derive(Debug, Clone)]
 pub struct Attribute {
     pub id: Uuid,
     pub owner_id: Uuid,
@@ -44,7 +46,6 @@ impl Attribute {
 ///// Configs /////
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
 pub enum AttributeConfig {
     Numeric(NumericConfig),
     Select(SelectConfig),
@@ -63,22 +64,22 @@ impl AttributeConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NumericConfig {
-    min: Option<f64>,
-    max: Option<f64>,
-    integer: bool,
-    default: Option<f64>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub integer: bool,
+    pub default: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelectConfig {
-    options: Vec<String>,
-    ordered: bool,
-    default: Option<String>,
+    pub options: Vec<String>,
+    pub ordered: bool,
+    pub default: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MassConfig {
-    default_units: Vec<MassUnit>,
+    pub default_units: Vec<MassUnit>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +91,7 @@ pub enum MassUnit {
 
 ///// Values /////
 
+#[derive(Debug, Clone)]
 pub struct Value {
     // Identified by a composite key: (entry_id, attribute_id).
     pub entry_id: Uuid,
@@ -136,12 +138,13 @@ pub struct MassMeasurement {
 
 ///// Rows /////
 
+#[derive(Debug, Clone, FromRow)]
 pub struct AttributeRow {
     pub id: Uuid,
     pub owner_id: Uuid,
     pub name: String,
     pub data_type: String,
-    pub config: serde_json::Value,
+    pub config: String, // JSON as TEXT
 }
 
 impl AttributeRow {
@@ -151,14 +154,14 @@ impl AttributeRow {
             owner_id: attr.owner_id,
             name: attr.name.clone(),
             data_type: attr.config.data_type().to_string(),
-            config: serde_json::to_value(&attr.config)
+            config: serde_json::to_string(&attr.config)
                 .map_err(|e| DomainError::Other(e.to_string()))?,
         })
     }
 
     pub fn to_attribute(self) -> Result<Attribute> {
         let config: AttributeConfig =
-            serde_json::from_value(self.config).map_err(|e| DomainError::Other(e.to_string()))?;
+            serde_json::from_str(&self.config).map_err(|e| DomainError::Other(e.to_string()))?;
         Ok(Attribute {
             id: self.id,
             owner_id: self.owner_id,
@@ -168,12 +171,13 @@ impl AttributeRow {
     }
 }
 
+#[derive(Debug, Clone, FromRow)]
 pub struct ValueRow {
-    // Composite FK = (entry_id, attribute_id).
+    // Composite PK = (entry_id, attribute_id).
     pub entry_id: Uuid,
     pub attribute_id: Uuid,
-    pub plan: Option<serde_json::Value>,
-    pub actual: Option<serde_json::Value>,
+    pub plan: Option<String>,   // JSON as TEXT
+    pub actual: Option<String>, // JSON as TEXT
     pub index_float: Option<f64>,
     pub index_string: Option<String>,
 }
@@ -183,13 +187,13 @@ impl ValueRow {
         let plan = value
             .plan
             .as_ref()
-            .map(|v| serde_json::to_value(v))
+            .map(|v| serde_json::to_string(v))
             .transpose()
             .map_err(|e| DomainError::Other(e.to_string()))?;
         let actual = value
             .actual
             .as_ref()
-            .map(|v| serde_json::to_value(v))
+            .map(|v| serde_json::to_string(v))
             .transpose()
             .map_err(|e| DomainError::Other(e.to_string()))?;
         Ok(Self {
@@ -205,12 +209,14 @@ impl ValueRow {
     pub fn to_value(self) -> Result<Value> {
         let plan: Option<AttributeValue> = self
             .plan
-            .map(|v| serde_json::from_value(v))
+            .as_deref()
+            .map(|v| serde_json::from_str(v))
             .transpose()
             .map_err(|e| DomainError::Other(e.to_string()))?;
         let actual: Option<AttributeValue> = self
             .actual
-            .map(|v| serde_json::from_value(v))
+            .as_deref()
+            .map(|v| serde_json::from_str(v))
             .transpose()
             .map_err(|e| DomainError::Other(e.to_string()))?;
         Ok(Value {
