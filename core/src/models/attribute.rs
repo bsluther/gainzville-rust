@@ -52,6 +52,22 @@ pub enum AttributeConfig {
     Mass(MassConfig),
 }
 
+impl From<NumericConfig> for AttributeConfig {
+    fn from(value: NumericConfig) -> Self {
+        AttributeConfig::Numeric(value)
+    }
+}
+impl From<SelectConfig> for AttributeConfig {
+    fn from(value: SelectConfig) -> Self {
+        AttributeConfig::Select(value)
+    }
+}
+impl From<MassConfig> for AttributeConfig {
+    fn from(value: MassConfig) -> Self {
+        AttributeConfig::Mass(value)
+    }
+}
+
 impl AttributeConfig {
     pub fn data_type(&self) -> &'static str {
         match self {

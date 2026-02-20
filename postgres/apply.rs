@@ -85,7 +85,10 @@ impl PgApply for Delta<User> {
                 .await?;
             }
             Delta::Update { old, new } => {
-                assert_eq!(old.actor_id, new.actor_id, "update must not mutate primary key");
+                assert_eq!(
+                    old.actor_id, new.actor_id,
+                    "update must not mutate primary key"
+                );
                 // TODO: this updates all fields, even those that haven't changed.
                 sqlx::query!(
                     r#"

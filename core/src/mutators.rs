@@ -19,6 +19,11 @@ use crate::{
 
 // FIXME: make randomness/time deterministic when creating mutations.
 
+/**
+ * Constraints
+ * - All mutators must be capable of running in a transaction.
+ */
+
 #[derive(Debug, Clone)]
 pub struct Mutation {
     pub id: Uuid,
@@ -66,9 +71,7 @@ where
             created_at: chrono::Utc::now(),
         },
     };
-    let insert_user = Delta::<User>::Insert {
-        new: user.clone(),
-    };
+    let insert_user = Delta::<User>::Insert { new: user.clone() };
 
     // Create mutation.
     // - Might make more sense just to return deltas from here, we'll see.
@@ -100,9 +103,7 @@ where
         )));
     }
 
-    let insert_activity = Delta::Insert {
-        new: activity,
-    };
+    let insert_activity = Delta::Insert { new: activity };
 
     Ok(Mutation {
         id: Uuid::new_v4(),
@@ -320,9 +321,7 @@ where
     // The entry must exist.
     let entry = R::find_entry_by_id(&mut **tx, value.entry_id)
         .await?
-        .ok_or_else(|| {
-            DomainError::Other(format!("entry '{}' not found", value.entry_id))
-        })?;
+        .ok_or_else(|| DomainError::Other(format!("entry '{}' not found", value.entry_id)))?;
 
     // Only the entry owner can create values on it.
     if action.actor_id != entry.owner_id {
