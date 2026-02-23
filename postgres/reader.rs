@@ -3,6 +3,7 @@ use gv_core::{
     models::{
         activity::Activity,
         attribute::{Attribute, AttributeRow, Value, ValueRow},
+        attribute_pair::{AttributePair, AttributePairRow},
         entry::{Entry, EntryRow},
         entry_join::{EntryJoin, EntryJoinRow},
         user::User,
@@ -225,7 +226,7 @@ impl Reader<sqlx::Postgres> for PostgresReader {
         connection: &mut <sqlx::Postgres as sqlx::Database>::Connection,
         entry_id: Uuid,
     ) -> Result<Option<EntryJoin>> {
-        let mut entry_join = sqlx::query_as::<_, EntryJoinRow>(
+        let row = sqlx::query_as::<_, EntryJoinRow>(
             r#"
             SELECT
                 e.id, e.activity_id, e.owner_id, e.parent_id, e.frac_index,
@@ -241,19 +242,18 @@ impl Reader<sqlx::Postgres> for PostgresReader {
         )
         .bind(entry_id)
         .fetch_optional(&mut *connection)
-        .await?
-        .map(|row| row.to_entry_view())
-        .transpose()?;
+        .await?;
 
-        if let Some(entry_join) = &mut entry_join {
-            let values = PostgresReader::find_values_for_entry(&mut *connection, entry_id).await?;
-
-            for value in values {
-                entry_join.values.insert(value.attribute_id, value);
+        match row {
+            None => Ok(None),
+            Some(row) => {
+                let pairs =
+                    PostgresReader::find_attribute_pairs_for_entry(&mut *connection, entry_id)
+                        .await?;
+                let attributes = pairs.into_iter().map(|p| (p.attr_id(), p)).collect();
+                Ok(Some(EntryJoin::from_row(row, attributes)?))
             }
-        };
-
-        Ok(entry_join)
+        }
     }
 
     async fn find_descendants(
@@ -342,6 +342,31 @@ impl Reader<sqlx::Postgres> for PostgresReader {
         .await?
         .into_iter()
         .map(|row| row.to_value())
+        .collect()
+    }
+
+    async fn find_attribute_pairs_for_entry(
+        connection: &mut <sqlx::Postgres as sqlx::Database>::Connection,
+        entry_id: Uuid,
+    ) -> Result<Vec<AttributePair>> {
+        sqlx::query_as::<_, AttributePairRow>(
+            r#"
+            SELECT
+                a.id as attr_id, a.owner_id as attr_owner_id,
+                a.name as attr_name, a.data_type as attr_data_type,
+                a.config as attr_config,
+                v.entry_id, v.attribute_id, v.plan, v.actual,
+                v.index_float, v.index_string
+            FROM attribute_values v
+            INNER JOIN attributes a ON v.attribute_id = a.id
+            WHERE v.entry_id = $1
+            "#,
+        )
+        .bind(entry_id)
+        .fetch_all(&mut *connection)
+        .await?
+        .into_iter()
+        .map(|row| row.to_attribute_pair())
         .collect()
     }
 }

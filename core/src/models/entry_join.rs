@@ -7,16 +7,15 @@ use uuid::Uuid;
 use super::activity::{Activity, ActivityName};
 use super::entry::{Entry, Position, Temporal};
 use crate::error::Result;
-use crate::models::attribute::Value;
+use crate::models::attribute_pair::AttributePair;
 
 /// Domain model representing an Entry with all its joined relations.
-/// Currently includes the optional Activity; will expand to include
-/// attributes, categories, etc.
+/// Currently includes the optional Activity and Attribute-Value pairs.
 #[derive(Debug, Clone)]
 pub struct EntryJoin {
     pub entry: Entry,
     pub activity: Option<Activity>,
-    pub values: HashMap<Uuid, Value>,
+    attributes: HashMap<Uuid, AttributePair>,
 }
 
 impl EntryJoin {
@@ -28,6 +27,59 @@ impl EntryJoin {
         self.activity
             .as_ref()
             .map_or("Unnamed".to_string(), |a| a.name.to_string())
+    }
+
+    pub fn attribute(&self, attr_id: Uuid) -> Option<&AttributePair> {
+        self.attributes.get(&attr_id)
+    }
+
+    pub fn attributes(&self) -> impl Iterator<Item = &AttributePair> {
+        self.attributes.values()
+    }
+
+    pub fn from_row(row: EntryJoinRow, attributes: HashMap<Uuid, AttributePair>) -> Result<Self> {
+        let duration_ms: Option<u32> =
+            row.duration_ms
+                .map(|d| d.try_into())
+                .transpose()
+                .map_err(|_| {
+                    crate::error::ValidationError::Other(
+                        "duration must fit in a u32".to_string().into(),
+                    )
+                })?;
+
+        let entry = Entry {
+            id: row.id,
+            activity_id: row.activity_id,
+            owner_id: row.owner_id,
+            position: Position::parse(row.parent_id, row.frac_index)?,
+            is_template: row.is_template,
+            is_sequence: row.is_sequence,
+            display_as_sets: row.display_as_sets,
+            temporal: Temporal::parse(row.start_time, row.end_time, duration_ms)?,
+        };
+
+        let activity = match row.act_id {
+            Some(id) => Some(Activity {
+                id,
+                owner_id: row
+                    .act_owner_id
+                    .expect("act_owner_id should be present when act_id is"),
+                source_activity_id: row.act_source_activity_id,
+                name: ActivityName::parse(
+                    row.act_name
+                        .expect("act_name should be present when act_id is"),
+                )?,
+                description: row.act_description,
+            }),
+            None => None,
+        };
+
+        Ok(EntryJoin {
+            entry,
+            activity,
+            attributes,
+        })
     }
 }
 
@@ -59,54 +111,4 @@ pub struct EntryJoinRow {
     pub act_name: Option<String>,
     #[sqlx(rename = "act_description")]
     pub act_description: Option<String>,
-}
-
-impl EntryJoinRow {
-    /// Convert this flat row into the nested EntryView domain model.
-    pub fn to_entry_view(self) -> Result<EntryJoin> {
-        let duration_ms: Option<u32> =
-            self.duration_ms
-                .map(|d| d.try_into())
-                .transpose()
-                .map_err(|_| {
-                    crate::error::ValidationError::Other(
-                        "duration must fit in a u32".to_string().into(),
-                    )
-                })?;
-
-        let entry = Entry {
-            id: self.id,
-            activity_id: self.activity_id,
-            owner_id: self.owner_id,
-            position: Position::parse(self.parent_id, self.frac_index)?,
-            is_template: self.is_template,
-            is_sequence: self.is_sequence,
-            display_as_sets: self.display_as_sets,
-            temporal: Temporal::parse(self.start_time, self.end_time, duration_ms)?,
-        };
-
-        let activity = match self.act_id {
-            Some(id) => Some(Activity {
-                id,
-                owner_id: self
-                    .act_owner_id
-                    .expect("act_owner_id should be present when act_id is"),
-                source_activity_id: self.act_source_activity_id,
-                name: ActivityName::parse(
-                    self.act_name
-                        .expect("act_name should be present when act_id is"),
-                )?,
-                description: self.act_description,
-            }),
-            None => None,
-        };
-
-        let values: HashMap<Uuid, Value> = HashMap::new();
-
-        Ok(EntryJoin {
-            entry,
-            activity,
-            values,
-        })
-    }
 }

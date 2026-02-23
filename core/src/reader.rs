@@ -6,6 +6,7 @@ use crate::{
     models::{
         activity::Activity,
         attribute::{Attribute, Value},
+        attribute_pair::AttributePair,
         entry::Entry,
         entry_join::EntryJoin,
         user::User,
@@ -105,4 +106,9 @@ pub trait Reader<DB: sqlx::Database> {
         connection: &mut DB::Connection,
         entry_id: Uuid,
     ) -> Result<Vec<Value>>;
+
+    async fn find_attribute_pairs_for_entry(
+        connection: &mut DB::Connection,
+        entry_id: Uuid,
+    ) -> Result<Vec<AttributePair>>;
 }

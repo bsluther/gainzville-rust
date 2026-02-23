@@ -1,22 +1,34 @@
+use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    error::DomainError,
+    error::{DomainError, Result},
     models::attribute::{
-        Attribute, AttributeConfig, MassConfig, MassValue, NumericConfig, NumericValue,
-        SelectConfig, SelectValue, Value,
+        Attribute, AttributeConfig, AttributeRow, MassConfig, MassValue, NumericConfig,
+        NumericValue, SelectConfig, SelectValue, Value, ValueRow,
     },
 };
 
+#[derive(Debug, Clone)]
 pub enum AttributePair {
     Numeric(NumericAttributePair),
     Select(SelectAttributePair),
     Mass(MassAttributePair),
 }
 
+impl AttributePair {
+    pub fn attr_id(&self) -> Uuid {
+        match self {
+            AttributePair::Numeric(p) => p.attr_id,
+            AttributePair::Select(p) => p.attr_id,
+            AttributePair::Mass(p) => p.attr_id,
+        }
+    }
+}
+
 impl TryFrom<(Attribute, Value)> for AttributePair {
     type Error = DomainError;
-    fn try_from((attr, val): (Attribute, Value)) -> Result<Self, Self::Error> {
+    fn try_from((attr, val): (Attribute, Value)) -> std::result::Result<Self, Self::Error> {
         match (attr.config, val.plan, val.actual) {
             (AttributeConfig::Numeric(cfg), plan, actual) => {
                 let plan = plan.map(|v| v.expect_numeric()).transpose()?;
@@ -64,6 +76,7 @@ impl TryFrom<(Attribute, Value)> for AttributePair {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct NumericAttributePair {
     pub attr_id: Uuid,
     pub entry_id: Uuid,
@@ -75,6 +88,7 @@ pub struct NumericAttributePair {
     pub actual: Option<NumericValue>,
 }
 
+#[derive(Debug, Clone)]
 pub struct SelectAttributePair {
     pub attr_id: Uuid,
     pub entry_id: Uuid,
@@ -86,6 +100,7 @@ pub struct SelectAttributePair {
     pub actual: Option<SelectValue>,
 }
 
+#[derive(Debug, Clone)]
 pub struct MassAttributePair {
     pub attr_id: Uuid,
     pub entry_id: Uuid,
@@ -95,4 +110,53 @@ pub struct MassAttributePair {
     pub index_float: Option<f64>,
     pub plan: Option<MassValue>,
     pub actual: Option<MassValue>,
+}
+
+/// Flat row struct for decoding a JOIN between attributes and attribute_values.
+#[derive(Debug, Clone, FromRow)]
+pub struct AttributePairRow {
+    // Attribute columns
+    #[sqlx(rename = "attr_id")]
+    pub attr_id: Uuid,
+    #[sqlx(rename = "attr_owner_id")]
+    pub attr_owner_id: Uuid,
+    #[sqlx(rename = "attr_name")]
+    pub attr_name: String,
+    #[sqlx(rename = "attr_data_type")]
+    pub attr_data_type: String,
+    #[sqlx(rename = "attr_config")]
+    pub attr_config: String,
+
+    // Value columns
+    pub entry_id: Uuid,
+    pub attribute_id: Uuid,
+    pub plan: Option<String>,
+    pub actual: Option<String>,
+    pub index_float: Option<f64>,
+    pub index_string: Option<String>,
+}
+
+impl AttributePairRow {
+    pub fn to_attribute_pair(self) -> Result<AttributePair> {
+        let attr = AttributeRow {
+            id: self.attr_id,
+            owner_id: self.attr_owner_id,
+            name: self.attr_name,
+            data_type: self.attr_data_type,
+            config: self.attr_config,
+        }
+        .to_attribute()?;
+
+        let val = ValueRow {
+            entry_id: self.entry_id,
+            attribute_id: self.attribute_id,
+            plan: self.plan,
+            actual: self.actual,
+            index_float: self.index_float,
+            index_string: self.index_string,
+        }
+        .to_value()?;
+
+        AttributePair::try_from((attr, val))
+    }
 }
