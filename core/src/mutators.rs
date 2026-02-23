@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use sqlx::{Database, Executor, Transaction};
+use sqlx::{Database, Transaction};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -17,7 +17,7 @@ use crate::{
     reader::Reader,
 };
 
-// FIXME: make randomness/time deterministic when creating mutations.
+// TODO: make randomness/time deterministic in mutations.
 
 /**
  * Constraints
@@ -39,7 +39,6 @@ pub async fn create_user<'t, DB, R>(
 where
     DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     let user = action.user;
     // Check if email is already registered.
@@ -90,7 +89,6 @@ pub async fn create_activity<'t, DB, R>(
 where
     DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     let _all_activities = R::all_activities(&mut **tx);
     let activity = action.activity.clone();
@@ -120,7 +118,6 @@ pub async fn create_entry<'t, DB, R>(
 where
     DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     // Check if actor has permission to create entry at the given position.
     // For now, only allow the owner to create.
@@ -168,7 +165,6 @@ pub async fn move_entry<'t, DB, R>(
 where
     DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     // Moving entry should exist.
     let Some(entry) = R::find_entry_by_id(&mut **tx, action.entry_id).await? else {
@@ -238,7 +234,6 @@ pub async fn delete_entry_recursive<'t, DB, R>(
 where
     DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     // Get entry and all descendants.
     // - Once attributes are in place, will need get/delete them as well.
@@ -285,7 +280,6 @@ pub async fn create_attribute<'t, DB, R>(
 where
     DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     let attribute = action.attribute.clone();
 
@@ -314,7 +308,6 @@ pub async fn create_value<'t, DB, R>(
 where
     DB: Database,
     R: Reader<DB>,
-    for<'e> &'e mut <DB as Database>::Connection: Executor<'e, Database = DB>,
 {
     let value = action.value.clone();
 
