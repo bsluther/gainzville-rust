@@ -258,3 +258,20 @@ See [./docs/sync.md](./docs/sync.md) for detailed sync design notes including:
 - **Database**: PostgreSQL via docker-compose
 - **Migrations**: sqlx migrations
 - **Testing**: Integration tests with test database
+
+## UX Design Assets
+
+Reference screenshots and Figma prototypes are in `./docs/ux-design-assets/`. Key files:
+- `swift-*` — Swift iOS app (Oct/Nov 2025): Log/Library/Analysis tabs, inline attribute editing, drag reorder, breadcrumb nav
+- `gv-desktop-figma-proto-*` — Desktop Figma prototype: multi-day calendar columns, command palette (scoped Add + fuzzy search), right-click context menu
+- `figma-planning-{log,plan}-mode.PNG` — Plan/Log toggle pattern; same layout, different fill state on checkboxes
+- `figma-log-scroll-*.png` — Per-set inline editing with set selector (1/2/3/+/−), Plan/Log toggle per entry
+- `figma-viz-frequency.PNG` — Training frequency heatmap; configurable categories and count metric
+- `gv-2022-web-viewing-record.png`, `create-climb-outcome-web.png`, `use-climb-outcome.png`, `Screenshot 2025-09-28*` — Older web app showing attribute type editor and powerset/enum attribute design
+
+## Previous Gainzville Versions (Reference Only)
+
+These are prior implementations useful as reference. Do not modify them.
+
+- `/Users/brianluther/dev/swift/gv-2025-05-19/Gainzville` — Swift app (May 2025)
+- `/Users/brianluther/dev/gv/gv-2025-01-15` — React Native app (Jan 2025)
