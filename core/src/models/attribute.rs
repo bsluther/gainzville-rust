@@ -2,11 +2,11 @@
 //
 // Structure:
 // - Attribute: common fields + AttributeConfig enum for type-specific config.
-// - Value: entry-attribute pair with Optional plan/actual AttributeValue enums.
+// - Value: common fields + plan/actual AttributeValues.
+//   - AttributeValue: enum of type-specific values (*Value, eg NumericValue or SelectValue).
+//   - *Value: type-specific enum of exact or range values.
 // - Row structs (AttributeRow, ValueRow): flat DB representations using JSON-as-TEXT
 //   columns. Conversion methods handle serde round-tripping via to_string/from_str.
-// - Range values encoded in the value enums (Exact vs Range variants) rather than a
-//   separate boolean flag.
 //
 // Serde:
 // - All enums use default external tagging. Internally-tagged enums are incompatible with
@@ -118,6 +118,7 @@ pub struct Value {
     pub actual: Option<AttributeValue>,
 }
 
+// Consier renaming AttributeValue -> TypeValue.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AttributeValue {
     Numeric(NumericValue),
