@@ -29,7 +29,7 @@ pub fn Log() -> Element {
                         EntryNode { key: "{entry.id}", id: entry.id }
                     }
                 }
-            
+
             }
             div { class: "flex flex-row justify-center",
                 button {

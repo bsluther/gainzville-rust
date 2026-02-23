@@ -10,14 +10,12 @@ use uuid::Uuid;
 
 #[component]
 fn RustIcon() -> Element {
-    rsx!(
-        Icon {
-            width: 30,
-            height: 30,
-            fill: "black",
-            icon: IoCheckbox,
-        }
-    )
+    rsx!(Icon {
+        width: 30,
+        height: 30,
+        fill: "black",
+        icon: IoCheckbox,
+    })
 }
 
 use crate::{components::context_menu::ContextMenu, hooks::use_stream::use_stream};
