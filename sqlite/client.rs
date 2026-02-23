@@ -2,7 +2,7 @@ use futures_core::Stream;
 use gv_core::{
     actions::Action,
     error::Result,
-    models::{activity::Activity, entry::Entry, entry_view::EntryView},
+    models::{activity::Activity, entry::Entry, entry_join::EntryJoin},
     mutators,
     reader::Reader,
 };
@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::{
     apply::SqliteApply,
-    reader::{SqliteReader, entries_rooted_in_time_interval},
+    reader::SqliteReader,
 };
 
 #[derive(Debug, Clone)]
@@ -131,10 +131,20 @@ impl SqliteClient {
         let mut change_rx = self.change_transmitter.subscribe();
 
         async_stream::stream! {
-            yield SqliteReader::all_activities(&pool).await;
+            let initial = async {
+                let mut connection = pool.acquire().await?;
+                SqliteReader::all_activities(&mut *connection).await
+            }
+            .await;
+            yield initial;
 
             while let Ok(()) = change_rx.recv().await {
-                yield SqliteReader::all_activities(&pool).await;
+                let next = async {
+                    let mut connection = pool.acquire().await?;
+                    SqliteReader::all_activities(&mut *connection).await
+                }
+                .await;
+                yield next;
             }
         }
     }
@@ -144,10 +154,20 @@ impl SqliteClient {
         let mut change_rx = self.change_transmitter.subscribe();
 
         async_stream::stream! {
-            yield SqliteReader::all_entries(&pool).await;
+            let initial = async {
+                let mut connection = pool.acquire().await?;
+                SqliteReader::all_entries(&mut *connection).await
+            }
+            .await;
+            yield initial;
 
             while let Ok(()) = change_rx.recv().await {
-                yield SqliteReader::all_entries(&pool).await;
+                let next = async {
+                    let mut connection = pool.acquire().await?;
+                    SqliteReader::all_entries(&mut *connection).await
+                }
+                .await;
+                yield next;
             }
         }
     }
@@ -161,10 +181,20 @@ impl SqliteClient {
         let mut change_rx = self.change_transmitter.subscribe();
 
         async_stream::stream! {
-            yield entries_rooted_in_time_interval(&pool, min, max).await;
+            let initial = async {
+                let mut connection = pool.acquire().await?;
+                SqliteReader::entries_rooted_in_time_interval(&mut *connection, min, max).await
+            }
+            .await;
+            yield initial;
 
             while let Ok(()) = change_rx.recv().await {
-                yield entries_rooted_in_time_interval(&pool, min, max).await;
+                let next = async {
+                    let mut connection = pool.acquire().await?;
+                    SqliteReader::entries_rooted_in_time_interval(&mut *connection, min, max).await
+                }
+                .await;
+                yield next;
             }
         }
     }
@@ -172,19 +202,29 @@ impl SqliteClient {
     pub fn stream_entry_view_by_id(
         &self,
         id: Uuid,
-    ) -> impl Stream<Item = Result<EntryView>> + use<> {
+    ) -> impl Stream<Item = Result<EntryJoin>> + use<> {
         let pool = self.pool.clone();
         let mut change_rx = self.change_transmitter.subscribe();
 
         async_stream::stream! {
-            yield SqliteReader::find_entry_view_by_id(&pool, id)
-                .await
-                .and_then(|opt| opt.ok_or_else(|| DomainError::Other(format!("Entry not found: {}", id))));
+            let initial = async {
+                let mut connection = pool.acquire().await?;
+                SqliteReader::find_entry_join_by_id(&mut *connection, id)
+                    .await
+                    .and_then(|opt| opt.ok_or_else(|| DomainError::Other(format!("Entry not found: {}", id))))
+            }
+            .await;
+            yield initial;
 
             while let Ok(()) = change_rx.recv().await {
-                yield SqliteReader::find_entry_view_by_id(&pool, id)
-                    .await
-                    .and_then(|opt| opt.ok_or_else(|| DomainError::Other(format!("Entry not found: {}", id))));
+                let next = async {
+                    let mut connection = pool.acquire().await?;
+                    SqliteReader::find_entry_join_by_id(&mut *connection, id)
+                        .await
+                        .and_then(|opt| opt.ok_or_else(|| DomainError::Other(format!("Entry not found: {}", id))))
+                }
+                .await;
+                yield next;
             }
         }
     }
@@ -212,9 +252,12 @@ pub mod tests {
 
         sqlite_client.run_action(action).await.unwrap();
 
-        let queried_activity = SqliteReader::find_activity_by_id(&sqlite_client.pool, id)
-            .await
-            .unwrap();
+        let queried_activity = {
+            let mut connection = sqlite_client.pool.acquire().await.unwrap();
+            SqliteReader::find_activity_by_id(&mut *connection, id)
+                .await
+                .unwrap()
+        };
 
         assert!(queried_activity.is_some());
     }

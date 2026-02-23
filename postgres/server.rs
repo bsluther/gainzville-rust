@@ -93,9 +93,12 @@ pub mod tests {
 
         let _ = postgres_server.run_action(action).await;
 
-        let queried_activity = PostgresReader::find_activity_by_id(&postgres_server.pool, id)
-            .await
-            .unwrap();
+        let queried_activity = {
+            let mut connection = postgres_server.pool.acquire().await.unwrap();
+            PostgresReader::find_activity_by_id(&mut *connection, id)
+                .await
+                .unwrap()
+        };
 
         assert!(queried_activity.is_some());
     }

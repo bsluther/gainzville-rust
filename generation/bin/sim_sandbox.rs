@@ -21,7 +21,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut rng = rand::rng();
     let context = SimulationContext {};
-    let actor_ids = PostgresReader::all_actor_ids(&server.pool).await?;
+    let actor_ids = {
+        let mut connection = server.pool.acquire().await?;
+        PostgresReader::all_actor_ids(&mut *connection).await?
+    };
 
     let activities = (0..100)
         .map(|_| Activity::arbitrary_from(&mut rng, &context, &actor_ids))

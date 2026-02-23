@@ -4,7 +4,7 @@ use gv_core::{
         activity::Activity,
         attribute::{Attribute, AttributeRow, Value, ValueRow},
         entry::{Entry, EntryRow},
-        entry_view::{EntryView, EntryViewRow},
+        entry_join::{EntryJoin, EntryJoinRow},
         user::User,
     },
     reader::Reader,
@@ -21,102 +21,125 @@ use uuid::Uuid;
 pub struct SqliteReader;
 impl Reader<sqlx::Sqlite> for SqliteReader {
     ///////////// Authn /////////////
-    async fn is_email_registered<'e, E>(
-        executor: E,
+    async fn is_email_registered(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         email: gv_core::validation::Email,
-    ) -> Result<bool>
-    where
-        E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
-    {
+    ) -> Result<bool> {
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE email = ?")
             .bind(email.as_str())
-            .fetch_one(executor)
+            .fetch_one(&mut *connection)
             .await?;
 
         Ok(count > 0)
     }
 
-    async fn find_user_by_id<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn find_user_by_id(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         actor_id: Uuid,
     ) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             "SELECT actor_id, username, email FROM users WHERE actor_id = ?",
         )
         .bind(actor_id)
-        .fetch_optional(executor)
+        .fetch_optional(&mut *connection)
         .await?;
 
         Ok(user)
     }
 
-    async fn find_user_by_username<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn find_user_by_username(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         username: Username,
     ) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = ?")
             .bind(username.as_str())
-            .fetch_optional(executor)
+            .fetch_optional(&mut *connection)
             .await?;
 
         Ok(user)
     }
 
-    async fn all_actor_ids<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn all_actor_ids(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
     ) -> Result<Vec<Uuid>> {
         let actor_ids = sqlx::query_scalar(
             r#"
             SELECT id FROM actors
             "#,
         )
-        .fetch_all(executor)
+        .fetch_all(&mut *connection)
         .await?;
         Ok(actor_ids)
     }
 
     ///////////// Activity /////////////
 
-    async fn find_activity_by_id<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn find_activity_by_id(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         id: Uuid,
     ) -> Result<Option<Activity>> {
         let activity = sqlx::query_as::<_, Activity>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities WHERE id = ?",
         )
         .bind(id)
-        .fetch_optional(executor)
+        .fetch_optional(&mut *connection)
         .await?;
         Ok(activity)
     }
 
-    async fn all_activities<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn all_activities(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
     ) -> Result<Vec<Activity>> {
         let activities = sqlx::query_as::<_, Activity>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities",
         )
-        .fetch_all(executor)
+        .fetch_all(&mut *connection)
         .await?;
-        println!("all activites.len={}", activities.len());
         Ok(activities)
     }
 
     ///////////// Entry /////////////
 
-    async fn all_entries<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn all_entries(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
     ) -> Result<Vec<Entry>> {
         sqlx::query_as::<_, EntryRow>("SELECT * FROM entries")
-            .fetch_all(executor)
+            .fetch_all(&mut *connection)
             .await?
             .into_iter()
             .map(|r| r.to_entry())
             .collect()
     }
 
-    async fn find_ancestors<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn entries_rooted_in_time_interval(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<Entry>> {
+        sqlx::query_as::<sqlx::Sqlite, EntryRow>(
+            r#"
+            WITH RECURSIVE forest AS (
+                SELECT * FROM entries e
+                WHERE e.start_time BETWEEN ? AND ?
+                    AND e.parent_id IS NULL
+                UNION ALL
+                SELECT * FROM entries c
+                    INNER JOIN forest ON c.parent_id = forest.id
+            )
+            SELECT * FROM forest
+            "#,
+        )
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut *connection)
+        .await?
+        .into_iter()
+        .map(|r| r.to_entry())
+        .collect()
+    }
+
+    async fn find_ancestors(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         entry_id: Uuid,
     ) -> Result<Vec<Uuid>> {
         // Note: Can't use query! macro here because it requires a concrete connection at compile time.
@@ -137,7 +160,7 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
             "#,
         )
         .bind(entry_id)
-        .fetch_all(executor)
+        .fetch_all(&mut *connection)
         .await?;
 
         if results.is_empty() {
@@ -169,8 +192,8 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
         Ok(ancestors)
     }
 
-    async fn find_entry_by_id<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn find_entry_by_id(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         entry_id: Uuid,
     ) -> Result<Option<Entry>> {
         sqlx::query_as::<_, EntryRow>(
@@ -181,17 +204,17 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
             "#,
         )
         .bind(entry_id)
-        .fetch_optional(executor)
+        .fetch_optional(&mut *connection)
         .await?
         .map(|e| e.to_entry())
         .transpose()
     }
 
-    async fn find_entry_view_by_id<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn find_entry_join_by_id(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         entry_id: Uuid,
-    ) -> Result<Option<EntryView>> {
-        sqlx::query_as::<_, EntryViewRow>(
+    ) -> Result<Option<EntryJoin>> {
+        sqlx::query_as::<_, EntryJoinRow>(
             r#"
             SELECT
                 e.id, e.activity_id, e.owner_id, e.parent_id, e.frac_index,
@@ -206,14 +229,14 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
             "#,
         )
         .bind(entry_id)
-        .fetch_optional(executor)
+        .fetch_optional(&mut *connection)
         .await?
         .map(|row| row.to_entry_view())
         .transpose()
     }
 
-    async fn find_descendants<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn find_descendants(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         entry_id: Uuid,
     ) -> Result<Vec<Entry>> {
         sqlx::query_as::<sqlx::Sqlite, EntryRow>(
@@ -229,7 +252,7 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
             "#,
         )
         .bind(entry_id)
-        .fetch_all(executor)
+        .fetch_all(&mut *connection)
         .await?
         .into_iter()
         .map(|e| e.to_entry())
@@ -238,29 +261,29 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
 
     ///////////// Attribute /////////////
 
-    async fn find_attribute_by_id<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn find_attribute_by_id(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         attribute_id: Uuid,
     ) -> Result<Option<Attribute>> {
         sqlx::query_as::<_, AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes WHERE id = ?",
         )
         .bind(attribute_id)
-        .fetch_optional(executor)
+        .fetch_optional(&mut *connection)
         .await?
         .map(|row| row.to_attribute())
         .transpose()
     }
 
-    async fn find_attributes_by_owner<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn find_attributes_by_owner(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         owner_id: Uuid,
     ) -> Result<Vec<Attribute>> {
         sqlx::query_as::<_, AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes WHERE owner_id = ?",
         )
         .bind(owner_id)
-        .fetch_all(executor)
+        .fetch_all(&mut *connection)
         .await?
         .into_iter()
         .map(|row| row.to_attribute())
@@ -269,8 +292,8 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
 
     ///////////// Value /////////////
 
-    async fn find_value_by_key<'e>(
-        executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    async fn find_value_by_key(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         entry_id: Uuid,
         attribute_id: Uuid,
     ) -> Result<Option<Value>> {
@@ -279,38 +302,26 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
         )
         .bind(entry_id)
         .bind(attribute_id)
-        .fetch_optional(executor)
+        .fetch_optional(&mut *connection)
         .await?
         .map(|row| row.to_value())
         .transpose()
     }
-}
-// TODO: move into Reader.
-pub async fn entries_rooted_in_time_interval<'e>(
-    executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
-    from: DateTime<Utc>,
-    to: DateTime<Utc>,
-) -> Result<Vec<Entry>> {
-    sqlx::query_as::<sqlx::Sqlite, EntryRow>(
-        r#"
-        WITH RECURSIVE forest AS (
-            SELECT * FROM entries e
-            WHERE e.start_time BETWEEN ? AND ?
-                AND e.parent_id IS NULL
-            UNION ALL
-            SELECT * FROM entries c
-                INNER JOIN forest ON c.parent_id = forest.id
+
+    async fn find_values_for_entry(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
+        entry_id: Uuid,
+    ) -> Result<Vec<Value>> {
+        sqlx::query_as::<_, ValueRow>(
+            "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id = ?",
         )
-        SELECT * FROM forest
-        "#,
-    )
-    .bind(from)
-    .bind(to)
-    .fetch_all(executor)
-    .await?
-    .into_iter()
-    .map(|r| r.to_entry())
-    .collect()
+        .bind(entry_id)
+        .fetch_all(&mut *connection)
+        .await?
+        .into_iter()
+        .map(|row| row.to_value())
+        .collect()
+    }
 }
 
 /// Helper struct for ancestor query results.

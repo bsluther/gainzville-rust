@@ -52,12 +52,16 @@ async fn test_find_descendants(pool: SqlitePool) {
         .await
         .unwrap();
 
-    let a_descs = SqliteReader::find_descendants(&sqlite_client.pool, a.id)
-        .await
-        .unwrap();
-    let b_descs = SqliteReader::find_descendants(&sqlite_client.pool, b.id)
-        .await
-        .unwrap();
+    let (a_descs, b_descs) = {
+        let mut connection = sqlite_client.pool.acquire().await.unwrap();
+        let a_descs = SqliteReader::find_descendants(&mut *connection, a.id)
+            .await
+            .unwrap();
+        let b_descs = SqliteReader::find_descendants(&mut *connection, b.id)
+            .await
+            .unwrap();
+        (a_descs, b_descs)
+    };
 
     println!("{:?}", b_descs);
     assert_eq!(a_descs.len(), 2);
@@ -88,10 +92,13 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
         .unwrap();
 
     // Read attribute back.
-    let read_attr = SqliteReader::find_attribute_by_id(&sqlite_client.pool, attribute.id)
-        .await
-        .unwrap()
-        .expect("attribute should exist");
+    let read_attr = {
+        let mut connection = sqlite_client.pool.acquire().await.unwrap();
+        SqliteReader::find_attribute_by_id(&mut *connection, attribute.id)
+            .await
+            .unwrap()
+            .expect("attribute should exist")
+    };
     assert_eq!(read_attr.id, attribute.id);
     assert_eq!(read_attr.name, "Weight");
 
@@ -124,17 +131,16 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
         actor_id: SYSTEM_ACTOR_ID,
         value: value.clone(),
     };
-    sqlite_client
-        .run_action(create_value.into())
-        .await
-        .unwrap();
+    sqlite_client.run_action(create_value.into()).await.unwrap();
 
     // Read value back.
-    let read_value =
-        SqliteReader::find_value_by_key(&sqlite_client.pool, entry.id, attribute.id)
+    let read_value = {
+        let mut connection = sqlite_client.pool.acquire().await.unwrap();
+        SqliteReader::find_value_by_key(&mut *connection, entry.id, attribute.id)
             .await
             .unwrap()
-            .expect("value should exist");
+            .expect("value should exist")
+    };
     assert_eq!(read_value.entry_id, entry.id);
     assert_eq!(read_value.attribute_id, attribute.id);
 

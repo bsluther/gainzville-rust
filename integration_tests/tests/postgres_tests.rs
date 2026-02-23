@@ -131,9 +131,17 @@ async fn test_arbitrary_actions(pool: PgPool) {
     let context = SimulationContext {};
 
     for _ in 0..1_000 {
-        let actor_ids = PostgresReader::all_actor_ids(&server.pool).await.unwrap();
-        let activities = PostgresReader::all_activities(&server.pool).await.unwrap();
-        let entries = PostgresReader::all_entries(&server.pool).await.unwrap();
+        let (actor_ids, activities, entries) = {
+            let mut connection = server.pool.acquire().await.unwrap();
+            let actor_ids = PostgresReader::all_actor_ids(&mut *connection)
+                .await
+                .unwrap();
+            let activities = PostgresReader::all_activities(&mut *connection)
+                .await
+                .unwrap();
+            let entries = PostgresReader::all_entries(&mut *connection).await.unwrap();
+            (actor_ids, activities, entries)
+        };
         let action =
             Action::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &entries));
         // info!("Running action:\n{:?}", action);
