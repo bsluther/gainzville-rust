@@ -41,6 +41,20 @@ impl Attribute {
             _ => Err(DomainError::AttributeMismatch),
         }
     }
+
+    pub fn expect_select(&self) -> Result<&SelectConfig> {
+        match &self.config {
+            AttributeConfig::Select(c) => Ok(c),
+            _ => Err(DomainError::AttributeMismatch),
+        }
+    }
+
+    pub fn expect_mass(&self) -> Result<&MassConfig> {
+        match &self.config {
+            AttributeConfig::Mass(c) => Ok(c),
+            _ => Err(DomainError::AttributeMismatch),
+        }
+    }
 }
 
 ///// Configs /////
@@ -118,12 +132,35 @@ pub struct Value {
     pub actual: Option<AttributeValue>,
 }
 
-// Consier renaming AttributeValue -> TypeValue.
+// Consider renaming AttributeValue -> TypeValue.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AttributeValue {
     Numeric(NumericValue),
     Select(SelectValue),
     Mass(MassValue),
+}
+
+impl AttributeValue {
+    pub fn expect_numeric(self) -> Result<NumericValue> {
+        match self {
+            AttributeValue::Numeric(v) => Ok(v),
+            _ => Err(DomainError::AttributeMismatch),
+        }
+    }
+
+    pub fn expect_select(self) -> Result<SelectValue> {
+        match self {
+            AttributeValue::Select(v) => Ok(v),
+            _ => Err(DomainError::AttributeMismatch),
+        }
+    }
+
+    pub fn expect_mass(self) -> Result<MassValue> {
+        match self {
+            AttributeValue::Mass(v) => Ok(v),
+            _ => Err(DomainError::AttributeMismatch),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
