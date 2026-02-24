@@ -3,28 +3,40 @@ use uuid::Uuid;
 
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick};
 use gv_core::{
-    actions::{Action, CreateActivity, CreateEntry, CreateUser, MoveEntry},
+    actions::{Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue, MoveEntry},
     models::{
         activity::Activity,
+        attribute::{Attribute, Value},
         entry::{Entry, Position, Temporal},
         user::User,
     },
     validation::{Email, Username},
 };
 
-impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry])> for Action {
+impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
     fn arbitrary_from<R: Rng, C: GenerationContext>(
         rng: &mut R,
         context: &C,
-        (actor_ids, activities, entries): (&[Uuid], &[Activity], &[Entry]),
+        (actor_ids, activities, entries, attributes): (&[Uuid], &[Activity], &[Entry], &[Attribute]),
     ) -> Self {
-        // Do not choose MoveEntry if entries is empty.
-        let n = if entries.is_empty() { 3 } else { 4 };
-        match rng.random_range(0..n) {
+        // Actions that are always available: CreateUser, CreateActivity, CreateEntry, CreateAttribute
+        // Actions that require non-empty entries: MoveEntry
+        // Actions that require non-empty entries and attributes: CreateValue
+        let mut choices: Vec<u8> = vec![0, 1, 2, 3];
+        if !entries.is_empty() {
+            choices.push(4);
+            if !attributes.is_empty() {
+                choices.push(5);
+            }
+        }
+        let choice = pick(&choices, rng).unwrap();
+        match choice {
             0 => CreateUser::arbitrary(rng, context).into(),
             1 => CreateActivity::arbitrary_from(rng, context, actor_ids).into(),
             2 => CreateEntry::arbitrary_from(rng, context, (actor_ids, activities, entries)).into(),
-            3 => MoveEntry::arbitrary_from(rng, context, entries).into(),
+            3 => CreateAttribute::arbitrary_from(rng, context, actor_ids).into(),
+            4 => MoveEntry::arbitrary_from(rng, context, entries).into(),
+            5 => CreateValue::arbitrary_from(rng, context, (entries, attributes)).into(),
             _ => unreachable!(),
         }
     }
@@ -82,6 +94,31 @@ impl ArbitraryFrom<&[Entry]> for MoveEntry {
             // it.
             position: Option::<Position>::arbitrary_from(rng, context, entries),
             temporal: Temporal::arbitrary(rng, context),
+        }
+    }
+}
+
+impl ArbitraryFrom<&[Uuid]> for CreateAttribute {
+    fn arbitrary_from<R: Rng, C: GenerationContext>(
+        rng: &mut R,
+        context: &C,
+        actor_ids: &[Uuid],
+    ) -> Self {
+        Attribute::arbitrary_from(rng, context, actor_ids).into()
+    }
+}
+
+impl ArbitraryFrom<(&[Entry], &[Attribute])> for CreateValue {
+    fn arbitrary_from<R: Rng, C: GenerationContext>(
+        rng: &mut R,
+        context: &C,
+        (entries, attributes): (&[Entry], &[Attribute]),
+    ) -> Self {
+        let entry = pick(entries, rng).expect("entries must not be empty");
+        let value = Value::arbitrary_from(rng, context, (entries, attributes));
+        CreateValue {
+            actor_id: entry.owner_id,
+            value,
         }
     }
 }

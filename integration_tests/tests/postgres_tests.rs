@@ -131,7 +131,7 @@ async fn test_arbitrary_actions(pool: PgPool) {
     let context = SimulationContext {};
 
     for _ in 0..1_000 {
-        let (actor_ids, activities, entries) = {
+        let (actor_ids, activities, entries, attributes) = {
             let mut connection = server.pool.acquire().await.unwrap();
             let actor_ids = PostgresReader::all_actor_ids(&mut *connection)
                 .await
@@ -140,10 +140,11 @@ async fn test_arbitrary_actions(pool: PgPool) {
                 .await
                 .unwrap();
             let entries = PostgresReader::all_entries(&mut *connection).await.unwrap();
-            (actor_ids, activities, entries)
+            let attributes = PostgresReader::all_attributes(&mut *connection).await.unwrap();
+            (actor_ids, activities, entries, attributes)
         };
         let action =
-            Action::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &entries));
+            Action::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &entries, &attributes));
         // info!("Running action:\n{:?}", action);
 
         // Problem: running a MoveEntry action which tries to move into a non-sequence entry fails

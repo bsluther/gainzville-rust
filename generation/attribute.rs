@@ -105,6 +105,7 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for Value {
         let actual = maybe(rng, 0.5, |rng| {
             AttributeValue::arbitrary_from(rng, context, &attribute.config)
         });
+        // TODO: generate appropriate index_float / index_string based on attribute config.
         Value {
             entry_id: entry.id,
             attribute_id: attribute.id,
@@ -195,7 +196,7 @@ impl ArbitraryFrom<&MassConfig> for MassValue {
     ) -> Self {
         let all_units = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
         let rand_measurements = |rng: &mut R| -> Vec<MassMeasurement> {
-            let n = rng.random_range(0..=all_units.len());
+            let n = rng.random_range(1..=all_units.len());
             let mut units = all_units.to_vec();
             units.shuffle(rng);
             units.truncate(n);
