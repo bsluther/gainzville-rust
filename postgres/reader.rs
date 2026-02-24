@@ -296,6 +296,19 @@ impl Reader<sqlx::Postgres> for PostgresReader {
         .transpose()
     }
 
+    async fn all_attributes(
+        connection: &mut <sqlx::Postgres as sqlx::Database>::Connection,
+    ) -> Result<Vec<Attribute>> {
+        sqlx::query_as::<_, AttributeRow>(
+            "SELECT id, owner_id, name, data_type, config FROM attributes",
+        )
+        .fetch_all(&mut *connection)
+        .await?
+        .into_iter()
+        .map(|row| row.to_attribute())
+        .collect()
+    }
+
     async fn find_attributes_by_owner(
         connection: &mut <sqlx::Postgres as sqlx::Database>::Connection,
         owner_id: Uuid,

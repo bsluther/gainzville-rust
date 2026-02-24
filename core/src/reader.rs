@@ -89,6 +89,8 @@ pub trait Reader<DB: sqlx::Database> {
         attribute_id: Uuid,
     ) -> Result<Option<Attribute>>;
 
+    async fn all_attributes(connection: &mut DB::Connection) -> Result<Vec<Attribute>>;
+
     async fn find_attributes_by_owner(
         connection: &mut DB::Connection,
         owner_id: Uuid,
