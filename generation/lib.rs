@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 pub mod actions;
 pub mod activity;
+pub mod attribute;
 pub mod entry;
 
 pub trait GenerationContext {}
@@ -30,6 +31,15 @@ pub trait ArbitraryFromMaybe<T> {
     ) -> Option<Self>
     where
         Self: Sized;
+}
+
+/// Generate `Some(f(rng))` with probability `p_some`, otherwise `None`.
+pub fn maybe<T, R: Rng>(rng: &mut R, p_some: f64, f: impl FnOnce(&mut R) -> T) -> Option<T> {
+    if rng.random_bool(p_some) {
+        Some(f(rng))
+    } else {
+        None
+    }
 }
 
 // Unifiormly pick an element from a slice. Panics when the slice is empty.
