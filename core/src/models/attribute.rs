@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::error::{DomainError, Result};
+use crate::error::{DomainError, Result, ValidationError};
 
 #[derive(Debug, Clone)]
 pub struct Attribute {
@@ -98,6 +98,45 @@ pub struct NumericConfig {
     pub max: Option<f64>,
     pub integer: bool,
     pub default: Option<f64>,
+}
+
+impl NumericConfig {
+    pub fn new(
+        min: Option<f64>,
+        max: Option<f64>,
+        integer: bool,
+        default: Option<f64>,
+    ) -> Result<Self> {
+        fn is_integer(v: f64) -> bool {
+            v.is_finite() && v == v.trunc()
+        }
+
+        if integer {
+            if let Some(v) = min {
+                if !is_integer(v) {
+                    return Err(DomainError::Validation(
+                        ValidationError::InvalidNumericConfig(format!("min ({v}) must be an integer")),
+                    ));
+                }
+            }
+            if let Some(v) = max {
+                if !is_integer(v) {
+                    return Err(DomainError::Validation(
+                        ValidationError::InvalidNumericConfig(format!("max ({v}) must be an integer")),
+                    ));
+                }
+            }
+            if let Some(v) = default {
+                if !is_integer(v) {
+                    return Err(DomainError::Validation(
+                        ValidationError::InvalidNumericConfig(format!("default ({v}) must be an integer")),
+                    ));
+                }
+            }
+        }
+
+        Ok(Self { min, max, integer, default })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -24,6 +24,8 @@ pub enum ValidationError {
     InvalidUsername(String),
     #[error("Invalid activity name: {0}")]
     InvalidActivityName(String),
+    #[error("Invalid numeric config: {0}")]
+    InvalidNumericConfig(String),
     #[error("Other: {0}")]
     Other(String),
 }
