@@ -1,4 +1,3 @@
-use rand::Rng;
 use uuid::Uuid;
 
 use crate::{

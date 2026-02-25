@@ -8,7 +8,7 @@ pub use command_palette::CommandPalette;
 mod hero;
 pub use hero::Hero;
 
-mod entry_node;
-pub use entry_node::EntryNode;
+mod entry_view;
+pub use entry_view::EntryView;
 
 pub mod context_menu;

@@ -3,7 +3,7 @@ use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
 use gv_core::{actions::CreateEntry, forest, models::entry::Entry, SYSTEM_ACTOR_ID};
 use gv_sqlite::client::SqliteClient;
 
-use crate::{components::EntryNode, hooks::use_stream::use_stream};
+use crate::{components::EntryView, hooks::use_stream::use_stream};
 
 #[component]
 pub fn Log() -> Element {
@@ -26,10 +26,10 @@ pub fn Log() -> Element {
             div { class: "bg-[var(--gray-1200)] flex flex-1 flex-row justify-center h-full",
                 ul { class: "entry-list",
                     for entry in roots() {
-                        EntryNode { key: "{entry.id}", id: entry.id }
+                        EntryView { key: "{entry.id}", id: entry.id }
                     }
                 }
-
+            
             }
             div { class: "flex flex-row justify-center",
                 button {

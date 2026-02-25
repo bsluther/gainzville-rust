@@ -17,10 +17,7 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use crate::{
-    apply::SqliteApply,
-    reader::SqliteReader,
-};
+use crate::{apply::SqliteApply, reader::SqliteReader};
 
 #[derive(Debug, Clone)]
 pub struct SqliteClient {
@@ -199,7 +196,7 @@ impl SqliteClient {
         }
     }
 
-    pub fn stream_entry_view_by_id(
+    pub fn stream_entry_join_by_id(
         &self,
         id: Uuid,
     ) -> impl Stream<Item = Result<EntryJoin>> + use<> {
