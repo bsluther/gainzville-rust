@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::io_icons::IoCheckbox, Icon};
 use dioxus_primitives::context_menu::{ContextMenuContent, ContextMenuItem, ContextMenuTrigger};
-use gv_core::{actions::DeleteEntryRecursive, forest, models::entry::Entry, SYSTEM_ACTOR_ID};
+use gv_core::{actions::DeleteEntryRecursive, forest::Forest, SYSTEM_ACTOR_ID};
 use gv_sqlite::client::SqliteClient;
 use uuid::Uuid;
 
@@ -23,16 +23,17 @@ const ENTRY_CSS: Asset = asset!("/assets/styling/entry.css");
 
 #[component]
 pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
-    let forest = consume_context::<Memo<Vec<Entry>>>();
+    let forest = consume_context::<Memo<Forest>>();
 
     let entry_join =
         use_stream(move || consume_context::<SqliteClient>().stream_entry_join_by_id(id()));
 
     let children = use_memo(move || {
-        forest::children_of(id(), &forest())
+        forest()
+            .children(id())
             .into_iter()
-            .cloned()
-            .collect::<Vec<_>>()
+            .map(|e| e.id)
+            .collect::<Vec<Uuid>>()
     });
 
     let Some(entry_join) = entry_join() else {
@@ -67,8 +68,8 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
 
                 if !children().is_empty() {
                     div { class: "entry-list",
-                        for child in children() {
-                            EntryView { key: "{child.id}", id: child.id }
+                        for child_id in children() {
+                            EntryView { key: "{child_id}", id: child_id }
                         }
                     }
                 }

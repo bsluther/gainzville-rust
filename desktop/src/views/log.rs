@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
-use gv_core::{actions::CreateEntry, forest, models::entry::Entry, SYSTEM_ACTOR_ID};
+use gv_core::{actions::CreateEntry, forest::Forest, models::entry::Entry, SYSTEM_ACTOR_ID};
 use gv_sqlite::client::SqliteClient;
 
 use crate::{components::EntryView, hooks::use_stream::use_stream};
@@ -11,21 +11,15 @@ pub fn Log() -> Element {
     let activities = use_stream(move || consume_context::<SqliteClient>().stream_activities());
     let entries = use_memo(move || entries_opt.read().cloned().unwrap_or(Vec::new()));
 
-    use_context_provider(|| entries);
-
-    let roots = use_memo(move || {
-        forest::roots(&entries.read())
-            .into_iter()
-            .cloned()
-            .collect::<Vec<Entry>>()
-    });
+    let forest = use_memo(move || Forest::from(entries_opt.read().cloned().unwrap_or_default()));
+    use_context_provider(|| forest);
 
     rsx! {
         div { class: "flex flex-col w-full",
 
             div { class: "bg-[var(--gray-1200)] flex flex-1 flex-row justify-center h-full",
                 ul { class: "entry-list",
-                    for entry in roots() {
+                    for entry in forest.read().roots() {
                         EntryView { key: "{entry.id}", id: entry.id }
                     }
                 }

@@ -24,7 +24,8 @@ provided reactively via Dioxus context.
 
 ## Assumptions
 
-- For a user's own data, the full forest is available locally and can be loaded eagerly
+- For a user's own data, the full forest fits in memory and can be loaded eagerly; a personal
+  training log spanning years is at most tens of thousands of entries — trivial in memory
 - Remote data (global library, shared exercises) arrives as **complete subtrees** — all descendants
   of the returned root are present, though the root itself may have a `parent_id` pointing outside
   the result (see expanded notes)
@@ -181,6 +182,15 @@ async_stream::stream! {
 
 Components handle both identically — the existing `let Some(join) = entry_join() else { return
 rsx! {} }` pattern already covers the loading state implicitly.
+
+### Lazy loading local data (future)
+
+The current design loads all local entries into a single `Forest` in memory. If this assumption
+ever breaks — e.g. a team or coaching use case where one account aggregates many athletes' data —
+the same `EntrySource` interface accommodates a lazy local implementation: the Forest would load
+entries on demand from SQLite rather than all at once, with the same navigation API exposed to
+components. This is an optimization path, not a redesign. UI components are insulated from the
+change because they program against the interface, not the loading strategy.
 
 ### IVM and incremental Forest updates
 

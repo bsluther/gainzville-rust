@@ -1,38 +1,69 @@
 use crate::models::entry::Entry;
-use std::cmp::Ordering;
+use chrono::{DateTime, Utc};
+use std::ops::Range;
 use uuid::Uuid;
 
-/// Find an entry by id.
-pub fn find_by_id(id: Uuid, entries: &[Entry]) -> Option<&Entry> {
-    entries.iter().find(|e| e.id == id)
+#[derive(Debug, Clone, PartialEq)]
+pub struct Forest(Vec<Entry>);
+
+impl From<Vec<Entry>> for Forest {
+    fn from(entries: Vec<Entry>) -> Self {
+        Forest(entries)
+    }
 }
 
-/// Returns the root entries (entries with no parent entry) ordered by time;
-/// entries without a definite time are placed at the start.
-pub fn roots(entries: &[Entry]) -> Vec<&Entry> {
-    let mut roots: Vec<_> = entries.iter().filter(|e| e.parent_id().is_none()).collect();
-    roots.sort_by(|a, b| match (a.temporal.start(), b.temporal.start()) {
-        (None, None) => Ordering::Equal,
-        (None, Some(_)) => Ordering::Less,
-        (Some(_), None) => Ordering::Greater,
-        (Some(a), Some(b)) => a.cmp(&b),
-    });
-    roots
-}
+impl Forest {
+    fn data(&self) -> &[Entry] {
+        &self.0
+    }
 
-/// Returns the children of the entry with the given id, ordered by fractional index.
-pub fn children_of(parent_id: Uuid, entries: &[Entry]) -> Vec<&Entry> {
-    let mut children: Vec<_> = entries
-        .iter()
-        .filter(|e| e.parent_id().is_some_and(|id| id == parent_id))
-        .collect();
-    children.sort_by(|a, b| {
-        a.frac_index()
-            .expect("child entries must have a defined fractional index")
-            .cmp(
-                b.frac_index()
-                    .expect("child entries must have a defined fractional index"),
-            )
-    });
-    children
+    /// Get an entry in the forest by id.
+    pub fn entry(&self, id: Uuid) -> Option<&Entry> {
+        self.data().iter().find(|e| e.id == id)
+    }
+
+    /// Get all root entries in the forest.
+    pub fn roots(&self) -> Vec<&Entry> {
+        let mut roots: Vec<&Entry> = self
+            .data()
+            .iter()
+            .filter(|e| e.parent_id().is_none())
+            .collect();
+        roots.sort_by_key(|e| e.temporal.canonical_instant());
+        roots
+    }
+
+    /// Get all root entries whose start time falls within the provided interval, sorted by time.
+    /// Entries without a definite start
+    pub fn roots_in(&self, interval: Range<DateTime<Utc>>) -> Vec<&Entry> {
+        let mut roots: Vec<_> = self
+            .roots()
+            .into_iter()
+            .filter(|e| {
+                e.temporal
+                    .canonical_instant()
+                    .is_some_and(|t| interval.contains(&t))
+            })
+            .collect();
+        roots.sort_by_key(|e| e.temporal.canonical_instant());
+        roots
+    }
+
+    /// Get the direct children of the provided parent_id, sorted by fractional index.
+    pub fn children(&self, parent_id: Uuid) -> Vec<&Entry> {
+        let mut children: Vec<_> = self
+            .data()
+            .iter()
+            .filter(|e| e.parent_id().is_some_and(|id| id == parent_id))
+            .collect();
+        children.sort_by(|a, b| {
+            a.frac_index()
+                .expect("child entries must have a defined fractional index")
+                .cmp(
+                    b.frac_index()
+                        .expect("child entries must have a defined fractional index"),
+                )
+        });
+        children
+    }
 }
