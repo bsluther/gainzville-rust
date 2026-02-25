@@ -162,6 +162,8 @@ impl Temporal {
         }
     }
 
+    /// Returns the definite start, if present. Use `infer_start` to get the inferred start based
+    /// on duration and end times.
     pub fn start(&self) -> Option<DateTime<Utc>> {
         match self {
             Temporal::None
@@ -180,6 +182,8 @@ impl Temporal {
         }
     }
 
+    /// Returns the definite end, if present. Use `infer_end` to get the inferred end based on
+    /// start and duration.
     pub fn end(&self) -> Option<DateTime<Utc>> {
         match self {
             Temporal::None
@@ -198,6 +202,8 @@ impl Temporal {
         }
     }
 
+    /// Returns the definite duration, if present. Use `infer_duration` to get the inferred duration
+    /// based on start and end times.
     pub fn duration(&self) -> Option<u32> {
         match self {
             Temporal::None
@@ -214,6 +220,52 @@ impl Temporal {
                 end: _,
             } => Some(*duration_ms),
         }
+    }
+
+    /// Returns the inferred start time, computing it from end and duration if not explicitly set.
+    pub fn infer_start(&self) -> Option<DateTime<Utc>> {
+        match self {
+            Temporal::Start { start }
+            | Temporal::StartAndEnd { start, .. }
+            | Temporal::StartAndDuration { start, .. } => Some(*start),
+            Temporal::DurationAndEnd { duration_ms, end } => {
+                Some(*end - chrono::Duration::milliseconds(*duration_ms as i64))
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the inferred end time, computing it from start and duration if not explicitly set.
+    pub fn infer_end(&self) -> Option<DateTime<Utc>> {
+        match self {
+            Temporal::End { end }
+            | Temporal::StartAndEnd { end, .. }
+            | Temporal::DurationAndEnd { end, .. } => Some(*end),
+            Temporal::StartAndDuration { start, duration_ms } => {
+                Some(*start + chrono::Duration::milliseconds(*duration_ms as i64))
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the inferred duration in milliseconds, computing it from start and end if not
+    /// explicitly set.
+    pub fn infer_duration_ms(&self) -> Option<i64> {
+        match self {
+            Temporal::Duration { duration } => Some(*duration as i64),
+            Temporal::StartAndDuration { duration_ms, .. }
+            | Temporal::DurationAndEnd { duration_ms, .. } => Some(*duration_ms as i64),
+            Temporal::StartAndEnd { start, end } => {
+                Some((*end - *start).num_milliseconds())
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the canonical instant used to place this entry in time for ordering and filtering.
+    /// Prefers inferred start; falls back to end if no start can be derived.
+    pub fn canonical_instant(&self) -> Option<DateTime<Utc>> {
+        self.infer_start().or_else(|| self.end())
     }
 }
 

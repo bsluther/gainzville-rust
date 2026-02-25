@@ -123,6 +123,18 @@ of these options:
 Template entries may have a duration but not a start time or end time; this corresponds to the fact
 that template entries have not "occurred".
 
+#### Canonical Instant
+When an entry needs to be assigned a single point in time — for ordering, interval filtering, or
+display — the **canonical instant** is used. It is derived as follows:
+
+1. Infer start if possible: use the explicit start, or compute `end - duration` for `DurationAndEnd`.
+2. If no start can be derived, fall back to the explicit end.
+3. If no temporal data is present, the entry has no canonical instant.
+
+Entries are said to **belong to** the interval that contains their canonical instant. An entry that
+spans midnight (e.g. 11pm–1am) belongs to the day it started on, not the day it ended on. This
+mirrors standard calendar semantics and avoids an entry appearing in multiple day views.
+
 ### Attributes and Values
 An **attribute** describes a set of possible **values**. Attributes have a data type (see Attribute
 Types) and sometimes optionally define additional constraints on the data type (min value, if the
