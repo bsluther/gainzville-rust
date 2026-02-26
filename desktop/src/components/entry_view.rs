@@ -6,7 +6,7 @@ use gv_sqlite::client::SqliteClient;
 use uuid::Uuid;
 
 #[component]
-fn RustIcon() -> Element {
+fn CheckboxIcon() -> Element {
     rsx!(
         Icon {
             width: 30,
@@ -28,7 +28,7 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
     let entry_join =
         use_stream(move || consume_context::<SqliteClient>().stream_entry_join_by_id(id()));
 
-    let children = use_memo(move || {
+    let child_ids = use_memo(move || {
         forest()
             .children(id())
             .into_iter()
@@ -40,39 +40,61 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
         return rsx! {};
     };
 
+    let handle_delete_recursive = move |_e| async move {
+        let delete_recursive_action = DeleteEntryRecursive {
+            actor_id: SYSTEM_ACTOR_ID,
+            entry_id: entry_join.entry.id,
+        };
+        let client = consume_context::<SqliteClient>();
+        if let Err(e) = client.run_action(delete_recursive_action.into()).await {
+            debug!("Error running delete_entry_recursive action: {e}");
+        }
+    };
+
     rsx! {
         document::Link { rel: "stylesheet", href: ENTRY_CSS }
 
         EntryContextMenu { id,
-            div {
-                id: "entry",
-                class: if entry_join.is_sequence() { "sequence" } else { "scalar" },
-                div { class: "header flex flex-row justify-between pr-4",
-                    "{entry_join.display_name()}"
-                    button {
-                        onclick: move |_e| async move {
-                            let delete_recursive_action = DeleteEntryRecursive {
-                                actor_id: SYSTEM_ACTOR_ID,
-                                entry_id: entry_join.entry.id,
-                            };
-                            let client = consume_context::<SqliteClient>();
-                            if let Err(e) = client.run_action(delete_recursive_action.into()).await {
-                                debug!("Error running delete_entry_recursive action: {e}");
-                            }
-                        },
-                        class: "radius-2 text-red-700",
-                        "D"
-                    }
-                    RustIcon {}
+            Container { is_sequence: entry_join.is_sequence(),
+                Header {
+                    display_name: entry_join.display_name(),
+                    on_delete_recursive: handle_delete_recursive,
                 }
+                if !child_ids().is_empty() {
+                    ChildEntries { entry_ids: child_ids() }
+                }
+            }
+        }
+    }
+}
 
-                if !children().is_empty() {
-                    div { class: "entry-list",
-                        for child_id in children() {
-                            EntryView { key: "{child_id}", id: child_id }
-                        }
-                    }
-                }
+#[component]
+fn Container(is_sequence: ReadSignal<bool>, children: Element) -> Element {
+    rsx! {
+        div { class: if is_sequence() { "entry sequence" } else { "entry scalar" }, {children} }
+    }
+}
+
+#[component]
+fn Header(
+    display_name: ReadSignal<String>,
+    on_delete_recursive: EventHandler<MouseEvent>,
+) -> Element {
+    rsx! {
+        div { class: "header flex flex-row justify-between pr-4",
+            "{display_name()}"
+            button { onclick: on_delete_recursive, class: "radius-2 text-red-700", "D" }
+            CheckboxIcon {}
+        }
+    }
+}
+
+#[component]
+fn ChildEntries(entry_ids: Vec<Uuid>) -> Element {
+    rsx! {
+        div { class: "entry-list",
+            for child_id in entry_ids {
+                EntryView { key: "{child_id}", id: child_id }
             }
         }
     }

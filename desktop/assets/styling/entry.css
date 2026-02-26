@@ -16,7 +16,7 @@
     background-color: var(--bg-log);
 }
 
-#entry {
+.entry {
     color: var(--entry-text-color);
     display: flex;
     flex-direction: column;
@@ -30,20 +30,20 @@
 }
 
 /* Nested entry lists inside entries */
-#entry .entry-list {
+.entry .entry-list {
     padding-inline: 0;
     padding-block: var(--spacing-sm);
     width: auto;
 }
 
 /* Nested entries */
-#entry .entry-list #entry {
+.entry .entry-list .entry {
     max-width: none;
     border-radius: 4px 0 0 4px;
     border-right: 0px;
 }
 
-#entry.scalar {
+.entry.scalar {
     background-color: var(--entry-scalar-bg);
 }
 
