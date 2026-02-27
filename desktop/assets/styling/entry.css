@@ -1,10 +1,14 @@
 :root {
-    --entry-border-color: rgb(33, 33, 33);
-    /* --entry-border-color: rgb(27, 27, 27); */
-    --entry-text-color: rgb(163, 163, 163);
-    --entry-scalar-bg: rgb(21, 21, 21);
-    /* --entry-scalar-bg: rgb(23, 23, 23); */
-    --sequence-color: white;
+    --entry-text-color: var(--gv-neutral-400);
+
+    --entry-scalar-border-color: var(--gv-neutral-900);
+    --entry-scalar-bg-color: var(--gv-neutral-950);
+
+    --entry-sequence-border-color: var(--gv-neutral-800);
+    --entry-sequence-bg-color: var(--app-bg-color);
+
+    --entry-max-width: 24rem;
+    --entry-corner-radius: 8px;
 
 }
 
@@ -16,18 +20,44 @@
     background-color: var(--bg-log);
 }
 
-.entry {
+.entry-view {
     color: var(--entry-text-color);
     display: flex;
     flex-direction: column;
     font-size: 16px;
+    font-weight: 300;
     padding-block: var(--spacing-sm);
     padding-inline-start: var(--spacing-md);
-    border-radius: 4px;
-    max-width: 24rem;
+    border-radius: var(--entry-corner-radius);
+    max-width: var(--entry-max-width);
     box-sizing: border-box;
-    border: 1px solid var(--entry-border-color);
+
+    &[data-entry-kind="scalar"] {
+        background-color: var(--entry-scalar-bg-color);
+        border: 1px solid var(--entry-scalar-border-color);
+
+    }
+
+    &[data-entry-kind="sequence"] {
+        background-color: var(--entry-sequence-bg-color);
+        border: 1px solid var(--entry-sequence-border-color);
+    }
+
+    /* Nested entry lists */
+    .entry-list {
+        padding-inline: 0;
+        padding-block: var(--spacing-sm);
+        /* Size to the parent. */
+        width: auto;
+    }
+
+    /* Nested entries */
+    .entry-view {
+        border-radius: var(--entry-corner-radius) 0 0 var(--entry-corner-radius);
+        border-right: 0px;
+    }
 }
+
 
 /* Nested entry lists inside entries */
 .entry .entry-list {
@@ -43,10 +73,26 @@
     border-right: 0px;
 }
 
-.entry.scalar {
-    background-color: var(--entry-scalar-bg);
-}
 
-#entry.sequence {
-    /* border: 1px solid var(--entry-scalar-bg); */
+.entry-checkbox {
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 1px solid var(--gv-neutral-600);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+
+    .entry-checkbox-check {
+        display: block;
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 2px;
+    }
+
+    &[data-state="actual"] .entry-checkbox-check {
+        background-color: var(--gv-logged-blue);
+    }
 }

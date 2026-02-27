@@ -1,21 +1,11 @@
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::io_icons::IoCheckbox, Icon};
 use dioxus_primitives::context_menu::{ContextMenuContent, ContextMenuItem, ContextMenuTrigger};
-use gv_core::{actions::DeleteEntryRecursive, forest::Forest, SYSTEM_ACTOR_ID};
+use gv_core::{
+    actions::DeleteEntryRecursive, forest::Forest, models::attribute_pair::AttributePair,
+    SYSTEM_ACTOR_ID,
+};
 use gv_sqlite::client::SqliteClient;
 use uuid::Uuid;
-
-#[component]
-fn CheckboxIcon() -> Element {
-    rsx!(
-        Icon {
-            width: 30,
-            height: 30,
-            fill: "black",
-            icon: IoCheckbox,
-        }
-    )
-}
 
 use crate::{components::context_menu::ContextMenu, hooks::use_stream::use_stream};
 
@@ -27,6 +17,7 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
 
     let entry_join =
         use_stream(move || consume_context::<SqliteClient>().stream_entry_join_by_id(id()));
+    // let attr_pairs:  = entry_join().map(|e| e.attributes().collect());
 
     let child_ids = use_memo(move || {
         forest()
@@ -60,6 +51,7 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
                     display_name: entry_join.display_name(),
                     on_delete_recursive: handle_delete_recursive,
                 }
+                Attributes { attr_pairs: entry_join.attributes().cloned().collect::<Vec<_>>() }
                 if !child_ids().is_empty() {
                     ChildEntries { entry_ids: child_ids() }
                 }
@@ -71,7 +63,11 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
 #[component]
 fn Container(is_sequence: ReadSignal<bool>, children: Element) -> Element {
     rsx! {
-        div { class: if is_sequence() { "entry sequence" } else { "entry scalar" }, {children} }
+        div {
+            class: "entry-view",
+            "data-entry-kind": if is_sequence() { "sequence" } else { "scalar" },
+            {children}
+        }
     }
 }
 
@@ -80,11 +76,26 @@ fn Header(
     display_name: ReadSignal<String>,
     on_delete_recursive: EventHandler<MouseEvent>,
 ) -> Element {
+    let mut checked = use_signal(|| false);
     rsx! {
-        div { class: "header flex flex-row justify-between pr-4",
+        div { class: "header flex flex-row justify-between pr-4 items-center",
             "{display_name()}"
             button { onclick: on_delete_recursive, class: "radius-2 text-red-700", "D" }
-            CheckboxIcon {}
+            FillCheckbox {
+                checked: checked(),
+                on_toggle: move |_| checked.set(!checked()),
+            }
+        }
+    }
+}
+
+#[component]
+fn Attributes(attr_pairs: Vec<AttributePair>) -> Element {
+    rsx! {
+        div { class: "flex flex-col",
+            for a in attr_pairs {
+                div { "{a.name()}" }
+            }
         }
     }
 }
@@ -96,6 +107,18 @@ fn ChildEntries(entry_ids: Vec<Uuid>) -> Element {
             for child_id in entry_ids {
                 EntryView { key: "{child_id}", id: child_id }
             }
+        }
+    }
+}
+
+#[component]
+fn FillCheckbox(checked: bool, on_toggle: EventHandler<MouseEvent>) -> Element {
+    rsx! {
+        div {
+            class: "entry-checkbox",
+            "data-state": if checked { "plan" } else { "actual" },
+            onclick: on_toggle,
+            span { class: "entry-checkbox-check" }
         }
     }
 }

@@ -1,7 +1,13 @@
 use dioxus::prelude::*;
 use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
-use gv_core::{actions::CreateEntry, forest::Forest, models::entry::Entry, SYSTEM_ACTOR_ID};
-use gv_sqlite::client::SqliteClient;
+use gv_core::{
+    actions::{CreateEntry, CreateValue},
+    forest::Forest,
+    models::entry::Entry,
+    reader::Reader,
+    SYSTEM_ACTOR_ID,
+};
+use gv_sqlite::{client::SqliteClient, reader::SqliteReader};
 
 use crate::{components::EntryView, hooks::use_stream::use_stream};
 
@@ -15,9 +21,9 @@ pub fn Log() -> Element {
     use_context_provider(|| forest);
 
     rsx! {
-        div { class: "flex flex-col w-full",
+        div { class: "flex flex-col w-full items-center gap-4",
 
-            div { class: "bg-[var(--gray-1200)] flex flex-1 flex-row justify-center h-full",
+            div { class: "flex flex-1 flex-row justify-center h-full",
                 ul { class: "entry-list",
                     for entry in forest.read().roots() {
                         EntryView { key: "{entry.id}", id: entry.id }
@@ -25,7 +31,7 @@ pub fn Log() -> Element {
                 }
             
             }
-            div { class: "flex flex-row justify-center",
+            div { class: "flex w-72 flex-col items-center justify-center gap-4",
                 button {
                     class: "border-1 rounded-sm px-2 border-gray-500 ",
                     onclick: move |_e| async move {
@@ -50,8 +56,27 @@ pub fn Log() -> Element {
                     },
                     "Create ArbitraryFrom Entry"
                 }
-            }
-            div { class: "flex flex-row justify-center",
+                button {
+                    class: "border-1 rounded-sm px-2 border-gray-500 ",
+                    onclick: move |_e| async move {
+                        let mut rng = rand::rng();
+                        let context = SimulationContext {};
+                        let client = consume_context::<SqliteClient>();
+
+                        let mut conn = client.pool.acquire().await.unwrap();
+                        let attrs = SqliteReader::all_attributes(&mut conn).await.unwrap();
+                        debug!("{:?}", attrs);
+                        let create_value = CreateValue::arbitrary_from(
+                            &mut rng,
+                            &context,
+                            (&entries(), &attrs),
+                        );
+                        if let Err(e) = client.run_action(create_value.into()).await {
+                            println!("Create Value failed: {:?}", e);
+                        }
+                    },
+                    "Create ArbitraryFrom Value"
+                }
                 button {
                     class: "border-1 rounded-sm px-2 border-gray-500 ",
                     onclick: async |_e| {

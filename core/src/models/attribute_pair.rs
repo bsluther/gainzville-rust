@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AttributePair {
     Numeric(NumericAttributePair),
     Select(SelectAttributePair),
@@ -22,6 +22,14 @@ impl AttributePair {
             AttributePair::Numeric(p) => p.attr_id,
             AttributePair::Select(p) => p.attr_id,
             AttributePair::Mass(p) => p.attr_id,
+        }
+    }
+
+    pub fn name(&self) -> String {
+        match self {
+            AttributePair::Numeric(p) => p.name.clone(),
+            AttributePair::Select(p) => p.name.clone(),
+            AttributePair::Mass(p) => p.name.clone(),
         }
     }
 }
@@ -76,7 +84,7 @@ impl TryFrom<(Attribute, Value)> for AttributePair {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NumericAttributePair {
     pub attr_id: Uuid,
     pub entry_id: Uuid,
@@ -88,7 +96,7 @@ pub struct NumericAttributePair {
     pub actual: Option<NumericValue>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SelectAttributePair {
     pub attr_id: Uuid,
     pub entry_id: Uuid,
@@ -100,7 +108,7 @@ pub struct SelectAttributePair {
     pub actual: Option<SelectValue>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MassAttributePair {
     pub attr_id: Uuid,
     pub entry_id: Uuid,

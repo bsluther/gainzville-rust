@@ -8,14 +8,14 @@ use crate::{
 pub struct StandardLibrary {}
 
 impl StandardLibrary {
-    pub fn create_attributes() -> Vec<Attribute> {
+    pub fn attributes() -> Vec<Attribute> {
         let reps = Attribute {
             id: Uuid::new_v4(),
             owner_id: SYSTEM_ACTOR_ID,
             name: "Reps".to_string(),
             config: NumericConfig {
                 min: Some(0.),
-                max: Some(0.),
+                max: Some(100.),
                 integer: true,
                 default: Some(0.),
             }

@@ -2,6 +2,7 @@ use std::fs;
 
 use dioxus::prelude::*;
 
+use gv_core::{actions::CreateAttribute, std_lib};
 use gv_sqlite::client::SqliteClient;
 use tracing::Level;
 use views::{ActivitySandbox, Blog, Home, Log, Navbar};
@@ -63,6 +64,12 @@ fn main() {
         .block_on(async { SqliteClient::init(&db_url).await })
         .expect("failed to init client");
 
+    // for attr in std_lib::StandardLibrary::attributes() {
+    //     let action: CreateAttribute = attr.into();
+    //     rt.block_on(async { client.run_action(action.into()).await })
+    //         .expect("failed to create std_lib attributes")
+    // }
+
     dioxus::logger::init(Level::DEBUG).expect("failed to init logger");
 
     dioxus::LaunchBuilder::new()
@@ -81,11 +88,11 @@ fn main() {
 fn App() -> Element {
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
-        document::Link { rel: "stylesheet", href: MAIN_CSS }
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
-        document::Link { rel: "stylesheet", href: TOKENS_CSS }
-        document::Link { rel: "stylesheet", href: LOG_CSS }
         document::Link { rel: "stylesheet", href: DX_COMPONENTS_CSS }
+        document::Link { rel: "stylesheet", href: TOKENS_CSS }
+        document::Link { rel: "stylesheet", href: MAIN_CSS }
+        document::Link { rel: "stylesheet", href: LOG_CSS }
 
         Router::<Route> {}
     }

@@ -59,7 +59,7 @@ impl Attribute {
 
 ///// Configs /////
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AttributeConfig {
     Numeric(NumericConfig),
     Select(SelectConfig),
@@ -92,7 +92,7 @@ impl AttributeConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NumericConfig {
     pub min: Option<f64>,
     pub max: Option<f64>,
@@ -115,43 +115,54 @@ impl NumericConfig {
             if let Some(v) = min {
                 if !is_integer(v) {
                     return Err(DomainError::Validation(
-                        ValidationError::InvalidNumericConfig(format!("min ({v}) must be an integer")),
+                        ValidationError::InvalidNumericConfig(format!(
+                            "min ({v}) must be an integer"
+                        )),
                     ));
                 }
             }
             if let Some(v) = max {
                 if !is_integer(v) {
                     return Err(DomainError::Validation(
-                        ValidationError::InvalidNumericConfig(format!("max ({v}) must be an integer")),
+                        ValidationError::InvalidNumericConfig(format!(
+                            "max ({v}) must be an integer"
+                        )),
                     ));
                 }
             }
             if let Some(v) = default {
                 if !is_integer(v) {
                     return Err(DomainError::Validation(
-                        ValidationError::InvalidNumericConfig(format!("default ({v}) must be an integer")),
+                        ValidationError::InvalidNumericConfig(format!(
+                            "default ({v}) must be an integer"
+                        )),
                     ));
                 }
             }
         }
 
-        Ok(Self { min, max, integer, default })
+        Ok(Self {
+            min,
+            max,
+            integer,
+            default,
+        })
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SelectConfig {
     pub options: Vec<String>,
     pub ordered: bool,
     pub default: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MassConfig {
     pub default_units: Vec<MassUnit>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MassUnit {
     Gram,
     Kilogram,
@@ -172,7 +183,7 @@ pub struct Value {
 }
 
 // Consider renaming AttributeValue -> TypeValue.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AttributeValue {
     Numeric(NumericValue),
     Select(SelectValue),
@@ -202,19 +213,19 @@ impl AttributeValue {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NumericValue {
     Exact(f64),
     Range { min: f64, max: f64 },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SelectValue {
     Exact(String),
     Range { min: String, max: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MassValue {
     Exact(Vec<MassMeasurement>),
     Range {
@@ -223,7 +234,7 @@ pub enum MassValue {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MassMeasurement {
     pub unit: MassUnit,
     pub value: f64,
@@ -231,7 +242,7 @@ pub struct MassMeasurement {
 
 ///// Rows /////
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct AttributeRow {
     pub id: Uuid,
     pub owner_id: Uuid,
@@ -264,7 +275,7 @@ impl AttributeRow {
     }
 }
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct ValueRow {
     // Composite PK = (entry_id, attribute_id).
     pub entry_id: Uuid,

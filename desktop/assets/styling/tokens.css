@@ -6,6 +6,28 @@
     --gray-1100: rgb(12, 13, 13);
     --gray-1200: rgb(10, 10, 10);
 
-    --bg-app: var(--gray-1200);
-    --bg-log: var(--gray-1100);
+    --app-bg-color: var(--gv-neutral-1100);
+    --bg-color-log: var(--gv-neutral-1200);
+
+
+    --gv-neutral-50: rgb(250, 250, 250);
+    --gv-neutral-100: rgb(245, 245, 245);
+    --gv-neutral-200: rgb(229, 229, 229);
+    --gv-neutral-300: rgb(212, 212, 212);
+    --gv-neutral-400: rgb(163, 163, 163);
+    --gv-neutral-500: rgb(115, 115, 115);
+    --gv-neutral-550: rgb(96, 96, 96);
+    --gv-neutral-600: rgb(82, 82, 82);
+    --gv-neutral-650: rgb(72, 72, 72);
+    --gv-neutral-700: rgb(64, 64, 64);
+    --gv-neutral-750: rgb(56, 55, 55);
+    --gv-neutral-800: rgb(38, 38, 38);
+    --gv-neutral-850: rgb(30, 30, 32);
+    --gv-neutral-900: rgb(23, 23, 23);
+    --gv-neutral-950: rgb(19, 19, 19);
+    --gv-neutral-1000: rgb(17, 17, 17);
+    --gv-neutral-1100: rgb(13, 13, 13);
+    --gv-neutral-1200: rgb(10, 10, 10);
+
+    --gv-logged-blue: rgb(110, 121, 144);
 }
