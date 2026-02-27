@@ -11,7 +11,14 @@ pub mod entry;
 pub trait GenerationContext {}
 
 pub struct SimulationContext {
-    // rng: rand_chacha::ChaCha8Rng,
+    // rng: rand_chacha::ChaCha8Rng
+
+    // Maybe:
+    // p_semantic : probability of choose semanitcally meaningful data, such as choosing activity
+    // names from an exercise list rather than generating string. May severly limit the randomness
+    // of generation.
+    // p_valid : probability of generating valid data, where apprpopriate. For example, if a row
+    // struct is created, with p_valid=1 it should always parse successfully into a model value.
 }
 impl GenerationContext for SimulationContext {}
 
@@ -42,7 +49,7 @@ pub fn maybe<T, R: Rng>(rng: &mut R, p_some: f64, f: impl FnOnce(&mut R) -> T) -
     }
 }
 
-// Unifiormly pick an element from a slice. Panics when the slice is empty.
+// Unifiormly pick an Some(element) from a slice; returns None if the slice is empty.
 pub fn pick<'a, T, R: Rng>(choices: &'a [T], rng: &mut R) -> Option<&'a T> {
     if choices.is_empty() {
         None
