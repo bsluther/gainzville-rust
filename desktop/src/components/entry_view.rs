@@ -1,4 +1,6 @@
 use dioxus::prelude::*;
+use dioxus_free_icons::icons::io_icons::IoEllipsisVertical;
+use dioxus_free_icons::Icon;
 use dioxus_primitives::context_menu::{ContextMenuContent, ContextMenuItem, ContextMenuTrigger};
 use gv_core::{
     actions::DeleteEntryRecursive, forest::Forest, models::attribute_pair::AttributePair,
@@ -9,15 +11,19 @@ use uuid::Uuid;
 
 use crate::{components::context_menu::ContextMenu, hooks::use_stream::use_stream};
 
-const ENTRY_CSS: Asset = asset!("/assets/styling/entry.css");
+// Code style:
+// - Prefer pure components (UI is a function of props) for smaller/lower-level UI componets.
+//   E.g. access data through side-effects (hooks) at the higher-level orchestration level and wire
+//   to
+// - Access data at the top of a component; use props or context to pass to subcomponents.
 
 #[component]
 pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
+    let mut expanded = use_signal(|| false);
     let forest = consume_context::<Memo<Forest>>();
 
     let entry_join =
         use_stream(move || consume_context::<SqliteClient>().stream_entry_join_by_id(id()));
-    // let attr_pairs:  = entry_join().map(|e| e.attributes().collect());
 
     let child_ids = use_memo(move || {
         forest()
@@ -42,21 +48,35 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
         }
     };
 
-    rsx! {
-        document::Link { rel: "stylesheet", href: ENTRY_CSS }
+    let toggle_expanded = move |_| {
+        info!("toggle");
+        expanded.toggle();
+    };
 
-        EntryContextMenu { id,
-            Container { is_sequence: entry_join.is_sequence(),
-                Header {
-                    display_name: entry_join.display_name(),
-                    on_delete_recursive: handle_delete_recursive,
-                }
-                Attributes { attr_pairs: entry_join.attributes().cloned().collect::<Vec<_>>() }
-                if !child_ids().is_empty() {
-                    ChildEntries { entry_ids: child_ids() }
+    rsx! {
+
+        Container { is_sequence: entry_join.is_sequence(),
+            Header {
+                entry_id: id(),
+                display_name: entry_join.display_name(),
+                on_delete_recursive: handle_delete_recursive,
+                expanded: expanded(),
+                on_toggle_expand: toggle_expanded,
+                is_sequence: entry_join.is_sequence(),
+            }
+            if expanded() {
+                div { class: "flex flex-col p-1",
+                    Attributes { attr_pairs: entry_join.attributes().cloned().collect::<Vec<_>>() }
+                    if !child_ids().is_empty() {
+                        ChildEntries { entry_ids: child_ids() }
+                    }
+                    if !entry_join.is_sequence() {
+                        FooterScalar {}
+                    }
                 }
             }
         }
+
     }
 }
 
@@ -73,18 +93,49 @@ fn Container(is_sequence: ReadSignal<bool>, children: Element) -> Element {
 
 #[component]
 fn Header(
+    entry_id: Uuid,
+    is_sequence: bool,
     display_name: ReadSignal<String>,
     on_delete_recursive: EventHandler<MouseEvent>,
+    on_toggle_expand: EventHandler<MouseEvent>,
+    expanded: bool,
 ) -> Element {
     let mut checked = use_signal(|| false);
     rsx! {
-        div { class: "header flex flex-row justify-between pr-4 items-center",
-            "{display_name()}"
-            button { onclick: on_delete_recursive, class: "radius-2 text-red-700", "D" }
-            FillCheckbox {
-                checked: checked(),
-                on_toggle: move |_| checked.set(!checked()),
+        // Outer row containinbg two clickable elements.
+        div { class: "header flex flex-row justify-between items-center",
+            // Title/summary; clicking here expands/contracts the entry.
+            div {
+                class: "flex flex-row grow items-center pr-4 gap-4 select-none",
+                onclick: move |e| on_toggle_expand(e),
+                // Title
+                div { "{display_name()}" }
+                // Summary text
+                div {}
             }
+            // Checkbox controlling `Entry.is_complete` or menu trigger.
+            if expanded || is_sequence {
+                div { class: "pr-1",
+                    EntryContextMenu { id: entry_id }
+                }
+            } else {
+                // TODO: checked should come from props (from DB).
+                div { class: "pr-2",
+                    FillCheckbox {
+                        checked: checked(),
+                        on_toggle: move |_| checked.set(!checked()),
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn FooterScalar() -> Element {
+    rsx! {
+        div { class: "flex flex-row grow justify-end",
+            FillCheckbox { checked: true, on_toggle: move |_| {} }
         }
     }
 }
@@ -94,7 +145,7 @@ fn Attributes(attr_pairs: Vec<AttributePair>) -> Element {
     rsx! {
         div { class: "flex flex-col",
             for a in attr_pairs {
-                div { "{a.name()}" }
+                div { class: "attribute-label", "{a.name()}" }
             }
         }
     }
@@ -127,7 +178,15 @@ fn FillCheckbox(checked: bool, on_toggle: EventHandler<MouseEvent>) -> Element {
 fn EntryContextMenu(id: ReadSignal<Uuid>, children: Element) -> Element {
     rsx! {
         ContextMenu {
-            ContextMenuTrigger { children }
+            ContextMenuTrigger {
+                Icon {
+                    width: 20,
+                    height: 20,
+                    fill: "white",
+                    class: "red-200",
+                    icon: IoEllipsisVertical,
+                }
+            }
             ContextMenuContent { class: "context-menu-content",
                 ContextMenuItem {
                     class: "context-menu-item",
