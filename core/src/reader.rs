@@ -109,6 +109,11 @@ pub trait Reader<DB: sqlx::Database> {
         entry_id: Uuid,
     ) -> Result<Vec<Value>>;
 
+    async fn find_values_for_entries(
+        connection: &mut DB::Connection,
+        entry_ids: &[Uuid],
+    ) -> Result<Vec<Value>>;
+
     async fn find_attribute_pairs_for_entry(
         connection: &mut DB::Connection,
         entry_id: Uuid,

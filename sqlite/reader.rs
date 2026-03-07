@@ -349,6 +349,30 @@ impl Reader<sqlx::Sqlite> for SqliteReader {
         .collect()
     }
 
+    async fn find_values_for_entries(
+        connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
+        entry_ids: &[Uuid],
+    ) -> Result<Vec<Value>> {
+        if entry_ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id IN (",
+        );
+        let mut separated = builder.separated(", ");
+        for id in entry_ids {
+            separated.push_bind(*id);
+        }
+        builder.push(")");
+        builder
+            .build_query_as::<ValueRow>()
+            .fetch_all(&mut *connection)
+            .await?
+            .into_iter()
+            .map(|row| row.to_value())
+            .collect()
+    }
+
     async fn find_attribute_pairs_for_entry(
         connection: &mut <sqlx::Sqlite as sqlx::Database>::Connection,
         entry_id: Uuid,

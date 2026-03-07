@@ -358,6 +358,21 @@ impl Reader<sqlx::Postgres> for PostgresReader {
         .collect()
     }
 
+    async fn find_values_for_entries(
+        connection: &mut <sqlx::Postgres as sqlx::Database>::Connection,
+        entry_ids: &[Uuid],
+    ) -> Result<Vec<Value>> {
+        sqlx::query_as::<_, ValueRow>(
+            "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id = ANY($1)",
+        )
+        .bind(entry_ids)
+        .fetch_all(&mut *connection)
+        .await?
+        .into_iter()
+        .map(|row| row.to_value())
+        .collect()
+    }
+
     async fn find_attribute_pairs_for_entry(
         connection: &mut <sqlx::Postgres as sqlx::Database>::Connection,
         entry_id: Uuid,

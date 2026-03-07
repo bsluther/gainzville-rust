@@ -237,13 +237,13 @@ where
 {
     // Get entry and all descendants.
     // - Once attributes are in place, will need get/delete them as well.
-    let tree = R::find_descendants(&mut **tx, action.entry_id).await?;
-    // YOU ARE HERE
-    // Debugging what's wrong with delete_entry_recursive
-    debug!("descendants len={} {:?}", tree.len(), tree);
-    let Some(root) = tree.iter().find(|e| e.id == action.entry_id) else {
+    let subtree = R::find_descendants(&mut **tx, action.entry_id).await?;
+    let subtree_ids: Vec<Uuid> = subtree.iter().map(|e| e.id).collect();
+    let subtree_attr_values = R::find_values_for_entries(&mut **tx, &subtree_ids).await?;
+
+    let Some(root) = subtree.iter().find(|e| e.id == action.entry_id) else {
         assert!(
-            tree.is_empty(),
+            subtree.is_empty(),
             "descendants query must include the root entry or be null, 
             found a non-empty tree which does not contain the root"
         );
@@ -260,10 +260,19 @@ where
     }
 
     // Create delete deltas for entry and descendants.
-    let deltas: Vec<ModelDelta> = tree
+    let entry_deltas: Vec<ModelDelta> = subtree
         .into_iter()
         .map(|e| Delta::Delete { old: e }.into())
         .collect();
+
+    // Create delete deltas for entry and descedants attribute values.
+    let attr_value_deltas: Vec<ModelDelta> = subtree_attr_values
+        .into_iter()
+        .map(|v| Delta::Delete { old: v }.into())
+        .collect();
+
+    let mut deltas = entry_deltas;
+    deltas.extend(attr_value_deltas);
 
     Ok(Mutation {
         id: Uuid::new_v4(),
