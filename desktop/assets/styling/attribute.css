@@ -1,3 +1,65 @@
 .attribute-label {
     font-size: 14px;
+    color: var(--gv-neutral-500);
+}
+
+.temporal-attribute {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    padding: 4px 0;
+}
+
+.temporal-header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 28px;
+    cursor: pointer;
+}
+
+.temporal-label {
+    font-size: 14px;
+    color: var(--gv-neutral-500);
+}
+
+.temporal-summary {
+    font-style: italic;
+    font-size: 14px;
+    color: var(--gv-neutral-500);
+}
+
+.temporal-expanded {
+    display: flex;
+    flex-direction: column;
+    padding-left: var(--spacing-md);
+    gap: var(--spacing-sm);
+}
+
+.temporal-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.temporal-row-label {
+    font-size: 14px;
+    color: var(--gv-neutral-500);
+}
+
+.temporal-pill {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--gv-neutral-700);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 14px;
+    color: var(--gv-neutral-300);
+}
+
+.temporal-pill--empty {
+    min-width: 40px;
+    min-height: 20px;
 }

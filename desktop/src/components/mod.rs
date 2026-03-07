@@ -12,3 +12,6 @@ mod entry_view;
 pub use entry_view::EntryView;
 
 pub mod context_menu;
+
+mod temporal_attribute;
+pub use temporal_attribute::TemporalAttribute;

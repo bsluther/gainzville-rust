@@ -9,7 +9,10 @@ use gv_core::{
 use gv_sqlite::client::SqliteClient;
 use uuid::Uuid;
 
-use crate::{components::context_menu::ContextMenu, hooks::use_stream::use_stream};
+use crate::{
+    components::{context_menu::ContextMenu, TemporalAttribute},
+    hooks::use_stream::use_stream,
+};
 
 // Code style:
 // - Prefer pure components (UI is a function of props) for smaller/lower-level UI componets.
@@ -66,6 +69,7 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
             }
             if expanded() {
                 div { class: "flex flex-col p-1",
+                    TemporalAttribute { temporal: entry_join.entry.temporal.clone() }
                     Attributes { attr_pairs: entry_join.attributes().cloned().collect::<Vec<_>>() }
                     if !child_ids().is_empty() {
                         ChildEntries { entry_ids: child_ids() }
