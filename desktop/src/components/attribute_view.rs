@@ -93,27 +93,67 @@ fn NumericView(pair: NumericAttributePair) -> Element {
 
 #[component]
 fn SelectView(pair: SelectAttributePair) -> Element {
-    let name = pair.name.clone();
-    let pills = match pair.actual {
-        Some(SelectValue::Exact(s)) => rsx! {
-            span { class: "attribute-pill", "{s}" }
-        },
-        Some(SelectValue::Range { min, max }) => rsx! {
-            span { class: "attribute-pill", "{min}" }
-            Icon {
-                width: 12,
-                height: 12,
-                fill: "var(--gv-neutral-500)",
-                icon: IoRemove,
-            }
-            span { class: "attribute-pill", "{max}" }
-        },
-        None => rsx! {
-            span { class: "attribute-pill" }
-        },
+    let attr_id = pair.attr_id;
+    let entry_id = pair.entry_id;
+    let options = pair.config.options.clone();
+    let mut open = use_signal(|| false);
+
+    let current = match &pair.actual {
+        Some(SelectValue::Exact(s)) => s.clone(),
+        _ => String::new(),
     };
+
     rsx! {
-        AttributeRow { label: name, {pills} }
+        AttributeRow { label: pair.name.clone(),
+            div { class: "select-wrapper",
+                // Backdrop: captures outside clicks to close the popover.
+                if open() {
+                    div {
+                        class: "select-backdrop",
+                        onclick: move |_| open.set(false),
+                    }
+                }
+                button {
+                    class: "attribute-pill select-trigger",
+                    onclick: move |_| open.set(!open()),
+                    if current.is_empty() { "\u{00a0}" } else { "{current}" }
+                }
+                if open() {
+                    div { class: "select-popover",
+                        for option in options {
+                            div {
+                                class: "select-option",
+                                onclick: {
+                                    let option = option.clone();
+                                    move |_| {
+                                        let option = option.clone();
+                                        open.set(false);
+                                        async move {
+                                            let client = consume_context::<SqliteClient>();
+                                            let _ = client
+                                                .run_action(
+                                                    UpdateAttributeValue {
+                                                        actor_id: SYSTEM_ACTOR_ID,
+                                                        entry_id,
+                                                        attribute_id: attr_id,
+                                                        field: ValueField::Actual,
+                                                        value: AttributeValue::Select(
+                                                            SelectValue::Exact(option),
+                                                        ),
+                                                    }
+                                                    .into(),
+                                                )
+                                                .await;
+                                        }
+                                    }
+                                },
+                                "{option}"
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
