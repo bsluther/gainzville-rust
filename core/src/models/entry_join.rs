@@ -55,6 +55,7 @@ impl EntryJoin {
             position: Position::parse(row.parent_id, row.frac_index)?,
             is_template: row.is_template,
             is_sequence: row.is_sequence,
+            is_complete: row.is_complete,
             display_as_sets: row.display_as_sets,
             temporal: Temporal::parse(row.start_time, row.end_time, duration_ms)?,
         };
@@ -96,6 +97,7 @@ pub struct EntryJoinRow {
     pub is_template: bool,
     pub display_as_sets: bool,
     pub is_sequence: bool,
+    pub is_complete: bool,
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
     pub duration_ms: Option<i64>,

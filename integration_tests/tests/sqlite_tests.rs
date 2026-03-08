@@ -23,6 +23,7 @@ async fn test_find_descendants(pool: SqlitePool) {
         display_as_sets: false,
         id: Uuid::new_v4(),
         is_sequence: false,
+        is_complete: false,
         is_template: false,
         owner_id: SYSTEM_ACTOR_ID,
         position: None,
@@ -34,6 +35,7 @@ async fn test_find_descendants(pool: SqlitePool) {
         display_as_sets: false,
         id: Uuid::new_v4(),
         is_sequence: false,
+        is_complete: false,
         is_template: false,
         owner_id: SYSTEM_ACTOR_ID,
         position: Some(Position {
@@ -110,6 +112,7 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
         position: None,
         display_as_sets: false,
         is_sequence: false,
+        is_complete: false,
         is_template: false,
         temporal: Temporal::None,
     };

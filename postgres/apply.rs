@@ -190,11 +190,12 @@ impl PgApply for Delta<Entry> {
                         is_template,
                         display_as_sets,
                         is_sequence,
+                        is_complete,
                         start_time,
                         end_time,
                         duration_ms
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                     "#,
                     new.id,
                     new.activity_id,
@@ -204,6 +205,7 @@ impl PgApply for Delta<Entry> {
                     new.is_template,
                     new.display_as_sets,
                     new.is_sequence,
+                    new.is_complete,
                     new.temporal.start(),
                     new.temporal.end(),
                     new.temporal.duration().map(|d| d as i64)
@@ -222,16 +224,18 @@ impl PgApply for Delta<Entry> {
                         frac_index = $3,
                         display_as_sets = $4,
                         is_sequence = $5,
-                        start_time = $6,
-                        end_time = $7,
-                        duration_ms = $8
-                    WHERE id = $9
+                        is_complete = $6,
+                        start_time = $7,
+                        end_time = $8,
+                        duration_ms = $9
+                    WHERE id = $10
                     "#,
                     new.activity_id,
                     new.parent_id(),
                     new.frac_index().map(|f| f.to_string()),
                     new.display_as_sets,
                     new.is_sequence,
+                    new.is_complete,
                     new.temporal.start(),
                     new.temporal.end(),
                     new.temporal.duration().map(|d| d as i64),

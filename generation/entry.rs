@@ -67,6 +67,7 @@ impl Arbitrary for Entry {
             activity_id: Some(Uuid::arbitrary(rng, context)),
             display_as_sets: rng.random_bool(0.5),
             is_sequence: rng.random_bool(0.5),
+            is_complete: rng.random_bool(0.5),
             is_template: rng.random_bool(0.5),
             position: Some(Position {
                 parent_id: Uuid::arbitrary(rng, context),
@@ -172,6 +173,7 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry])> for Entry {
             id: Uuid::arbitrary(rng, context),
             display_as_sets: rng.random_bool(0.5),
             is_sequence: rng.random_bool(0.5),
+            is_complete: rng.random_bool(0.5),
             is_template: false,
             position: Option::<Position>::arbitrary_from(rng, context, entries),
             temporal: Temporal::arbitrary(rng, context),

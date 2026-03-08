@@ -141,11 +141,12 @@ impl SqliteApply for Delta<Entry> {
                         is_template,
                         display_as_sets,
                         is_sequence,
+                        is_complete,
                         start_time,
                         end_time,
                         duration_ms
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     "#,
                 )
                 .bind(new.id)
@@ -156,6 +157,7 @@ impl SqliteApply for Delta<Entry> {
                 .bind(new.is_template)
                 .bind(new.display_as_sets)
                 .bind(new.is_sequence)
+                .bind(new.is_complete)
                 .bind(new.temporal.start().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.end().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.duration().map(|d| d as i64))
@@ -172,6 +174,7 @@ impl SqliteApply for Delta<Entry> {
                         frac_index = ?,
                         display_as_sets = ?,
                         is_sequence = ?,
+                        is_complete = ?,
                         start_time = ?,
                         end_time = ?,
                         duration_ms = ?
@@ -183,6 +186,7 @@ impl SqliteApply for Delta<Entry> {
                 .bind(new.frac_index().map(|f| f.to_string()))
                 .bind(new.display_as_sets)
                 .bind(new.is_sequence)
+                .bind(new.is_complete)
                 .bind(new.temporal.start().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.end().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.duration().map(|d| d as i64))

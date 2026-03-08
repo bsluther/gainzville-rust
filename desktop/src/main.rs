@@ -66,6 +66,7 @@ fn main() {
         .block_on(async { SqliteClient::init(&db_url).await })
         .expect("failed to init client");
 
+    // Populate database with attributes from the "standard library".
     // for attr in std_lib::StandardLibrary::attributes() {
     //     let action: CreateAttribute = attr.into();
     //     rt.block_on(async { client.run_action(action.into()).await })

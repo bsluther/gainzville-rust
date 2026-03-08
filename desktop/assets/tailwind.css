@@ -191,15 +191,6 @@
       max-width: 96rem;
     }
   }
-  .mr-\[-4px\] {
-    margin-right: -4px;
-  }
-  .mr-\[-8px\] {
-    margin-right: -8px;
-  }
-  .mr-\[-16px\] {
-    margin-right: -16px;
-  }
   .block {
     display: block;
   }
@@ -232,9 +223,6 @@
   }
   .flex-1 {
     flex: 1;
-  }
-  .flex-shrink {
-    flex-shrink: 1;
   }
   .grow {
     flex-grow: 1;
@@ -292,9 +280,6 @@
   .bg-gray-400 {
     background-color: var(--color-gray-400);
   }
-  .p-1 {
-    padding: calc(var(--spacing) * 1);
-  }
   .p-4 {
     padding: calc(var(--spacing) * 4);
   }
@@ -309,9 +294,6 @@
   }
   .pr-4 {
     padding-right: calc(var(--spacing) * 4);
-  }
-  .pr-\[-4px\] {
-    padding-right: -4px;
   }
   .text-black {
     color: var(--color-black);

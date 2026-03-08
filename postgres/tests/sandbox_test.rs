@@ -53,6 +53,7 @@ async fn test_create_user_activity_entry(pool: PgPool) {
             is_template: false,
             display_as_sets: false,
             is_sequence: false,
+            is_complete: false,
             temporal: Temporal::None,
         },
     };

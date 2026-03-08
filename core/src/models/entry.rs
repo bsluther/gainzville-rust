@@ -17,6 +17,7 @@ pub struct Entry {
     pub is_template: bool,
     pub display_as_sets: bool,
     pub is_sequence: bool,
+    pub is_complete: bool,
     pub temporal: Temporal,
 }
 
@@ -47,6 +48,7 @@ pub struct EntryRow {
     pub is_template: bool,
     pub display_as_sets: bool,
     pub is_sequence: bool,
+    pub is_complete: bool,
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
     pub duration_ms: Option<i64>,
@@ -74,6 +76,7 @@ impl EntryRow {
             position: Position::parse(self.parent_id, self.frac_index)?,
             is_template: self.is_template,
             is_sequence: self.is_sequence,
+            is_complete: self.is_complete,
             display_as_sets: self.display_as_sets,
             temporal: Temporal::parse(self.start_time, self.end_time, duration_ms)?,
         })
@@ -291,6 +294,11 @@ impl EntryUpdater {
 
     pub fn is_sequence(mut self, is_sequence: bool) -> Self {
         self.new.is_sequence = is_sequence;
+        self
+    }
+
+    pub fn is_complete(mut self, v: bool) -> Self {
+        self.new.is_complete = v;
         self
     }
 
