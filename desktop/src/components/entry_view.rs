@@ -3,7 +3,7 @@ use dioxus_free_icons::icons::io_icons::IoEllipsisVertical;
 use dioxus_free_icons::Icon;
 use dioxus_primitives::context_menu::{ContextMenuContent, ContextMenuItem, ContextMenuTrigger};
 use gv_core::{
-    actions::DeleteEntryRecursive,
+    actions::{DeleteEntryRecursive, UpdateEntryCompletion},
     forest::Forest,
     models::{attribute_pair::AttributePair, entry::Temporal},
     SYSTEM_ACTOR_ID,
@@ -42,14 +42,33 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
         return rsx! {};
     };
 
+    let entry_id = entry_join.entry.id;
+    let is_complete = entry_join.entry.is_complete;
+
     let handle_delete_recursive = move |_e| async move {
-        let delete_recursive_action = DeleteEntryRecursive {
-            actor_id: SYSTEM_ACTOR_ID,
-            entry_id: entry_join.entry.id,
-        };
         let client = consume_context::<SqliteClient>();
-        if let Err(e) = client.run_action(delete_recursive_action.into()).await {
+        if let Err(e) = client
+            .run_action(DeleteEntryRecursive { actor_id: SYSTEM_ACTOR_ID, entry_id }.into())
+            .await
+        {
             debug!("Error running delete_entry_recursive action: {e}");
+        }
+    };
+
+    let handle_toggle_complete = move |_| async move {
+        let client = consume_context::<SqliteClient>();
+        if let Err(e) = client
+            .run_action(
+                UpdateEntryCompletion {
+                    actor_id: SYSTEM_ACTOR_ID,
+                    entry_id,
+                    is_complete: !is_complete,
+                }
+                .into(),
+            )
+            .await
+        {
+            debug!("Error running update_entry_completion action: {e}");
         }
     };
 
@@ -68,6 +87,8 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
                 expanded: expanded(),
                 on_toggle_expand: toggle_expanded,
                 is_sequence: entry_join.is_sequence(),
+                is_complete,
+                on_toggle_complete: handle_toggle_complete,
             }
             if expanded() {
                 div { class: "entry-body",
@@ -79,7 +100,7 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
                         ChildEntries { entry_ids: child_ids() }
                     }
                     if !entry_join.is_sequence() {
-                        FooterScalar {}
+                        FooterScalar { is_complete, on_toggle: handle_toggle_complete }
                     }
                 }
             }
@@ -103,14 +124,15 @@ fn Container(is_sequence: ReadSignal<bool>, children: Element) -> Element {
 fn Header(
     entry_id: Uuid,
     is_sequence: bool,
+    is_complete: bool,
     display_name: ReadSignal<String>,
     on_delete_recursive: EventHandler<MouseEvent>,
     on_toggle_expand: EventHandler<MouseEvent>,
+    on_toggle_complete: EventHandler<MouseEvent>,
     expanded: bool,
 ) -> Element {
-    let mut checked = use_signal(|| false);
     rsx! {
-        // Outer row containinbg two clickable elements.
+        // Outer row containing two clickable elements.
         div { class: "entry-header flex flex-row justify-between items-center",
             // Title/summary; clicking here expands/contracts the entry.
             div {
@@ -127,11 +149,10 @@ fn Header(
                     EntryContextMenu { id: entry_id }
                 }
             } else {
-                // TODO: checked should come from props (from DB).
                 div { class: "pr-2",
                     FillCheckbox {
-                        checked: checked(),
-                        on_toggle: move |_| checked.set(!checked()),
+                        checked: is_complete,
+                        on_toggle: move |e| on_toggle_complete(e),
                     }
                 }
             }
@@ -140,10 +161,10 @@ fn Header(
 }
 
 #[component]
-fn FooterScalar() -> Element {
+fn FooterScalar(is_complete: bool, on_toggle: EventHandler<MouseEvent>) -> Element {
     rsx! {
         div { class: "entry-footer flex flex-row grow justify-end",
-            FillCheckbox { checked: true, on_toggle: move |_| {} }
+            FillCheckbox { checked: is_complete, on_toggle: move |e| on_toggle(e) }
         }
     }
 }
