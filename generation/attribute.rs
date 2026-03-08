@@ -102,6 +102,7 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for Value {
         let plan = maybe(rng, 0.5, |rng| {
             AttributeValue::arbitrary_from(rng, context, &attribute.config)
         });
+        // TEMPORARY - always generate an actual value for UI development.
         let actual = maybe(rng, 0.5, |rng| {
             AttributeValue::arbitrary_from(rng, context, &attribute.config)
         });
@@ -209,7 +210,8 @@ impl ArbitraryFrom<&MassConfig> for MassValue {
                 .collect()
         };
 
-        match rng.random_range(0..=1) {
+        // TEMPORARY: always generate exact values for UI development.
+        match rng.random_range(0..=0) {
             0 => MassValue::Exact(rand_measurements(rng)),
             _ => {
                 let a = rand_measurements(rng);

@@ -96,6 +96,44 @@ input.attribute-pill:focus {
     background: var(--gv-neutral-800);
 }
 
+/* Mass attribute */
+.mass-input {
+    width: 48px;
+    text-align: center;
+}
+
+.mass-unit-label {
+    font-size: 13px;
+    color: var(--gv-neutral-500);
+    user-select: none;
+    margin-right: 4px;
+}
+
+.mass-cog-btn {
+    background: none;
+    border: none;
+    padding: 2px;
+    cursor: pointer;
+    opacity: 0.4;
+    display: flex;
+    align-items: center;
+    border-radius: 4px;
+}
+
+.mass-cog-btn:hover {
+    opacity: 1;
+    background: var(--gv-neutral-800);
+}
+
+.unit-picker-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 10px;
+    font-size: 14px;
+    color: var(--gv-neutral-300);
+}
+
 .temporal-attribute {
     padding: 4px 0;
 }

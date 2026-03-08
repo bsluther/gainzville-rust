@@ -1,11 +1,15 @@
 use dioxus::prelude::*;
-use dioxus_free_icons::icons::io_icons::IoRemove;
+use dioxus_free_icons::icons::io_icons::IoCog;
 use dioxus_free_icons::Icon;
 use gv_core::{
-    SYSTEM_ACTOR_ID,
     actions::{UpdateAttributeValue, ValueField},
-    models::attribute::{AttributeValue, MassMeasurement, MassUnit, MassValue, NumericValue, SelectValue},
-    models::attribute_pair::{AttributePair, MassAttributePair, NumericAttributePair, SelectAttributePair},
+    models::attribute::{
+        AttributeValue, MassMeasurement, MassUnit, MassValue, NumericValue, SelectValue,
+    },
+    models::attribute_pair::{
+        AttributePair, MassAttributePair, NumericAttributePair, SelectAttributePair,
+    },
+    SYSTEM_ACTOR_ID,
 };
 use gv_sqlite::client::SqliteClient;
 
@@ -116,7 +120,11 @@ fn SelectView(pair: SelectAttributePair) -> Element {
                 button {
                     class: "attribute-pill select-trigger",
                     onclick: move |_| open.set(!open()),
-                    if current.is_empty() { "\u{00a0}" } else { "{current}" }
+                    if current.is_empty() {
+                        "\u{00a0}"
+                    } else {
+                        "{current}"
+                    }
                 }
                 if open() {
                     div { class: "select-popover",
@@ -137,11 +145,9 @@ fn SelectView(pair: SelectAttributePair) -> Element {
                                                         entry_id,
                                                         attribute_id: attr_id,
                                                         field: ValueField::Actual,
-                                                        value: AttributeValue::Select(
-                                                            SelectValue::Exact(option),
-                                                        ),
+                                                        value: AttributeValue::Select(SelectValue::Exact(option)),
                                                     }
-                                                    .into(),
+                                                        .into(),
                                                 )
                                                 .await;
                                         }
@@ -157,29 +163,130 @@ fn SelectView(pair: SelectAttributePair) -> Element {
     }
 }
 
+fn mass_input_strings(units: &[MassUnit], actual: &Option<MassValue>) -> Vec<String> {
+    units
+        .iter()
+        .map(|unit| match actual {
+            Some(MassValue::Exact(ms)) => ms
+                .iter()
+                .find(|m| &m.unit == unit)
+                .map(|m| m.value.to_string())
+                .unwrap_or_default(),
+            _ => String::new(),
+        })
+        .collect()
+}
+
 #[component]
 fn MassView(pair: MassAttributePair) -> Element {
-    let name = pair.name.clone();
-    let pills = match pair.actual {
-        Some(MassValue::Exact(measurements)) => rsx! {
-            span { class: "attribute-pill", "{format_mass(&measurements)}" }
-        },
-        Some(MassValue::Range { min, max }) => rsx! {
-            span { class: "attribute-pill", "{format_mass(&min)}" }
-            Icon {
-                width: 12,
-                height: 12,
-                fill: "var(--gv-neutral-500)",
-                icon: IoRemove,
-            }
-            span { class: "attribute-pill", "{format_mass(&max)}" }
-        },
-        None => rsx! {
-            span { class: "attribute-pill" }
-        },
+    let attr_id = pair.attr_id;
+    let entry_id = pair.entry_id;
+    // let units = pair.config.default_units.clone();
+    let units = pair.defined_units();
+    let all_units = vec![MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
+    let configured_units = units.clone();
+
+    let db_strs = mass_input_strings(&units, &pair.actual);
+    let mut inputs = use_signal(|| db_strs.clone());
+    let mut synced_db = use_signal(|| db_strs.clone());
+    if db_strs != *synced_db.peek() {
+        synced_db.set(db_strs.clone());
+        inputs.set(db_strs.clone());
+    }
+
+    // Store units in a signal so commit closure is Copy.
+    let units_sig = use_signal(|| units.clone());
+    let mut show_picker = use_signal(|| false);
+
+    let commit = move || async move {
+        let strs = inputs.peek().clone();
+        let units = units_sig.peek().clone();
+        let measurements: Vec<MassMeasurement> = units
+            .iter()
+            .enumerate()
+            .filter_map(|(i, unit)| {
+                strs.get(i)
+                    .and_then(|s| s.trim().parse::<f64>().ok())
+                    .map(|v| MassMeasurement {
+                        unit: unit.clone(),
+                        value: v,
+                    })
+            })
+            .collect();
+        if measurements.is_empty() {
+            return;
+        }
+        let client = consume_context::<SqliteClient>();
+        let _ = client
+            .run_action(
+                UpdateAttributeValue {
+                    actor_id: SYSTEM_ACTOR_ID,
+                    entry_id,
+                    attribute_id: attr_id,
+                    field: ValueField::Actual,
+                    value: AttributeValue::Mass(MassValue::Exact(measurements)),
+                }
+                .into(),
+            )
+            .await;
     };
+
     rsx! {
-        AttributeRow { label: name, {pills} }
+        AttributeRow { label: pair.name.clone(),
+            for (i , unit) in units.iter().enumerate() {
+                input {
+                    class: "attribute-pill mass-input",
+                    r#type: "text",
+                    value: "{inputs()[i]}",
+                    oninput: move |e| {
+                        let mut v = inputs();
+                        if let Some(s) = v.get_mut(i) {
+                            *s = e.value();
+                        }
+                        inputs.set(v);
+                    },
+                    onblur: move |_| async move { commit().await },
+                    onkeydown: move |e: KeyboardEvent| async move {
+                        if e.key() == Key::Enter {
+                            commit().await;
+                        }
+                    },
+                }
+                span { class: "mass-unit-label", "{format_mass_unit(unit)}" }
+            }
+            div { class: "select-wrapper",
+                if show_picker() {
+                    div {
+                        class: "select-backdrop",
+                        onclick: move |_| show_picker.set(false),
+                    }
+                }
+                button {
+                    class: "mass-cog-btn",
+                    onclick: move |_| show_picker.set(!show_picker()),
+                    Icon {
+                        width: 14,
+                        height: 14,
+                        fill: "var(--gv-neutral-500)",
+                        icon: IoCog,
+                    }
+                }
+                if show_picker() {
+                    div { class: "select-popover unit-picker-popover",
+                        for unit in all_units {
+                            div { class: "unit-picker-row",
+                                span { class: "unit-picker-label", "{format_mass_unit(&unit)}" }
+                                input {
+                                    r#type: "checkbox",
+                                    checked: configured_units.contains(&unit),
+                                    disabled: true,
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -197,12 +304,4 @@ fn format_mass_unit(unit: &MassUnit) -> &'static str {
         MassUnit::Kilogram => "kg",
         MassUnit::Pound => "lb",
     }
-}
-
-fn format_mass(measurements: &[MassMeasurement]) -> String {
-    measurements
-        .iter()
-        .map(|m| format!("{} {}", m.value, format_mass_unit(&m.unit)))
-        .collect::<Vec<_>>()
-        .join(" ")
 }

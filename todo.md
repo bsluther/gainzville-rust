@@ -2,7 +2,7 @@
 
 Features to add:
 - Sets
-- Attributes
+- Attribute variants: Length, Text.
 - Categories
 - Permissions
 
@@ -12,13 +12,30 @@ Properties to test:
 - Undo/redo roundtrip
 
 Actions to add:
-    CreateEntryFromTemplate
+- UpdateEntryAttribute
+- CreateEntryFromTemplate
     - Or should the client do the look-up, and just CreateEntry?
-    CreateActivityTemplate
+- CreateActivityTemplate
     - Or should each activity automatically have a template?
-    CreateAttribute
-    AddValueToEntry
-    UpdateValue
+
+- [ ] Add a Permissions placeholder: `Permissions:can_write(&mut *tx, entry, actor)`.
+    - For reads: assume only data the user is permittd to read is synced.
+
+- [ ] Introduce a Measure trait
+      - Move `defined_units` to trait.
+      - Consider using `uom` crate for conversions.
+      - API
+        - Remove a unit: redistribute quantity over remaining units.
+        - Add a unit: redistribute quantity over set of units.
+        - Get the normalized quantity (for indexing).
+      - Internallly, convert between quantity and a set of units.
+        - Distributed quantity -> units.
+        - Sum units -> quantity.
+
+
+- [ ] Deterministically order attributes in entry_view.
+
+- [ ] Change generation to not panic on empty parameter sets (entries, attributes, etc).
     
 - [ ] Consider using an Edge trait to have a generic interface to the Entry forest.
 

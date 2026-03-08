@@ -234,6 +234,27 @@ pub enum MassValue {
     },
 }
 
+impl MassValue {
+    pub fn defined_units(&self) -> Vec<MassUnit> {
+        match self {
+            MassValue::Exact(measurements) => measurements.iter().map(|m| m.unit.clone()).collect(),
+            MassValue::Range { min, max } => {
+                let min_units: Vec<_> = min.iter().map(|m| m.unit.clone()).collect();
+                let union: Vec<MassUnit> = min_units
+                    .iter()
+                    .chain(
+                        max.iter()
+                            .map(|m| &m.unit)
+                            .filter(|m| !min_units.contains(m)),
+                    )
+                    .cloned()
+                    .collect();
+                union
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MassMeasurement {
     pub unit: MassUnit,

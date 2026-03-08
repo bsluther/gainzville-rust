@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     error::{DomainError, Result},
     models::attribute::{
-        Attribute, AttributeConfig, AttributeRow, MassConfig, MassValue, NumericConfig,
+        Attribute, AttributeConfig, AttributeRow, MassConfig, MassUnit, MassValue, NumericConfig,
         NumericValue, SelectConfig, SelectValue, Value, ValueRow,
     },
 };
@@ -118,6 +118,18 @@ pub struct MassAttributePair {
     pub index_float: Option<f64>,
     pub plan: Option<MassValue>,
     pub actual: Option<MassValue>,
+}
+
+impl MassAttributePair {
+    pub fn defined_units(&self) -> Vec<MassUnit> {
+        let plan_units = self.plan.clone().map_or(vec![], |m| m.defined_units());
+        let actual_units = self.actual.clone().map_or(vec![], |m| m.defined_units());
+        plan_units
+            .iter()
+            .chain(actual_units.iter().filter(|u| !plan_units.contains(u)))
+            .cloned()
+            .collect()
+    }
 }
 
 /// Flat row struct for decoding a JOIN between attributes and attribute_values.
