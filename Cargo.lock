@@ -1683,6 +1683,7 @@ dependencies = [
  "dioxus-free-icons",
  "dioxus-primitives",
  "directories",
+ "dotenvy",
  "futures-util",
  "generation",
  "gv_core",

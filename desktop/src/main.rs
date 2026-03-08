@@ -39,6 +39,8 @@ const ATTRIBUTE_CSS: Asset = asset!("/assets/styling/attribute.css");
 const DX_COMPONENTS_CSS: Asset = asset!("/assets/dx-components-theme.css");
 
 fn main() {
+    let _ = dotenvy::dotenv();
+
     // On iOS we only have permission to access certain directories in the filesystem.
     // ProjectDirs is a utility for working with standard locations on a given plaform.
     // The iOS directory structure is similar to that for macOS, so this works to find a place

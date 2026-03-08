@@ -48,7 +48,13 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
     let handle_delete_recursive = move |_e| async move {
         let client = consume_context::<SqliteClient>();
         if let Err(e) = client
-            .run_action(DeleteEntryRecursive { actor_id: SYSTEM_ACTOR_ID, entry_id }.into())
+            .run_action(
+                DeleteEntryRecursive {
+                    actor_id: SYSTEM_ACTOR_ID,
+                    entry_id,
+                }
+                .into(),
+            )
             .await
         {
             debug!("Error running delete_entry_recursive action: {e}");
@@ -73,7 +79,6 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
     };
 
     let toggle_expanded = move |_| {
-        info!("toggle");
         expanded.toggle();
     };
 
@@ -100,7 +105,10 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
                         ChildEntries { entry_ids: child_ids() }
                     }
                     if !entry_join.is_sequence() {
-                        FooterScalar { is_complete, on_toggle: handle_toggle_complete }
+                        FooterScalar {
+                            is_complete,
+                            on_toggle: handle_toggle_complete,
+                        }
                     }
                 }
             }
