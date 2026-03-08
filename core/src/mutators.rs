@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     actions::{
         Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
-        DeleteEntryRecursive, MoveEntry,
+        DeleteEntryRecursive, MoveEntry, UpdateEntryCompletion,
     },
     delta::{Delta, ModelDelta},
     error::{DomainError, Result},
@@ -307,6 +307,55 @@ where
         timestamp: Utc::now(),
         action: Action::CreateAttribute(action),
         changes: vec![insert_attribute.into()],
+    })
+}
+
+pub async fn update_entry_completion<'t, DB, R>(
+    tx: &mut Transaction<'t, DB>,
+    action: UpdateEntryCompletion,
+) -> Result<Mutation>
+where
+    DB: Database,
+    R: Reader<DB>,
+{
+    let Some(entry) = R::find_entry_by_id(&mut **tx, action.entry_id).await? else {
+        return Err(DomainError::Consistency(
+            "entry does not exist".to_string(),
+        ));
+    };
+
+    // Only the owner may complete their own entries.
+    if action.actor_id != entry.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "actor '{}' is not the owner of entry '{}'",
+            action.actor_id, entry.id
+        )));
+    }
+
+    // Template entries represent activity definitions, not logged events.
+    if entry.is_template {
+        return Err(DomainError::Consistency(
+            "template entries cannot be marked complete".to_string(),
+        ));
+    }
+
+    // Sequence entries are containers; completion applies only to leaf entries.
+    if entry.is_sequence {
+        return Err(DomainError::Consistency(
+            "sequence entries cannot be marked complete".to_string(),
+        ));
+    }
+
+    let update_delta = entry
+        .update()
+        .is_complete(action.is_complete)
+        .to_delta();
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: Action::UpdateEntryCompletion(action),
+        changes: vec![update_delta.into()],
     })
 }
 

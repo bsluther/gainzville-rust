@@ -92,6 +92,10 @@ impl SqliteClient {
             Action::CreateValue(action) => {
                 mutators::create_value::<sqlx::Sqlite, SqliteReader>(&mut tx, action).await?
             }
+            Action::UpdateEntryCompletion(action) => {
+                mutators::update_entry_completion::<sqlx::Sqlite, SqliteReader>(&mut tx, action)
+                    .await?
+            }
         };
 
         // TODO: write this mutation into the local mutation log.

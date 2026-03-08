@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick};
 use gv_core::{
-    actions::{Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue, MoveEntry},
+    actions::{Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue, MoveEntry, UpdateEntryCompletion},
     models::{
         activity::Activity,
         attribute::{Attribute, Value},
@@ -20,11 +20,12 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
         (actor_ids, activities, entries, attributes): (&[Uuid], &[Activity], &[Entry], &[Attribute]),
     ) -> Self {
         // Actions that are always available: CreateUser, CreateActivity, CreateEntry, CreateAttribute
-        // Actions that require non-empty entries: MoveEntry
+        // Actions that require non-empty entries: MoveEntry, UpdateEntryCompletion
         // Actions that require non-empty entries and attributes: CreateValue
         let mut choices: Vec<u8> = vec![0, 1, 2, 3];
         if !entries.is_empty() {
             choices.push(4);
+            choices.push(6);
             if !attributes.is_empty() {
                 choices.push(5);
             }
@@ -37,6 +38,7 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
             3 => CreateAttribute::arbitrary_from(rng, context, actor_ids).into(),
             4 => MoveEntry::arbitrary_from(rng, context, entries).into(),
             5 => CreateValue::arbitrary_from(rng, context, (entries, attributes)).into(),
+            6 => UpdateEntryCompletion::arbitrary_from(rng, context, entries).into(),
             _ => unreachable!(),
         }
     }
@@ -105,6 +107,22 @@ impl ArbitraryFrom<&[Uuid]> for CreateAttribute {
         actor_ids: &[Uuid],
     ) -> Self {
         Attribute::arbitrary_from(rng, context, actor_ids).into()
+    }
+}
+
+/// Provided entries must be non-empty.
+impl ArbitraryFrom<&[Entry]> for UpdateEntryCompletion {
+    fn arbitrary_from<R: Rng, C: GenerationContext>(
+        rng: &mut R,
+        _context: &C,
+        entries: &[Entry],
+    ) -> Self {
+        let entry = pick(entries, rng).expect("entries must be non-empty");
+        UpdateEntryCompletion {
+            actor_id: entry.owner_id,
+            entry_id: entry.id,
+            is_complete: rng.random_bool(0.5),
+        }
     }
 }
 

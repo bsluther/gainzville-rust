@@ -19,6 +19,7 @@ pub enum Action {
     CreateEntry(CreateEntry),
     DeleteEntryRecursive(DeleteEntryRecursive),
     MoveEntry(MoveEntry),
+    UpdateEntryCompletion(UpdateEntryCompletion),
 }
 
 impl From<CreateUser> for Action {
@@ -137,4 +138,17 @@ impl From<Attribute> for CreateAttribute {
 pub struct CreateValue {
     pub actor_id: Uuid,
     pub value: Value,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateEntryCompletion {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub is_complete: bool,
+}
+
+impl From<UpdateEntryCompletion> for Action {
+    fn from(value: UpdateEntryCompletion) -> Self {
+        Action::UpdateEntryCompletion(value)
+    }
 }
