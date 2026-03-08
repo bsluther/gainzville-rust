@@ -6,12 +6,13 @@ use uuid::Uuid;
 use crate::{
     actions::{
         Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
-        DeleteEntryRecursive, MoveEntry, UpdateEntryCompletion,
+        DeleteEntryRecursive, MoveEntry, UpdateAttributeValue, UpdateEntryCompletion, ValueField,
     },
     delta::{Delta, ModelDelta},
     error::{DomainError, Result},
     models::{
         actor::{Actor, ActorKind},
+        attribute::Value,
         user::User,
     },
     reader::Reader,
@@ -403,5 +404,59 @@ where
         timestamp: Utc::now(),
         action: Action::CreateValue(action),
         changes: vec![insert_value.into()],
+    })
+}
+
+pub async fn update_attribute_value<'t, DB, R>(
+    tx: &mut Transaction<'t, DB>,
+    action: UpdateAttributeValue,
+) -> Result<Mutation>
+where
+    DB: Database,
+    R: Reader<DB>,
+{
+    let Some(entry) = R::find_entry_by_id(&mut **tx, action.entry_id).await? else {
+        return Err(DomainError::Consistency("entry does not exist".to_string()));
+    };
+
+    if action.actor_id != entry.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "actor '{}' is not the owner of entry '{}'",
+            action.actor_id, entry.id
+        )));
+    }
+
+    if R::find_attribute_by_id(&mut **tx, action.attribute_id)
+        .await?
+        .is_none()
+    {
+        return Err(DomainError::Consistency(
+            "attribute does not exist".to_string(),
+        ));
+    }
+
+    let Some(old) = R::find_value_by_key(&mut **tx, action.entry_id, action.attribute_id).await?
+    else {
+        return Err(DomainError::Consistency(
+            "value does not exist; use CreateValue before UpdateAttributeValue".to_string(),
+        ));
+    };
+
+    let new = match action.field {
+        ValueField::Plan => Value {
+            plan: Some(action.value.clone()),
+            ..old.clone()
+        },
+        ValueField::Actual => Value {
+            actual: Some(action.value.clone()),
+            ..old.clone()
+        },
+    };
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: Action::UpdateAttributeValue(action),
+        changes: vec![Delta::<Value>::Update { old, new }.into()],
     })
 }

@@ -68,7 +68,7 @@
     flex-direction: column;
     gap: var(--entry-spacing-vertical);
     padding-block: var(--spacing-md);
-    padding-inline-start: var(--spacing-md);
+    /* padding-inline-start: var(--spacing-md); */
 }
 
 .entry-body>.attribute-list,
@@ -80,7 +80,7 @@
 .entry-checkbox {
     width: 1.25rem;
     height: 1.25rem;
-    border: 1px solid var(--gv-logged-blue);
+    border: 1.5px solid var(--gv-logged-blue);
     border-radius: 4px;
     display: flex;
     align-items: center;

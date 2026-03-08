@@ -35,6 +35,17 @@
     min-height: 28px;
 }
 
+input.attribute-pill {
+    background: transparent;
+    outline: none;
+    width: 60px;
+    text-align: center;
+}
+
+input.attribute-pill:focus {
+    border-color: var(--gv-neutral-400);
+}
+
 .temporal-attribute {
     padding: 4px 0;
 }

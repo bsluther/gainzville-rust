@@ -48,6 +48,10 @@ impl PostgresServer {
                 mutators::update_entry_completion::<sqlx::Postgres, PostgresReader>(&mut tx, action)
                     .await?
             }
+            Action::UpdateAttributeValue(action) => {
+                mutators::update_attribute_value::<sqlx::Postgres, PostgresReader>(&mut tx, action)
+                    .await?
+            }
         };
 
         // TODO: log mutation in this transaction.

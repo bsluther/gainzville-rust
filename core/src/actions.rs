@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::models::{
     activity::Activity,
-    attribute::{Attribute, Value},
+    attribute::{Attribute, AttributeValue, Value},
     entry::{Entry, Position, Temporal},
     user::User,
 };
@@ -20,6 +20,7 @@ pub enum Action {
     DeleteEntryRecursive(DeleteEntryRecursive),
     MoveEntry(MoveEntry),
     UpdateEntryCompletion(UpdateEntryCompletion),
+    UpdateAttributeValue(UpdateAttributeValue),
 }
 
 impl From<CreateUser> for Action {
@@ -150,5 +151,26 @@ pub struct UpdateEntryCompletion {
 impl From<UpdateEntryCompletion> for Action {
     fn from(value: UpdateEntryCompletion) -> Self {
         Action::UpdateEntryCompletion(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ValueField {
+    Plan,
+    Actual,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateAttributeValue {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub attribute_id: Uuid,
+    pub field: ValueField,
+    pub value: AttributeValue,
+}
+
+impl From<UpdateAttributeValue> for Action {
+    fn from(value: UpdateAttributeValue) -> Self {
+        Action::UpdateAttributeValue(value)
     }
 }
