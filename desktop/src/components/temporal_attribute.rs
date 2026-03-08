@@ -4,6 +4,63 @@ use dioxus_free_icons::icons::io_icons::IoChevronDown;
 use dioxus_free_icons::Icon;
 use gv_core::models::entry::Temporal;
 
+use crate::components::AttributeRow;
+
+#[component]
+pub fn TemporalAttribute(temporal: Temporal) -> Element {
+    let mut expanded = use_signal(|| false);
+
+    let start = temporal.start();
+    let end = temporal.end();
+    let duration = temporal.duration();
+    let summary = temporal_summary(&temporal);
+
+    rsx! {
+        div { class: "temporal-attribute attribute-list",
+            div { class: "temporal-header", onclick: move |_| expanded.toggle(),
+                div { class: "flex flex-row items-center gap-1",
+                    span { class: "attribute-label", "Time" }
+                    Icon {
+                        width: 14,
+                        height: 14,
+                        fill: "var(--gv-neutral-500)",
+                        class: if expanded() { "rotate-180" } else { "" },
+                        icon: IoChevronDown,
+                    }
+                }
+                span { class: "temporal-summary", "{summary}" }
+            }
+            if expanded() {
+                div { class: "temporal-expanded attribute-list",
+                    AttributeRow { label: "Start".to_string(),
+                        if let Some(start) = start {
+                            span { class: "attribute-pill", "{format_date(&start)}" }
+                            span { class: "attribute-pill", "{format_time(&start)}" }
+                        } else {
+                            span { class: "attribute-pill attribute-pill--empty" }
+                        }
+                    }
+                    AttributeRow { label: "End".to_string(),
+                        if let Some(end) = end {
+                            span { class: "attribute-pill", "{format_date(&end)}" }
+                            span { class: "attribute-pill", "{format_time(&end)}" }
+                        } else {
+                            span { class: "attribute-pill attribute-pill--empty" }
+                        }
+                    }
+                    AttributeRow { label: "Duration".to_string(),
+                        if let Some(duration_ms) = duration {
+                            span { class: "attribute-pill", "{format_duration(duration_ms)}" }
+                        } else {
+                            span { class: "attribute-pill attribute-pill--empty" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn format_time(dt: &DateTime<Utc>) -> String {
     let local = dt.with_timezone(&Local);
     local.format("%-I:%M %p").to_string()
@@ -74,71 +131,6 @@ fn temporal_summary(temporal: &Temporal) -> String {
         Temporal::DurationAndEnd { duration_ms, end } => {
             let start = *end - chrono::Duration::milliseconds(*duration_ms as i64);
             format_temporal_range(&start, end, *duration_ms as i64)
-        }
-    }
-}
-
-#[component]
-pub fn TemporalAttribute(temporal: Temporal) -> Element {
-    let mut expanded = use_signal(|| false);
-
-    let start = temporal.start();
-    let end = temporal.end();
-    let duration = temporal.duration();
-    let summary = temporal_summary(&temporal);
-
-    rsx! {
-        div { class: "temporal-attribute",
-            div { class: "temporal-header", onclick: move |_| expanded.toggle(),
-                div { class: "flex flex-row items-center gap-1",
-                    span { class: "attribute-label", "Time" }
-                    Icon {
-                        width: 14,
-                        height: 14,
-                        fill: "var(--gv-neutral-500)",
-                        class: if expanded() { "rotate-180" } else { "" },
-                        icon: IoChevronDown,
-                    }
-                }
-                span { class: "temporal-summary", "{summary}" }
-            }
-            if expanded() {
-                div { class: "temporal-expanded",
-                    TemporalRow { label: "Start",
-                        if let Some(start) = start {
-                            span { class: "temporal-pill", "{format_date(&start)}" }
-                            span { class: "temporal-pill", "{format_time(&start)}" }
-                        } else {
-                            span { class: "temporal-pill temporal-pill--empty" }
-                        }
-                    }
-                    TemporalRow { label: "End",
-                        if let Some(end) = end {
-                            span { class: "temporal-pill", "{format_date(&end)}" }
-                            span { class: "temporal-pill", "{format_time(&end)}" }
-                        } else {
-                            span { class: "temporal-pill temporal-pill--empty" }
-                        }
-                    }
-                    TemporalRow { label: "Duration",
-                        if let Some(duration_ms) = duration {
-                            span { class: "temporal-pill", "{format_duration(duration_ms)}" }
-                        } else {
-                            span { class: "temporal-pill temporal-pill--empty" }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[component]
-fn TemporalRow(label: &'static str, children: Element) -> Element {
-    rsx! {
-        div { class: "temporal-row",
-            span { class: "attribute-label", "{label}" }
-            div { class: "flex flex-row gap-1", {children} }
         }
     }
 }

@@ -1,7 +1,7 @@
 :root {
     --entry-text-color: var(--gv-neutral-400);
 
-    --entry-scalar-border-color: var(--gv-neutral-900);
+    --entry-scalar-border-color: var(--gv-neutral-850);
     --entry-scalar-bg-color: var(--gv-neutral-950);
 
     --entry-sequence-border-color: var(--gv-neutral-800);
@@ -9,12 +9,14 @@
 
     --entry-max-width: 24rem;
     --entry-corner-radius: 8px;
+    --entry-spacing-vertical: var(--spacing-md);
+    --entry-spacing-horizontal: var(--spacing-sm);
 }
 
 .entry-list {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-md);
+    gap: var(--spacing-lg);
     width: 24rem;
     background-color: var(--bg-log);
 }
@@ -57,26 +59,28 @@
     }
 }
 
-
-/* Nested entry lists inside entries */
-.entry .entry-list {
-    padding-inline: 0;
-    padding-block: var(--spacing-sm);
-    width: auto;
+.entry-header {
+    min-height: 30px;
 }
 
-/* Nested entries */
-.entry .entry-list .entry {
-    max-width: none;
-    border-radius: 4px 0 0 4px;
-    border-right: 0px;
+.entry-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--entry-spacing-vertical);
+    padding-block: var(--spacing-md);
+    padding-inline-start: var(--spacing-md);
+}
+
+.entry-body>.attribute-list,
+.entry-body>.entry-footer {
+    padding-inline-end: var(--spacing-md);
 }
 
 
 .entry-checkbox {
     width: 1.25rem;
     height: 1.25rem;
-    border: 1px solid var(--gv-neutral-600);
+    border: 1px solid var(--gv-logged-blue);
     border-radius: 4px;
     display: flex;
     align-items: center;

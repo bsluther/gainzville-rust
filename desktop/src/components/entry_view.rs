@@ -3,14 +3,16 @@ use dioxus_free_icons::icons::io_icons::IoEllipsisVertical;
 use dioxus_free_icons::Icon;
 use dioxus_primitives::context_menu::{ContextMenuContent, ContextMenuItem, ContextMenuTrigger};
 use gv_core::{
-    actions::DeleteEntryRecursive, forest::Forest, models::attribute_pair::AttributePair,
+    actions::DeleteEntryRecursive,
+    forest::Forest,
+    models::{attribute_pair::AttributePair, entry::Temporal},
     SYSTEM_ACTOR_ID,
 };
 use gv_sqlite::client::SqliteClient;
 use uuid::Uuid;
 
 use crate::{
-    components::{context_menu::ContextMenu, TemporalAttribute},
+    components::{context_menu::ContextMenu, AttributeView, TemporalAttribute},
     hooks::use_stream::use_stream,
 };
 
@@ -68,9 +70,11 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
                 is_sequence: entry_join.is_sequence(),
             }
             if expanded() {
-                div { class: "flex flex-col p-1",
-                    TemporalAttribute { temporal: entry_join.entry.temporal.clone() }
-                    Attributes { attr_pairs: entry_join.attributes().cloned().collect::<Vec<_>>() }
+                div { class: "entry-body",
+                    Attributes {
+                        attr_pairs: entry_join.attributes().cloned().collect::<Vec<_>>(),
+                        temporal: entry_join.clone().entry.temporal,
+                    }
                     if !child_ids().is_empty() {
                         ChildEntries { entry_ids: child_ids() }
                     }
@@ -107,7 +111,7 @@ fn Header(
     let mut checked = use_signal(|| false);
     rsx! {
         // Outer row containinbg two clickable elements.
-        div { class: "header flex flex-row justify-between items-center",
+        div { class: "entry-header flex flex-row justify-between items-center",
             // Title/summary; clicking here expands/contracts the entry.
             div {
                 class: "flex flex-row grow items-center pr-4 gap-4 select-none",
@@ -138,18 +142,19 @@ fn Header(
 #[component]
 fn FooterScalar() -> Element {
     rsx! {
-        div { class: "flex flex-row grow justify-end",
+        div { class: "entry-footer flex flex-row grow justify-end",
             FillCheckbox { checked: true, on_toggle: move |_| {} }
         }
     }
 }
 
 #[component]
-fn Attributes(attr_pairs: Vec<AttributePair>) -> Element {
+fn Attributes(attr_pairs: Vec<AttributePair>, temporal: Temporal) -> Element {
     rsx! {
-        div { class: "flex flex-col",
-            for a in attr_pairs {
-                div { class: "attribute-label", "{a.name()}" }
+        div { class: "attribute-list",
+            TemporalAttribute { temporal: temporal.clone() }
+            for pair in attr_pairs {
+                AttributeView { pair }
             }
         }
     }
@@ -186,7 +191,7 @@ fn EntryContextMenu(id: ReadSignal<Uuid>, children: Element) -> Element {
                 Icon {
                     width: 20,
                     height: 20,
-                    fill: "white",
+                    fill: "var(--gv-neutral-500)",
                     class: "red-200",
                     icon: IoEllipsisVertical,
                 }

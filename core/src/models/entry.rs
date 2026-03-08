@@ -255,9 +255,7 @@ impl Temporal {
             Temporal::Duration { duration } => Some(*duration as i64),
             Temporal::StartAndDuration { duration_ms, .. }
             | Temporal::DurationAndEnd { duration_ms, .. } => Some(*duration_ms as i64),
-            Temporal::StartAndEnd { start, end } => {
-                Some((*end - *start).num_milliseconds())
-            }
+            Temporal::StartAndEnd { start, end } => Some((*end - *start).num_milliseconds()),
             _ => None,
         }
     }
