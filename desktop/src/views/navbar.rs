@@ -4,6 +4,14 @@ use crate::{
 };
 use dioxus::document::eval;
 use dioxus::prelude::*;
+use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
+use gv_core::{
+    actions::{CreateEntry, CreateValue},
+    models::entry::Entry,
+    SYSTEM_ACTOR_ID,
+};
+use gv_core::reader::Reader;
+use gv_sqlite::{client::SqliteClient, reader::SqliteReader};
 
 fn all_commands() -> Vec<Command> {
     vec![
@@ -15,6 +23,21 @@ fn all_commands() -> Vec<Command> {
         Command {
             id: "sandbox",
             label: "Go to Sandbox",
+            shortcut: None,
+        },
+        Command {
+            id: "dev_arbitrary_from_entry",
+            label: "Dev: Create ArbitraryFrom Entry",
+            shortcut: None,
+        },
+        Command {
+            id: "dev_arbitrary_from_value",
+            label: "Dev: Create ArbitraryFrom Value",
+            shortcut: None,
+        },
+        Command {
+            id: "dev_arbitrary_entry",
+            label: "Dev: Create Arbitrary Entry",
             shortcut: None,
         },
     ]
@@ -80,6 +103,53 @@ pub fn Navbar() -> Element {
         }
         "sandbox" => {
             nav.push(Route::ActivitySandbox {});
+        }
+        "dev_arbitrary_from_entry" => {
+            spawn(async move {
+                let client = consume_context::<SqliteClient>();
+                let mut conn = client.pool.acquire().await.unwrap();
+                let activities = SqliteReader::all_activities(&mut conn).await.unwrap();
+                let entries = SqliteReader::all_entries(&mut conn).await.unwrap();
+                drop(conn);
+                let mut rng = rand::rng();
+                let context = SimulationContext {};
+                let actor_ids = vec![SYSTEM_ACTOR_ID];
+                let entry = Entry::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &entries));
+                let create_entry: CreateEntry = entry.into();
+                if let Err(e) = client.run_action(create_entry.into()).await {
+                    tracing::error!("Create Entry failed: {:?}", e);
+                }
+            });
+        }
+        "dev_arbitrary_from_value" => {
+            spawn(async move {
+                let client = consume_context::<SqliteClient>();
+                let mut conn = client.pool.acquire().await.unwrap();
+                let entries = SqliteReader::all_entries(&mut conn).await.unwrap();
+                let attrs = SqliteReader::all_attributes(&mut conn).await.unwrap();
+                drop(conn);
+                let mut rng = rand::rng();
+                let context = SimulationContext {};
+                let create_value = CreateValue::arbitrary_from(&mut rng, &context, (&entries, &attrs));
+                if let Err(e) = client.run_action(create_value.into()).await {
+                    tracing::error!("Create Value failed: {:?}", e);
+                }
+            });
+        }
+        "dev_arbitrary_entry" => {
+            spawn(async move {
+                let client = consume_context::<SqliteClient>();
+                let mut rng = rand::rng();
+                let context = SimulationContext {};
+                let mut entry = Entry::arbitrary(&mut rng, &context);
+                entry.activity_id = None;
+                entry.position = None;
+                entry.owner_id = SYSTEM_ACTOR_ID;
+                let create_entry: CreateEntry = entry.into();
+                if let Err(e) = client.run_action(create_entry.into()).await {
+                    tracing::error!("Create Entry failed: {:?}", e);
+                }
+            });
         }
         _ => {}
     };
