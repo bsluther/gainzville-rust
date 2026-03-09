@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use gv_core::{actions::CreateAttribute, std_lib};
 use gv_sqlite::client::SqliteClient;
 use tracing::Level;
-use views::{ActivitySandbox, Blog, Home, Log, Navbar};
+use views::{ActivitySandbox, Log, Navbar};
 
 mod components;
 mod hooks;
@@ -16,17 +16,9 @@ mod views;
 enum Route {
     #[layout(Navbar)]
         #[route("/")]
-        Home {},
-        // The route attribute can include dynamic parameters that implement [`std::str::FromStr`] and [`std::fmt::Display`] with the `:` syntax.
-        // In this case, id will match any integer like `/blog/123` or `/blog/-456`.
-        #[route("/blog/:id")]
-        Blog { id: i32 },
-
+        Log {},
         #[route("/sandbox/entry")]
         ActivitySandbox {},
-
-        #[route("/log")]
-        Log {}
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");

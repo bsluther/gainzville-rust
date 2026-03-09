@@ -13,12 +13,20 @@ pub trait GenerationContext {}
 pub struct SimulationContext {
     // rng: rand_chacha::ChaCha8Rng
 
-    // Maybe:
+    // Ideas:
+    //
     // p_semantic : probability of choose semanitcally meaningful data, such as choosing activity
     // names from an exercise list rather than generating string. May severly limit the randomness
     // of generation.
+    // Another example: a higher p_semantic would limit entry duration to reasonable ranges, so I
+    // don't get a bunch of 24-day-long entries.
+    //
     // p_valid : probability of generating valid data, where apprpopriate. For example, if a row
     // struct is created, with p_valid=1 it should always parse successfully into a model value.
+    //
+    // date_mean : a date to center events around. Allows me to cluster events around some date so
+    // they're more useful for testing and developing.
+    // date_variance : the variance of events around the date_mean.
 }
 impl GenerationContext for SimulationContext {}
 

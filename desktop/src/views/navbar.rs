@@ -57,9 +57,6 @@ pub fn Navbar() -> Element {
     };
 
     let handle_select = move |id: String| match id.as_str() {
-        "home" => {
-            nav.push(Route::Home {});
-        }
         "log" => {
             nav.push(Route::Log {});
         }
@@ -95,8 +92,6 @@ pub fn Navbar() -> Element {
             }
 
             div { id: "navbar",
-                Link { to: Route::Home {}, "Home" }
-                Link { to: Route::Blog { id: 1 }, "Blog" }
                 Link { to: Route::Log {}, "Log" }
                 Link { to: Route::ActivitySandbox {}, "Activity Sandbox" }
             }

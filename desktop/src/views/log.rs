@@ -1,3 +1,4 @@
+use chrono;
 use dioxus::prelude::*;
 use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
 use gv_core::{
@@ -9,7 +10,10 @@ use gv_core::{
 };
 use gv_sqlite::{client::SqliteClient, reader::SqliteReader};
 
-use crate::{components::EntryView, hooks::use_stream::use_stream};
+use crate::{
+    components::{EntryView, LogDatePicker},
+    hooks::use_stream::use_stream,
+};
 
 #[component]
 pub fn Log() -> Element {
@@ -20,8 +24,14 @@ pub fn Log() -> Element {
     let forest = use_memo(move || Forest::from(entries_opt.read().cloned().unwrap_or_default()));
     use_context_provider(|| forest);
 
+    let mut log_date = use_signal(|| chrono::Local::now().date_naive());
+
     rsx! {
         div { class: "flex flex-col w-full items-center gap-4",
+            LogDatePicker {
+                selected_date: log_date(),
+                on_date_change: move |d| log_date.set(d),
+            }
 
             div { class: "flex flex-1 flex-row justify-center h-full",
                 ul { class: "entry-list",
@@ -65,7 +75,7 @@ pub fn Log() -> Element {
 
                         let mut conn = client.pool.acquire().await.unwrap();
                         let attrs = SqliteReader::all_attributes(&mut conn).await.unwrap();
-                        debug!("{:?}", attrs);
+
                         let create_value = CreateValue::arbitrary_from(
                             &mut rng,
                             &context,

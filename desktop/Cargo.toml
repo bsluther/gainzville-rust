@@ -12,6 +12,7 @@ gv_core = { path = "../core" }
 generation = { path = "../generation" }
 
 dioxus = { version = "0.7.1", features = ["router"] }
+time = { version = "0.3", features = ["std"] }
 directories = "6.0.0"
 uuid = { workspace = true }
 rand = { workspace = true }
