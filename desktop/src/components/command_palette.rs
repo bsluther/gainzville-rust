@@ -11,52 +11,26 @@ pub struct Command {
     pub shortcut: Option<&'static str>,
 }
 
-fn all_commands() -> Vec<Command> {
-    vec![
-        Command {
-            id: "home",
-            label: "Go to Home",
-            shortcut: Some("g h"),
-        },
-        Command {
-            id: "log",
-            label: "Go to Log",
-            shortcut: Some("g l"),
-        },
-        Command {
-            id: "sandbox",
-            label: "Go to Sandbox",
-            shortcut: None,
-        },
-    ]
-}
-
 #[component]
-pub fn CommandPalette(on_close: EventHandler<()>, on_select: EventHandler<String>) -> Element {
+pub fn CommandPalette(
+    commands: Vec<Command>,
+    on_close: EventHandler<()>,
+    on_select: EventHandler<String>,
+) -> Element {
     let mut query = use_signal(String::new);
     let mut selected_index = use_signal(|| 0usize);
 
-    let commands = all_commands();
-    let filtered: Vec<_> = commands
-        .iter()
-        .filter(|cmd| {
-            query().is_empty() || cmd.label.to_lowercase().contains(&query().to_lowercase())
-        })
-        .collect();
-
-    // Reset selection when query changes
-    use_effect(move || {
-        selected_index.set(0);
+    let filtered = use_memo(move || {
+        let q = query();
+        commands
+            .iter()
+            .filter(|cmd| q.is_empty() || cmd.label.to_lowercase().contains(&q.to_lowercase()))
+            .cloned()
+            .collect::<Vec<_>>()
     });
 
     let handle_keydown = move |evt: KeyboardEvent| {
-        let filtered_len = {
-            let q = query();
-            all_commands()
-                .iter()
-                .filter(|cmd| q.is_empty() || cmd.label.to_lowercase().contains(&q.to_lowercase()))
-                .count()
-        };
+        let filtered_len = filtered().len();
 
         match evt.key() {
             Key::Tab => {
@@ -78,14 +52,7 @@ pub fn CommandPalette(on_close: EventHandler<()>, on_select: EventHandler<String
             }
             Key::Enter => {
                 evt.prevent_default();
-                let q = query();
-                let filtered: Vec<_> = all_commands()
-                    .into_iter()
-                    .filter(|cmd| {
-                        q.is_empty() || cmd.label.to_lowercase().contains(&q.to_lowercase())
-                    })
-                    .collect();
-                if let Some(cmd) = filtered.get(selected_index()) {
+                if let Some(cmd) = filtered().get(selected_index()) {
                     on_select.call(cmd.id.to_string());
                     on_close.call(());
                 }
@@ -107,15 +74,17 @@ pub fn CommandPalette(on_close: EventHandler<()>, on_select: EventHandler<String
                     class: "palette-input",
                     placeholder: "Type a command...",
                     value: "{query}",
-                    oninput: move |e| query.set(e.value()),
-                    onkeydown: handle_keydown,
+                    oninput: move |e| {
+                        query.set(e.value());
+                        selected_index.set(0);
+                    },
                     onmounted: move |evt| async move {
                         debug!("cmd palette input onmounted called");
                         _ = evt.set_focus(true).await;
                     },
                 }
                 div { class: "palette-results",
-                    for (i , cmd) in filtered.iter().enumerate() {
+                    for (i , cmd) in filtered().iter().enumerate() {
                         div {
                             class: if i == selected_index() { "palette-item selected" } else { "palette-item" },
                             onclick: {
@@ -131,7 +100,7 @@ pub fn CommandPalette(on_close: EventHandler<()>, on_select: EventHandler<String
                             }
                         }
                     }
-                    if filtered.is_empty() {
+                    if filtered().is_empty() {
                         div { class: "palette-empty", "No commands found" }
                     }
                 }

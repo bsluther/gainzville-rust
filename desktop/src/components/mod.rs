@@ -3,7 +3,7 @@
 //! component  to be used in our app.
 
 mod command_palette;
-pub use command_palette::CommandPalette;
+pub use command_palette::{Command, CommandPalette};
 
 mod entry_view;
 pub use entry_view::EntryView;

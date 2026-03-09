@@ -1,6 +1,24 @@
-use crate::{components::CommandPalette, Route};
+use crate::{
+    components::{Command, CommandPalette},
+    Route,
+};
 use dioxus::document::eval;
 use dioxus::prelude::*;
+
+fn all_commands() -> Vec<Command> {
+    vec![
+        Command {
+            id: "log",
+            label: "Go to Log",
+            shortcut: Some("g l"),
+        },
+        Command {
+            id: "sandbox",
+            label: "Go to Sandbox",
+            shortcut: None,
+        },
+    ]
+}
 
 const NAVBAR_CSS: Asset = asset!("/assets/styling/navbar.css");
 
@@ -82,6 +100,7 @@ pub fn Navbar() -> Element {
             },
             if palette_open() {
                 CommandPalette {
+                    commands: all_commands(),
                     on_close: move |_| {
                         tracing::debug!("Command palette: on_close called");
                         palette_open.set(false);
