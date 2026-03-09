@@ -1,7 +1,6 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::io_icons::IoEllipsisVertical;
 use dioxus_free_icons::Icon;
-use dioxus_primitives::context_menu::{ContextMenuContent, ContextMenuItem, ContextMenuTrigger};
 use gv_core::{
     actions::{DeleteEntryRecursive, UpdateEntryCompletion},
     forest::Forest,
@@ -12,7 +11,10 @@ use gv_sqlite::client::SqliteClient;
 use uuid::Uuid;
 
 use crate::{
-    components::{context_menu::ContextMenu, AttributeView, TemporalAttribute},
+    components::{
+        dropdown_menu::{DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger},
+        AttributeView, TemporalAttribute,
+    },
     hooks::use_stream::use_stream,
 };
 
@@ -153,7 +155,7 @@ fn Header(
             }
             // Checkbox controlling `Entry.is_complete` or menu trigger.
             if expanded || is_sequence {
-                div { class: "pr-1",
+                div { class: "flex items-center pr-1",
                     EntryContextMenu { id: entry_id }
                 }
             } else {
@@ -215,8 +217,8 @@ fn FillCheckbox(checked: bool, on_toggle: EventHandler<MouseEvent>) -> Element {
 #[component]
 fn EntryContextMenu(id: ReadSignal<Uuid>, children: Element) -> Element {
     rsx! {
-        ContextMenu {
-            ContextMenuTrigger {
+        DropdownMenu {
+            DropdownMenuTrigger {
                 Icon {
                     width: 20,
                     height: 20,
@@ -225,21 +227,28 @@ fn EntryContextMenu(id: ReadSignal<Uuid>, children: Element) -> Element {
                     icon: IoEllipsisVertical,
                 }
             }
-            ContextMenuContent { class: "context-menu-content",
-                ContextMenuItem {
-                    class: "context-menu-item",
+            DropdownMenuContent {
+                DropdownMenuItem::<String> {
                     value: "delete".to_string(),
                     index: 0usize,
                     disabled: false,
-                    on_select: move |_e| async move {
-                        let delete_recursive_action = DeleteEntryRecursive {
-                            actor_id: SYSTEM_ACTOR_ID,
-                            entry_id: *id.read(),
-                        };
-                        let client = consume_context::<SqliteClient>();
-                        if let Err(e) = client.run_action(delete_recursive_action.into()).await {
-                            debug!("Error running delete_entry_recursive action: {e}");
-                        }
+                    on_select: move |_value: String| {
+                        let entry_id = *id.read();
+                        spawn(async move {
+                            let client = consume_context::<SqliteClient>();
+                            if let Err(e) = client
+                                .run_action(
+                                    DeleteEntryRecursive {
+                                        actor_id: SYSTEM_ACTOR_ID,
+                                        entry_id,
+                                    }
+                                    .into(),
+                                )
+                                .await
+                            {
+                                debug!("Error running delete_entry_recursive action: {e}");
+                            }
+                        });
                     },
                     "Delete"
                 }
