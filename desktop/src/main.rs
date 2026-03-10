@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use gv_core::{actions::CreateAttribute, std_lib};
 use gv_sqlite::client::SqliteClient;
 use tracing::Level;
-use views::{ActivitySandbox, Log, Navbar};
+use views::{ActivitySandbox, Log, Navbar, Viz};
 
 mod components;
 mod hooks;
@@ -19,6 +19,8 @@ enum Route {
         Log {},
         #[route("/sandbox/entry")]
         ActivitySandbox {},
+        #[route("/viz")]
+        Viz {},
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");

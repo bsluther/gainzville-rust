@@ -183,6 +183,7 @@ pub fn Navbar() -> Element {
             div { id: "navbar",
                 Link { to: Route::Log {}, "Log" }
                 Link { to: Route::ActivitySandbox {}, "Activity Sandbox" }
+                Link { to: Route::Viz {}, "Viz" }
             }
 
             // The `Outlet` component is used to render the next component inside the layout.

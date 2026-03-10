@@ -6,3 +6,6 @@ pub use activity_sandbox::ActivitySandbox;
 
 mod log;
 pub use log::Log;
+
+mod viz;
+pub use viz::Viz;

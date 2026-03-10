@@ -21,3 +21,6 @@ pub mod calendar;
 pub mod context_menu;
 pub mod popover;
 pub mod dropdown_menu;
+
+mod frequency_heatmap;
+pub use frequency_heatmap::{FrequencyGrid, FrequencyHeatmap, Quantizer};
