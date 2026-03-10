@@ -160,7 +160,7 @@ pub fn Navbar() -> Element {
         // App container to catch keyboard input at any time.
         div {
             id: "app-container",
-            class: "p-4 h-screen w-screen",
+            class: "p-4 h-screen w-screen flex flex-col",
             tabindex: 0,
             onkeydown: handle_global_keydown,
             onmounted: move |evt| {
@@ -184,6 +184,7 @@ pub fn Navbar() -> Element {
                 Link { to: Route::Log {}, "Log" }
                 Link { to: Route::ActivitySandbox {}, "Activity Sandbox" }
                 Link { to: Route::Viz {}, "Viz" }
+                Link { to: Route::LibraryActivitiesIndex {}, "Library" }
             }
 
             // The `Outlet` component is used to render the next component inside the layout.

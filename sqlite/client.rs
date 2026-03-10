@@ -2,7 +2,7 @@ use futures_core::Stream;
 use gv_core::{
     actions::Action,
     error::Result,
-    models::{activity::Activity, entry::Entry, entry_join::EntryJoin},
+    models::{activity::Activity, attribute::Attribute, entry::Entry, entry_join::EntryJoin},
     mutators,
     reader::Reader,
 };
@@ -147,6 +147,29 @@ impl SqliteClient {
                 let next = async {
                     let mut connection = pool.acquire().await?;
                     SqliteReader::all_activities(&mut *connection).await
+                }
+                .await;
+                yield next;
+            }
+        }
+    }
+
+    pub fn stream_attributes(&self) -> impl Stream<Item = Result<Vec<Attribute>>> + use<> {
+        let pool = self.pool.clone();
+        let mut change_rx = self.change_transmitter.subscribe();
+
+        async_stream::stream! {
+            let initial = async {
+                let mut connection = pool.acquire().await?;
+                SqliteReader::all_attributes(&mut *connection).await
+            }
+            .await;
+            yield initial;
+
+            while let Ok(()) = change_rx.recv().await {
+                let next = async {
+                    let mut connection = pool.acquire().await?;
+                    SqliteReader::all_attributes(&mut *connection).await
                 }
                 .await;
                 yield next;

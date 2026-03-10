@@ -1,0 +1,136 @@
+/* ── Local tokens ───────────────────────── */
+:root {
+    --library-browser-width: 20rem;
+    --library-tab-active-color: var(--gv-neutral-50);
+    --library-tab-inactive-color: var(--gv-neutral-500);
+    --library-item-hover-bg: var(--gv-neutral-900);
+    --library-item-selected-bg: var(--gv-neutral-850);
+    --library-divider-color: var(--gv-neutral-800);
+    --library-profile-bg: var(--gv-neutral-950);
+}
+
+/* ── Layout ─────────────────────────────── */
+.library-layout {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
+@media (width >=48rem) {
+    .library-layout {
+        flex-direction: row;
+    }
+}
+
+/* ── Browser column ─────────────────────── */
+.library-browser {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+@media (width >=48rem) {
+    .library-browser {
+        flex: 0 0 var(--library-browser-width);
+        border-right: 1px solid var(--library-divider-color);
+    }
+}
+
+/* ── Tab bar ────────────────────────────── */
+.library-tab-bar {
+    display: flex;
+    flex-direction: row;
+    border-bottom: 1px solid var(--library-divider-color);
+    padding: 0 var(--spacing-lg);
+    flex-shrink: 0;
+}
+
+.library-tab-bar a {
+    padding: var(--spacing-lg);
+    color: var(--library-tab-inactive-color);
+    text-decoration: none;
+    font-size: 0.9rem;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.library-tab-bar a[aria-current="page"],
+.library-tab-bar a.library-tab-active {
+    color: var(--library-tab-active-color);
+    border-bottom-color: var(--library-tab-active-color);
+}
+
+/* ── List ───────────────────────────────── */
+.library-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-md) 0;
+}
+
+.library-item {
+    padding: var(--spacing-lg);
+    cursor: pointer;
+    color: var(--gv-neutral-300);
+    font-size: 0.95rem;
+}
+
+.library-item:hover {
+    background: var(--library-item-hover-bg);
+}
+
+.library-item[data-selected="true"] {
+    background: var(--library-item-selected-bg);
+}
+
+/* ── Controls ───────────────────────────── */
+.library-controls {
+    display: flex;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-top: 1px solid var(--library-divider-color);
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.library-controls .input {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.library-controls .button {
+    flex-shrink: 0;
+}
+
+/* ── Profile column (desktop) ───────────── */
+.library-profile {
+    display: none;
+    flex: 1;
+    background: var(--library-profile-bg);
+    padding: var(--spacing-lg);
+    overflow-y: auto;
+}
+
+@media (width >=48rem) {
+    .library-profile {
+        display: flex;
+        flex-direction: column;
+    }
+}
+
+.library-profile-empty {
+    color: var(--gv-neutral-600);
+    font-size: 0.9rem;
+    text-align: center;
+    margin-top: 4rem;
+}
+
+/* ── Sheet override: hide on desktop ────── */
+@media (width >=48rem) {
+    .sheet-root {
+        display: none !important;
+    }
+}

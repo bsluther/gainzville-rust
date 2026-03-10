@@ -5,7 +5,11 @@ use dioxus::prelude::*;
 use gv_core::{actions::CreateAttribute, std_lib};
 use gv_sqlite::client::SqliteClient;
 use tracing::Level;
-use views::{ActivitySandbox, Log, Navbar, Viz};
+use uuid::Uuid;
+use views::{
+    ActivitySandbox, Library, LibraryActivities, LibraryActivitiesIndex, LibraryActivityDetail,
+    LibraryAttributeDetail, LibraryAttributes, LibraryAttributesIndex, Log, Navbar, Viz,
+};
 
 mod components;
 mod hooks;
@@ -21,9 +25,23 @@ enum Route {
         ActivitySandbox {},
         #[route("/viz")]
         Viz {},
+        #[route("/library")]
+        Library {},
+        #[layout(LibraryActivities)]
+            #[route("/library/activities")]
+            LibraryActivitiesIndex {},
+            #[route("/library/activities/:id")]
+            LibraryActivityDetail { id: Uuid },
+        #[end_layout]
+        #[layout(LibraryAttributes)]
+            #[route("/library/attributes")]
+            LibraryAttributesIndex {},
+            #[route("/library/attributes/:id")]
+            LibraryAttributeDetail { id: Uuid },
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
+const LIBRARY_CSS: Asset = asset!("/assets/styling/library.css");
 const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const TOKENS_CSS: Asset = asset!("/assets/styling/tokens.css");
@@ -94,6 +112,7 @@ fn App() -> Element {
         document::Link { rel: "stylesheet", href: LOG_CSS }
         document::Link { rel: "stylesheet", href: ENTRY_CSS }
         document::Link { rel: "stylesheet", href: ATTRIBUTE_CSS }
+        document::Link { rel: "stylesheet", href: LIBRARY_CSS }
 
         Router::<Route> {}
     }

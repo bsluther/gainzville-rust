@@ -9,3 +9,10 @@ pub use log::Log;
 
 mod viz;
 pub use viz::Viz;
+
+mod library;
+pub use library::{
+    Library,
+    LibraryActivities, LibraryActivitiesIndex, LibraryActivityDetail,
+    LibraryAttributes, LibraryAttributesIndex, LibraryAttributeDetail,
+};
