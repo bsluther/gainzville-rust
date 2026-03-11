@@ -1,11 +1,40 @@
 
-
+### Misc
 There will be 20+ database tables. Does each table have it's own change log? Or do you group all the
 changes together into a single log per client?
 - Electric does one log per table (shape).
 - I could join each individual table stream into a single client stream in DBSP, keyed on
 (seq_num, op_offset, table_name).
     - This sorta breaks electric compatability. Could stream join on the client, perhaps.
+
+### Ingesting data from third-parties
+Say we ingest data from a third-party source like a markdown file or Strava. We don't want to
+duplicate data if we ingest from the source more than once. Two simple approaches come to mind
+1. Hash the source data and store it. When we ingest in the future, compare hashes.
+2. Compare the parsed data (in GV terms, either actions or models) to existing data, if something
+is the same, assume it's a duplication.
+Neither of those handles updates to data out of the box. (2) could get you closer: you could say,
+if it's the same activity at the same time, it's probably the same item. If the time changed in the
+external source, there's not much hope, unless the provider has some way of uniquely identifying
+the data.
+
+What would be very useful to know in this process is not just who wrote data to GV, but in what way.
+Could store this on actions, something like
+```rust
+    enum ActionCause {
+        User,
+        UserAgent,
+        DataIngest,
+    }
+```
+Then again, you may in fact want more information than this. If we did ingest from the Strava API,
+and they do uniquely identify things, you'd probably want some higher-fidelity information.
+
+On the other hand, you could say "the source is the source of truth, whenever you read from it,
+wipe out my previous versions and load the new ones". This would of course clobber any updates made
+in Gainzville. Maybe then you just make ingested data read only, aside from the Activities it parses
+into. I could see preferring that experience: I know this data came from Strava, I can't change it,
+and I can continue to load new Strava data without fear of conflicts, duplications, etc.
 
 ### Rebasing
 To support offline writes:
@@ -37,12 +66,13 @@ sync logs.
 - Manually maintain global seq_num + delta_offset, store in all rows. Why store in rows? We know
 when that row was updated, like an updated_at column. Not sure but it could be useful.
 
-### Hybrid Logical Clocks for client sequence numbers
+#### Hybrid Logical Clocks for client sequence numbers
 Why hybrid logical clocks?
 If Alice edits Entry A while offline on her computer, then later that day edits Entry A on her
 phone, then the next day goes back online on her computer, we want the server to disregard the
 earlier write from her computer.
 Hybrid logical clocks provide a principled way of supporting this, and they're cheap and easy.
+- TODO: is this actually true?
 
 
 ### Electric Inspiration
