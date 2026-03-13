@@ -8,7 +8,7 @@
   z-index: 1000;
   display: flex;
   min-width: 200px;
-  max-width: calc(100% - 2rem);
+  max-width: calc(100vw - 2rem);
   box-sizing: border-box;
   flex-direction: column;
   /* padding: .25rem; */

@@ -14,6 +14,7 @@ body {
   font-weight: 400;
 }
 
+/* Always use dark mode. Media queries kept for reference.
 @media (prefers-color-scheme: dark) {
   :root {
     --dark: initial;
@@ -26,6 +27,11 @@ body {
     --dark: ;
     --light: initial;
   }
+}
+*/
+:root {
+  --dark: initial;
+  --light: ;
 }
 
 :root {
