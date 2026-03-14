@@ -8,27 +8,67 @@ pub mod activity;
 pub mod attribute;
 pub mod entry;
 
-pub trait GenerationContext {}
+pub trait GenerationContext {
+    fn opts(&self) -> &Opts;
+}
+
+/// Options for configuring how values are generated.
+#[derive(Debug, Clone)]
+#[allow(unused)]
+pub struct Opts {
+    /// Probability of generating semantically meaningful data. May significantly decrease the space
+    /// of possible values.
+    pub p_semantic: f64,
+    /// Probability of generating valid data.
+    pub p_valid: f64,
+    /// Expected value of generated time values.
+    pub time_mean: DateTime<Utc>,
+    /// Standard deviation of generated time values.
+    pub time_std: Duration,
+}
+
+impl Default for Opts {
+    fn default() -> Self {
+        Opts {
+            p_semantic: 0.8,
+            p_valid: 0.5,
+            time_mean: DateTime::parse_from_rfc3339("2026-01-01T05:00:00Z")
+                .unwrap()
+                .into(),
+            time_std: Duration::days(30),
+        }
+    }
+}
+
+impl Opts {
+    pub fn time_now_tight_std() -> Self {
+        Opts {
+            time_mean: Utc::now(),
+            time_std: Duration::hours(12),
+            ..Default::default()
+        }
+    }
+}
+
+/// Weights used to decide which actions are generated during simulation.
+// pub struct WorkloadProfile {}
 
 pub struct SimulationContext {
     // rng: rand_chacha::ChaCha8Rng
-
-    // Ideas:
-    //
-    // p_semantic : probability of choose semanitcally meaningful data, such as choosing activity
-    // names from an exercise list rather than generating string. May severly limit the randomness
-    // of generation.
-    // Another example: a higher p_semantic would limit entry duration to reasonable ranges, so I
-    // don't get a bunch of 24-day-long entries.
-    //
-    // p_valid : probability of generating valid data, where apprpopriate. For example, if a row
-    // struct is created, with p_valid=1 it should always parse successfully into a model value.
-    //
-    // date_mean : a date to center events around. Allows me to cluster events around some date so
-    // they're more useful for testing and developing.
-    // date_variance : the variance of events around the date_mean.
+    opts: Opts,
 }
-impl GenerationContext for SimulationContext {}
+impl Default for SimulationContext {
+    fn default() -> Self {
+        SimulationContext {
+            opts: Opts::default(),
+        }
+    }
+}
+impl GenerationContext for SimulationContext {
+    fn opts(&self) -> &Opts {
+        &self.opts
+    }
+}
 
 pub trait Arbitrary {
     fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self;
@@ -167,7 +207,7 @@ mod tests {
     #[test]
     /// Check DateTime<Utc> generation doesn't fail.
     fn test_arbitrary_datetime_shouldnt_panic() {
-        let context = SimulationContext {};
+        let context = SimulationContext::default();
         let mut rng = rand::rng();
         for _ in 0..10_000 {
             DateTime::<Utc>::arbitrary(&mut rng, &context);
@@ -176,7 +216,7 @@ mod tests {
 
     #[test]
     fn test_arbitrary_email_shouldnt_panic() {
-        let context = SimulationContext {};
+        let context = SimulationContext::default();
         let mut rng = rand::rng();
         for _ in 0..10_000 {
             Email::arbitrary(&mut rng, &context);

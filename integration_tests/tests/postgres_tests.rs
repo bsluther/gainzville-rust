@@ -24,7 +24,7 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
         .expect("begin transaction should not fail");
 
     let mut rng = rand::rng();
-    let context = SimulationContext {};
+    let context = SimulationContext::default();
 
     let actor_ids = PostgresReader::all_actor_ids(&mut *tx).await.unwrap();
     let actor_id = actor_ids[0];
@@ -75,7 +75,7 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
 async fn test_arbitrary_create_user(pool: PgPool) {
     let server = PostgresServer::new(pool);
     let mut rng = rand::rng();
-    let context = SimulationContext {};
+    let context = SimulationContext::default();
 
     let action: Action = CreateUser::arbitrary(&mut rng, &context).into();
 
@@ -94,7 +94,7 @@ async fn test_arbitrary_create_entry(pool: PgPool) {
         .await
         .expect("begin transaction should not fail");
     let mut rng = rand::rng();
-    let context = SimulationContext {};
+    let context = SimulationContext::default();
 
     let actor_ids = PostgresReader::all_actor_ids(&mut *tx).await.unwrap();
     let activities = (0..100)
@@ -128,7 +128,7 @@ async fn test_arbitrary_actions(pool: PgPool) {
     info!("seed={}", seed);
     let server = PostgresServer::new(pool);
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    let context = SimulationContext {};
+    let context = SimulationContext::default();
 
     for _ in 0..1_000 {
         let (actor_ids, activities, entries, attributes) = {
@@ -140,11 +140,16 @@ async fn test_arbitrary_actions(pool: PgPool) {
                 .await
                 .unwrap();
             let entries = PostgresReader::all_entries(&mut *connection).await.unwrap();
-            let attributes = PostgresReader::all_attributes(&mut *connection).await.unwrap();
+            let attributes = PostgresReader::all_attributes(&mut *connection)
+                .await
+                .unwrap();
             (actor_ids, activities, entries, attributes)
         };
-        let action =
-            Action::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &entries, &attributes));
+        let action = Action::arbitrary_from(
+            &mut rng,
+            &context,
+            (&actor_ids, &activities, &entries, &attributes),
+        );
         // info!("Running action:\n{:?}", action);
 
         // Problem: running a MoveEntry action which tries to move into a non-sequence entry fails

@@ -5,12 +5,12 @@ use crate::{
 use dioxus::document::eval;
 use dioxus::prelude::*;
 use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
+use gv_core::reader::Reader;
 use gv_core::{
     actions::{CreateEntry, CreateValue},
     models::entry::Entry,
     SYSTEM_ACTOR_ID,
 };
-use gv_core::reader::Reader;
 use gv_sqlite::{client::SqliteClient, reader::SqliteReader};
 
 fn all_commands() -> Vec<Command> {
@@ -112,9 +112,10 @@ pub fn Navbar() -> Element {
                 let entries = SqliteReader::all_entries(&mut conn).await.unwrap();
                 drop(conn);
                 let mut rng = rand::rng();
-                let context = SimulationContext {};
+                let context = SimulationContext::default();
                 let actor_ids = vec![SYSTEM_ACTOR_ID];
-                let entry = Entry::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &entries));
+                let entry =
+                    Entry::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &entries));
                 let create_entry: CreateEntry = entry.into();
                 if let Err(e) = client.run_action(create_entry.into()).await {
                     tracing::error!("Create Entry failed: {:?}", e);
@@ -129,8 +130,9 @@ pub fn Navbar() -> Element {
                 let attrs = SqliteReader::all_attributes(&mut conn).await.unwrap();
                 drop(conn);
                 let mut rng = rand::rng();
-                let context = SimulationContext {};
-                let create_value = CreateValue::arbitrary_from(&mut rng, &context, (&entries, &attrs));
+                let context = SimulationContext::default();
+                let create_value =
+                    CreateValue::arbitrary_from(&mut rng, &context, (&entries, &attrs));
                 if let Err(e) = client.run_action(create_value.into()).await {
                     tracing::error!("Create Value failed: {:?}", e);
                 }
@@ -140,7 +142,7 @@ pub fn Navbar() -> Element {
             spawn(async move {
                 let client = consume_context::<SqliteClient>();
                 let mut rng = rand::rng();
-                let context = SimulationContext {};
+                let context = SimulationContext::default();
                 let mut entry = Entry::arbitrary(&mut rng, &context);
                 entry.activity_id = None;
                 entry.position = None;

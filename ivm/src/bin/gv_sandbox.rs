@@ -32,7 +32,7 @@ pub fn main() -> Result<()> {
     // Generation setup.
     let seed = 1337u64;
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    let context = SimulationContext {};
+    let context = SimulationContext::default();
     let actor_ids = vec![SYSTEM_ACTOR_ID, Uuid::arbitrary(&mut rng, &context)];
     let activities = (0..5)
         .map(|_| Activity::arbitrary_from(&mut rng, &context, &actor_ids))
@@ -71,7 +71,7 @@ fn _basic_main() -> Result<()> {
     // Generation setup.
     let seed = 1337u64;
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    let context = SimulationContext {};
+    let context = SimulationContext::default();
 
     // Build circuit.
     let (circuit, (input_handle, output_handle)) = RootCircuit::build(build_circuit)?;

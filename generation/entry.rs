@@ -234,7 +234,7 @@ mod tests {
     /// Test that generation of temporals doesn't panic.
     fn test_arbitrary_temporal_does_not_panic() {
         let mut rng = rand::rng();
-        let context = SimulationContext {};
+        let context = SimulationContext::default();
 
         for _ in 0..10_000 {
             Temporal::arbitrary(&mut rng, &context);
@@ -245,7 +245,7 @@ mod tests {
     /// Test that generation of fractional indices doesn't panic.
     fn test_arbitrary_fractional_index_does_not_panic() {
         let mut rng = rand::rng();
-        let context = SimulationContext {};
+        let context = SimulationContext::default();
 
         for _ in 0..10_000 {
             FractionalIndex::arbitrary(&mut rng, &context);
@@ -258,7 +258,7 @@ mod tests {
     /// A better approach would be to check each position has the expected number of occurrences.
     fn test_arbitrary_frac_index_from_frac_indices() {
         let mut rng = rand::rng();
-        let context = SimulationContext {};
+        let context = SimulationContext::default();
 
         let mut findices: Vec<FractionalIndex> = Vec::new();
         findices.push(FractionalIndex::default());
@@ -315,7 +315,7 @@ mod tests {
     fn test_arbitary_position_from_entries() {
         // Nor there yet, I think I need more building blocks first.
         let mut rng = rand::rng();
-        let context = SimulationContext {};
+        let context = SimulationContext::default();
         let entry = Entry::arbitrary(&mut rng, &context);
         println!("{:?}", entry);
         let entries: Vec<Entry> = (0..100)

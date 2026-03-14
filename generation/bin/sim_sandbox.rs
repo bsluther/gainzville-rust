@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = PostgresServer::new(pool);
 
     let mut rng = rand::rng();
-    let context = SimulationContext {};
+    let context = SimulationContext::default();
     let actor_ids = {
         let mut connection = server.pool.acquire().await?;
         PostgresReader::all_actor_ids(&mut *connection).await?
