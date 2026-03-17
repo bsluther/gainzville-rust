@@ -1,12 +1,14 @@
 use chrono::{DateTime, Duration, Utc};
 use gv_core::validation::{Email, Username};
 use rand::{Rng, rand_core};
+use rand_distr::{Distribution, Normal};
 use uuid::Uuid;
 
 pub mod actions;
 pub mod activity;
 pub mod attribute;
 pub mod entry;
+pub mod samples;
 
 pub trait GenerationContext {
     fn opts(&self) -> &Opts;
@@ -164,18 +166,29 @@ impl Arbitrary for Username {
 }
 
 impl Arbitrary for DateTime<Utc> {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
-        let min = chrono::DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z")
-            .expect("RFC3339 string must be valid");
-        let max = chrono::DateTime::parse_from_rfc3339("2050-12-12T23:59:59Z")
-            .expect("RFC3339 string must be valid");
+    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+        let mean_ms = context.opts().time_mean.timestamp_millis() as f64;
+        let std_ms = context.opts().time_std.num_milliseconds() as f64;
+        let normal = Normal::new(mean_ms, std_ms).unwrap();
 
-        let diff = max - min;
-        let diff_seconds = diff.num_seconds();
-        let random_seconds = rng.random_range(0..=diff_seconds);
+        let ts_ms = (normal.sample(rng) as i64).clamp(
+            DateTime::<Utc>::MIN_UTC.timestamp_millis(),
+            DateTime::<Utc>::MAX_UTC.timestamp_millis(),
+        );
+        let dt = DateTime::from_timestamp_millis(ts_ms).unwrap();
+        dt
 
-        let dt = min + Duration::seconds(random_seconds);
-        dt.to_utc()
+        // let min = chrono::DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z")
+        //     .expect("RFC3339 string must be valid");
+        // let max = chrono::DateTime::parse_from_rfc3339("2050-12-12T23:59:59Z")
+        //     .expect("RFC3339 string must be valid");
+
+        // let diff = max - min;
+        // let diff_seconds = diff.num_seconds();
+        // let random_seconds = rng.random_range(0..=diff_seconds);
+
+        // let dt = min + Duration::seconds(random_seconds);
+        // dt.to_utc()
     }
 }
 

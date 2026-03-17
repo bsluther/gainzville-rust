@@ -156,5 +156,5 @@ input.attribute-pill:focus {
 }
 
 .temporal-expanded {
-    padding-left: var(--spacing-md);
+    padding-left: var(--spacing-xl);
 }

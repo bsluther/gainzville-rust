@@ -13,8 +13,7 @@ use gv_core::{
     },
 };
 
-// TODO: could use a trait, i.e. ForestNode, which keeps only the forest structure. Then Entry can
-// implement ForestNode, but so can a collection of Positions.
+// TODO: switch to Forest impl in `core`.
 struct Forest {}
 impl Forest {
     #[allow(unused)]
