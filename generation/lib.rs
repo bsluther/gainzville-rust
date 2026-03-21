@@ -23,9 +23,9 @@ pub struct Opts {
     pub p_semantic: f64,
     /// Probability of generating valid data.
     pub p_valid: f64,
-    /// Expected value of generated time values.
+    /// Expected value of generated timestamps.
     pub time_mean: DateTime<Utc>,
-    /// Standard deviation of generated time values.
+    /// Standard deviation of generated timestamps.
     pub time_std: Duration,
 }
 

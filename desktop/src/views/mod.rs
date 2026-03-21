@@ -1,3 +1,5 @@
+pub(crate) mod dev;
+
 mod navbar;
 pub use navbar::Navbar;
 
@@ -13,6 +15,6 @@ pub use viz::Viz;
 mod library;
 pub use library::{
     Library,
-    LibraryActivities, LibraryActivitiesIndex, LibraryActivityDetail,
-    LibraryAttributes, LibraryAttributesIndex, LibraryAttributeDetail,
+    LibraryActivities, LibraryActivitiesIndex, LibraryActivityProfile,
+    LibraryAttributes, LibraryAttributesIndex, LibraryAttributeProfile,
 };

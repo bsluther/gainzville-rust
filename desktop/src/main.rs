@@ -7,8 +7,8 @@ use gv_sqlite::client::SqliteClient;
 use tracing::Level;
 use uuid::Uuid;
 use views::{
-    ActivitySandbox, Library, LibraryActivities, LibraryActivitiesIndex, LibraryActivityDetail,
-    LibraryAttributeDetail, LibraryAttributes, LibraryAttributesIndex, Log, Navbar, Viz,
+    ActivitySandbox, Library, LibraryActivities, LibraryActivitiesIndex, LibraryActivityProfile,
+    LibraryAttributeProfile, LibraryAttributes, LibraryAttributesIndex, Log, Navbar, Viz,
 };
 
 mod components;
@@ -31,13 +31,13 @@ enum Route {
             #[route("/library/activities")]
             LibraryActivitiesIndex {},
             #[route("/library/activities/:id")]
-            LibraryActivityDetail { id: Uuid },
+            LibraryActivityProfile { id: Uuid },
         #[end_layout]
         #[layout(LibraryAttributes)]
             #[route("/library/attributes")]
             LibraryAttributesIndex {},
             #[route("/library/attributes/:id")]
-            LibraryAttributeDetail { id: Uuid },
+            LibraryAttributeProfile { id: Uuid },
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");

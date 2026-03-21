@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::error::{DomainError, Result, ValidationError};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Attribute {
     pub id: Uuid,
     pub owner_id: Uuid,

@@ -24,7 +24,7 @@ chrono = { workspace = true }
 serde = { workspace = true }
 serde_json.workspace = true
 dioxus-primitives = { git = "https://github.com/DioxusLabs/components", version = "0.0.1", default-features = false }
-dioxus-free-icons = { version = "0.10.0", features = ["font-awesome-brands", "ionicons"] }
+dioxus-free-icons = { version = "0.10.0", features = ["font-awesome-brands", "ionicons", "lucide"] }
 
 [features]
 default = ["desktop"]
