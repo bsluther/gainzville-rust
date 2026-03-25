@@ -7,21 +7,21 @@ Primary docs on the Gainzville project are in `/docs/*`.
 - [Generation](./docs/generation.md)
 - [Properties](./docs/properties.md)
 - [Attributes/Values design decisions](./docs/attributes-design.md)
-- Documentation on UX and the dioxus desktop/mobile app is in `./docs/ui/*`.
+- Documentation on UX and the Dioxus app is in `./docs/ui/*`.
 
 Additional Dioxus information can be found in the following files.
-`/desktop/AGENTS.md`
-`/desktop/docs/00-OVERVIEW.md`
-`/desktop/docs/01-CORE.md`
-`/desktop/docs/02-CLI.md`
-`/desktop/docs/03-RSX.md`
-`/desktop/docs/04-SIGNALS.md`
-`/desktop/docs/05-FULLSTACK.md`
-`/desktop/docs/06-RENDERERS.md`
-`/desktop/docs/07-HOTRELOAD.md`
-`/desktop/docs/08-ASSETS.md`
-`/desktop/docs/09-ROUTER.md`
-`/desktop/docs/10-WASM-SPLIT.md`
+`/dx-app/AGENTS.md`
+`/dx-app/docs/00-OVERVIEW.md`
+`/dx-app/docs/01-CORE.md`
+`/dx-app/docs/02-CLI.md`
+`/dx-app/docs/03-RSX.md`
+`/dx-app/docs/04-SIGNALS.md`
+`/dx-app/docs/05-FULLSTACK.md`
+`/dx-app/docs/06-RENDERERS.md`
+`/dx-app/docs/07-HOTRELOAD.md`
+`/dx-app/docs/08-ASSETS.md`
+`/dx-app/docs/09-ROUTER.md`
+`/dx-app/docs/10-WASM-SPLIT.md`
 
 # Project Overview
 
@@ -42,9 +42,8 @@ Planned to support both an HTTP API as well as offline-first sync.
 Gainzville client. Implements `Reader` and `Apply` traits for Sqlite and processes `Actions`.
 Planned to support offline-first sync.
 
-`./desktop`
-Desktop app using Dioxus. Supports a single codebase and easy shared logic + standard web primitives.
-If development goes well, will use Dioxus for mobile and web apps.
+`./dx-app`
+Cross-platform Dioxus app (desktop, mobile, web). Supports a single codebase with shared logic and standard web primitives.
 
 `./ivm`
 Experimentation with the DBSP library for incremental view maintenance to potentially support sync.

@@ -1675,29 +1675,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "desktop"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "dioxus",
- "dioxus-free-icons",
- "dioxus-primitives",
- "directories",
- "dotenvy",
- "futures-util",
- "generation",
- "gv_core",
- "gv_sqlite",
- "rand 0.9.2",
- "serde",
- "serde_json",
- "time",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2402,6 +2379,29 @@ name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
+
+[[package]]
+name = "dx-app"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "dioxus",
+ "dioxus-free-icons",
+ "dioxus-primitives",
+ "directories",
+ "dotenvy",
+ "futures-util",
+ "generation",
+ "gv_core",
+ "gv_sqlite",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "dyn-clone"

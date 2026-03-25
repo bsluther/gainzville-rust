@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "core",
-    "desktop",
+    "dx-app",
     "generation",
     "integration_tests",
     "ivm",
