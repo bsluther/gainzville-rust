@@ -16,8 +16,9 @@ use gv_sqlite::client::SqliteClient;
 #[component]
 pub fn AttributeRow(label: String, children: Element) -> Element {
     rsx! {
+        document::Link { rel: "stylesheet", href: asset!("./style.css") }
         div { class: "attribute-row",
-            span { class: "attribute-label", "{label}" }
+            span { class: "text-sm text-gv-neutral-500 select-none", "{label}" }
             div { class: "flex flex-row gap-1 items-center", {children} }
         }
     }

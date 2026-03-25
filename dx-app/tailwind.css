@@ -1,1 +1,29 @@
 @import "tailwindcss";
+
+@theme {
+    /* GV neutral color scale.
+     * Source of truth for all neutral colors. Generates bg-gv-neutral-*, text-gv-neutral-*,
+     * border-gv-neutral-*, etc. as Tailwind utilities (including opacity modifiers).
+     * CSS files reference these via --gv-neutral-* aliases in tokens.css. */
+    --color-gv-neutral-50: rgb(250, 250, 250);
+    --color-gv-neutral-100: rgb(245, 245, 245);
+    --color-gv-neutral-200: rgb(229, 229, 229);
+    --color-gv-neutral-300: rgb(212, 212, 212);
+    --color-gv-neutral-400: rgb(163, 163, 163);
+    --color-gv-neutral-500: rgb(115, 115, 115);
+    --color-gv-neutral-550: rgb(96, 96, 96);
+    --color-gv-neutral-600: rgb(82, 82, 82);
+    --color-gv-neutral-650: rgb(72, 72, 72);
+    --color-gv-neutral-700: rgb(64, 64, 64);
+    --color-gv-neutral-750: rgb(56, 55, 55);
+    --color-gv-neutral-800: rgb(38, 38, 38);
+    --color-gv-neutral-850: rgb(30, 30, 32);
+    --color-gv-neutral-900: rgb(23, 23, 23);
+    --color-gv-neutral-950: rgb(19, 19, 19);
+    --color-gv-neutral-1000: rgb(17, 17, 17);
+    --color-gv-neutral-1100: rgb(13, 13, 13);
+    --color-gv-neutral-1200: rgb(10, 10, 10);
+
+    /* Accent colors */
+    --color-gv-logged-blue: rgb(110, 121, 144);
+}

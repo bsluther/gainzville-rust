@@ -13,13 +13,7 @@
     --entry-spacing-horizontal: var(--spacing-sm);
 }
 
-.entry-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
-    width: 24rem;
-    background-color: var(--bg-log);
-}
+/* .entry-list removed — use Tailwind: flex flex-col gap-[var(--entry-list-gap)] */
 
 .entry-view {
     color: var(--entry-text-color);
@@ -36,20 +30,11 @@
     &[data-entry-kind="scalar"] {
         background-color: var(--entry-scalar-bg-color);
         border: 1px solid var(--entry-scalar-border-color);
-
     }
 
     &[data-entry-kind="sequence"] {
         background-color: var(--entry-sequence-bg-color);
         border: 1px solid var(--entry-sequence-border-color);
-    }
-
-    /* Nested entry lists */
-    .entry-list {
-        padding-inline: 0;
-        padding-block: var(--spacing-sm);
-        /* Size to the parent. */
-        width: auto;
     }
 
     /* Nested entries */
@@ -68,14 +53,11 @@
     flex-direction: column;
     gap: var(--entry-spacing-vertical);
     padding-block: var(--spacing-md);
-    /* padding-inline-start: var(--spacing-md); */
 }
 
-.entry-body>.attribute-list,
 .entry-body>.entry-footer {
     padding-inline-end: var(--spacing-md);
 }
-
 
 .entry-checkbox {
     width: 1.25rem;

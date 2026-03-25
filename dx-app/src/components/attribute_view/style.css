@@ -2,17 +2,8 @@
     --attr-row-min-height: 36px;
 }
 
-.attribute-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--entry-spacing-vertical);
-}
-
-.attribute-label {
-    font-size: 14px;
-    color: var(--gv-neutral-500);
-    user-select: none;
-}
+/* .attribute-list removed — use Tailwind: flex flex-col gap-2 */
+/* .attribute-label removed — use Tailwind: text-sm text-gv-neutral-500 select-none */
 
 .attribute-row {
     display: flex;
@@ -134,6 +125,7 @@ input.attribute-pill:focus {
     color: var(--gv-neutral-300);
 }
 
+/* Temporal attribute */
 .temporal-attribute {
     padding: 4px 0;
 }
@@ -146,7 +138,6 @@ input.attribute-pill:focus {
     min-height: 28px;
     cursor: pointer;
 }
-
 
 .temporal-summary {
     font-style: italic;

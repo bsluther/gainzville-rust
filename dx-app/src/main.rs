@@ -41,13 +41,9 @@ enum Route {
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
-const LIBRARY_CSS: Asset = asset!("/assets/styling/library.css");
 const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const TOKENS_CSS: Asset = asset!("/assets/styling/tokens.css");
-const LOG_CSS: Asset = asset!("/assets/styling/log.css");
-const ENTRY_CSS: Asset = asset!("/assets/styling/entry.css");
-const ATTRIBUTE_CSS: Asset = asset!("/assets/styling/attribute.css");
 const DX_COMPONENTS_CSS: Asset = asset!("/assets/dx-components-theme.css");
 
 fn main() {
@@ -109,10 +105,6 @@ fn App() -> Element {
         document::Link { rel: "stylesheet", href: DX_COMPONENTS_CSS }
         document::Link { rel: "stylesheet", href: TOKENS_CSS }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
-        document::Link { rel: "stylesheet", href: LOG_CSS }
-        document::Link { rel: "stylesheet", href: ENTRY_CSS }
-        document::Link { rel: "stylesheet", href: ATTRIBUTE_CSS }
-        document::Link { rel: "stylesheet", href: LIBRARY_CSS }
 
         Router::<Route> {}
     }

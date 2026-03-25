@@ -43,6 +43,7 @@ pub fn LibraryActivities() -> Element {
     };
 
     rsx! {
+        document::Link { rel: "stylesheet", href: asset!("./library.css") }
         div { class: "library-layout",
             div { class: "library-browser",
                 nav { class: "library-tab-bar",
@@ -115,6 +116,7 @@ pub fn LibraryAttributes() -> Element {
     };
 
     rsx! {
+        document::Link { rel: "stylesheet", href: asset!("./library.css") }
         div { class: "library-layout",
             div { class: "library-browser",
                 nav { class: "library-tab-bar",

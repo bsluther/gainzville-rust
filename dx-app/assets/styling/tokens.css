@@ -1,34 +1,41 @@
 :root {
-    --spacing-sm: 4px;
-    --spacing-md: 8px;
-    --spacing-lg: 12px;
-    --spacing-xl: 24px;
+    /* Spacing scale — aliases to Tailwind's --spacing base unit (0.25rem).
+     * Keeps CSS files in sync with Tailwind utilities automatically.
+     * --spacing-sm → p-1 / gap-1 / m-1
+     * --spacing-md → p-2 / gap-2 / m-2
+     * --spacing-lg → p-3 / gap-3 / m-3
+     * --spacing-xl → p-6 / gap-6 / m-6 */
+    --spacing-sm: calc(var(--spacing) * 1);
+    --spacing-md: calc(var(--spacing) * 2);
+    --spacing-lg: calc(var(--spacing) * 3);
+    --spacing-xl: calc(var(--spacing) * 6);
 
-    --gray-1100: rgb(12, 13, 13);
-    --gray-1200: rgb(10, 10, 10);
+    /* Semantic spacing tokens */
+    --entry-list-gap: var(--spacing-lg);
 
+    /* GV neutral scale — aliases to @theme variables in tailwind.css.
+     * Color values are authoritative in @theme; use these aliases in CSS class files. */
+    --gv-neutral-50: var(--color-gv-neutral-50);
+    --gv-neutral-100: var(--color-gv-neutral-100);
+    --gv-neutral-200: var(--color-gv-neutral-200);
+    --gv-neutral-300: var(--color-gv-neutral-300);
+    --gv-neutral-400: var(--color-gv-neutral-400);
+    --gv-neutral-500: var(--color-gv-neutral-500);
+    --gv-neutral-550: var(--color-gv-neutral-550);
+    --gv-neutral-600: var(--color-gv-neutral-600);
+    --gv-neutral-650: var(--color-gv-neutral-650);
+    --gv-neutral-700: var(--color-gv-neutral-700);
+    --gv-neutral-750: var(--color-gv-neutral-750);
+    --gv-neutral-800: var(--color-gv-neutral-800);
+    --gv-neutral-850: var(--color-gv-neutral-850);
+    --gv-neutral-900: var(--color-gv-neutral-900);
+    --gv-neutral-950: var(--color-gv-neutral-950);
+    --gv-neutral-1000: var(--color-gv-neutral-1000);
+    --gv-neutral-1100: var(--color-gv-neutral-1100);
+    --gv-neutral-1200: var(--color-gv-neutral-1200);
+
+    --gv-logged-blue: var(--color-gv-logged-blue);
+
+    /* Semantic aliases */
     --app-bg-color: var(--gv-neutral-1100);
-    --bg-color-log: var(--gv-neutral-1200);
-
-
-    --gv-neutral-50: rgb(250, 250, 250);
-    --gv-neutral-100: rgb(245, 245, 245);
-    --gv-neutral-200: rgb(229, 229, 229);
-    --gv-neutral-300: rgb(212, 212, 212);
-    --gv-neutral-400: rgb(163, 163, 163);
-    --gv-neutral-500: rgb(115, 115, 115);
-    --gv-neutral-550: rgb(96, 96, 96);
-    --gv-neutral-600: rgb(82, 82, 82);
-    --gv-neutral-650: rgb(72, 72, 72);
-    --gv-neutral-700: rgb(64, 64, 64);
-    --gv-neutral-750: rgb(56, 55, 55);
-    --gv-neutral-800: rgb(38, 38, 38);
-    --gv-neutral-850: rgb(30, 30, 32);
-    --gv-neutral-900: rgb(23, 23, 23);
-    --gv-neutral-950: rgb(19, 19, 19);
-    --gv-neutral-1000: rgb(17, 17, 17);
-    --gv-neutral-1100: rgb(13, 13, 13);
-    --gv-neutral-1200: rgb(10, 10, 10);
-
-    --gv-logged-blue: rgb(110, 121, 144);
 }

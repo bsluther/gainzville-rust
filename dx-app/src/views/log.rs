@@ -25,7 +25,7 @@ pub fn Log() -> Element {
             }
 
             div { class: "flex flex-1 flex-row justify-center h-full",
-                ul { class: "entry-list",
+                ul { class: "flex flex-col gap-[var(--entry-list-gap)] w-96",
                     for entry in forest.read().roots() {
                         EntryView { key: "{entry.id}", id: entry.id }
                     }

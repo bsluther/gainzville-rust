@@ -85,6 +85,7 @@ pub fn EntryView(id: ReadSignal<Uuid>) -> Element {
     };
 
     rsx! {
+        document::Link { rel: "stylesheet", href: asset!("./entry_view.css") }
 
         Container { is_sequence: entry_join.is_sequence(),
             Header {
@@ -182,7 +183,7 @@ fn FooterScalar(is_complete: bool, on_toggle: EventHandler<MouseEvent>) -> Eleme
 #[component]
 fn Attributes(attr_pairs: Vec<AttributePair>, temporal: Temporal) -> Element {
     rsx! {
-        div { class: "attribute-list",
+        div { class: "flex flex-col gap-2 pr-2",
             TemporalAttribute { temporal: temporal.clone() }
             for pair in attr_pairs {
                 AttributeView { pair }
@@ -194,7 +195,7 @@ fn Attributes(attr_pairs: Vec<AttributePair>, temporal: Temporal) -> Element {
 #[component]
 fn ChildEntries(entry_ids: Vec<Uuid>) -> Element {
     rsx! {
-        div { class: "entry-list",
+        div { class: "flex flex-col gap-[var(--entry-list-gap)] px-0 py-1",
             for child_id in entry_ids {
                 EntryView { key: "{child_id}", id: child_id }
             }

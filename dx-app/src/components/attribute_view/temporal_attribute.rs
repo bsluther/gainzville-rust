@@ -16,10 +16,11 @@ pub fn TemporalAttribute(temporal: Temporal) -> Element {
     let summary = temporal_summary(&temporal);
 
     rsx! {
-        div { class: "temporal-attribute attribute-list",
+        document::Link { rel: "stylesheet", href: asset!("./style.css") }
+        div { class: "temporal-attribute flex flex-col gap-2",
             div { class: "temporal-header", onclick: move |_| expanded.toggle(),
                 div { class: "flex flex-row items-center gap-1",
-                    span { class: "attribute-label", "Time" }
+                    span { class: "text-sm text-gv-neutral-500 select-none", "Time" }
                     Icon {
                         width: 14,
                         height: 14,
@@ -31,7 +32,7 @@ pub fn TemporalAttribute(temporal: Temporal) -> Element {
                 span { class: "temporal-summary", "{summary}" }
             }
             if expanded() {
-                div { class: "temporal-expanded attribute-list",
+                div { class: "temporal-expanded flex flex-col gap-2",
                     AttributeRow { label: "Start".to_string(),
                         if let Some(start) = start {
                             span { class: "attribute-pill", "{format_date(&start)}" }

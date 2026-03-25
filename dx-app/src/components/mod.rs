@@ -8,11 +8,8 @@ pub use command_palette::{Command, CommandPalette};
 mod entry_view;
 pub use entry_view::EntryView;
 
-mod attribute_view;
-pub use attribute_view::{AttributeRow, AttributeView};
-
-mod temporal_attribute;
-pub use temporal_attribute::TemporalAttribute;
+pub mod attribute_view;
+pub use attribute_view::{AttributeRow, AttributeView, TemporalAttribute};
 
 mod log_date_picker;
 pub use log_date_picker::LogDatePicker;

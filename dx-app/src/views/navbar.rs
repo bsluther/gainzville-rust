@@ -43,7 +43,6 @@ fn all_commands() -> Vec<Command> {
     ]
 }
 
-const NAVBAR_CSS: Asset = asset!("/assets/styling/navbar.css");
 
 #[component]
 pub fn Navbar() -> Element {
@@ -157,7 +156,7 @@ pub fn Navbar() -> Element {
     };
 
     rsx! {
-        document::Link { rel: "stylesheet", href: NAVBAR_CSS }
+        document::Link { rel: "stylesheet", href: asset!("./navbar.css") }
 
         // App container to catch keyboard input at any time.
         div {

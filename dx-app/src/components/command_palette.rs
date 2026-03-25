@@ -1,7 +1,5 @@
 use dioxus::prelude::*;
 
-const PALETTE_CSS: Asset = asset!("/assets/styling/command_palette.css");
-
 // This is AI generated, mostly a placeholder to get opening/closing via cmd-p working correctly.
 
 #[derive(Clone, PartialEq)]
@@ -62,7 +60,7 @@ pub fn CommandPalette(
     };
 
     rsx! {
-        document::Link { rel: "stylesheet", href: PALETTE_CSS }
+        document::Link { rel: "stylesheet", href: asset!("./command_palette.css") }
 
         div {
             class: "palette-overlay",
