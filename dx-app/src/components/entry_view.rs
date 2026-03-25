@@ -11,10 +11,7 @@ use gv_sqlite::client::SqliteClient;
 use uuid::Uuid;
 
 use crate::{
-    components::{
-        dropdown_menu::{DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger},
-        AttributeView, TemporalAttribute,
-    },
+    components::{AttributeView, PlatformMenu, PlatformMenuItem, TemporalAttribute},
     hooks::use_stream::use_stream,
 };
 
@@ -218,22 +215,20 @@ fn FillCheckbox(checked: bool, on_toggle: EventHandler<MouseEvent>) -> Element {
 #[component]
 fn EntryContextMenu(id: ReadSignal<Uuid>, children: Element) -> Element {
     rsx! {
-        DropdownMenu {
-            DropdownMenuTrigger {
+        PlatformMenu {
+            trigger: rsx! {
                 Icon {
                     width: 20,
                     height: 20,
                     fill: "var(--gv-neutral-500)",
-                    class: "red-200",
                     icon: IoEllipsisVertical,
                 }
-            }
-            DropdownMenuContent {
-                DropdownMenuItem::<String> {
-                    value: "delete".to_string(),
-                    index: 0usize,
-                    disabled: false,
-                    on_select: move |_value: String| {
+            },
+            content: rsx! {
+                PlatformMenuItem::<()> {
+                    value: (),
+                    index: 0,
+                    on_select: move |_| {
                         let entry_id = *id.read();
                         spawn(async move {
                             let client = consume_context::<SqliteClient>();
@@ -253,7 +248,7 @@ fn EntryContextMenu(id: ReadSignal<Uuid>, children: Element) -> Element {
                     },
                     "Delete"
                 }
-            }
+            },
         }
     }
 }

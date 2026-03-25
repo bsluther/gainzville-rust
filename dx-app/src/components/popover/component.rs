@@ -22,7 +22,14 @@ pub fn PopoverRoot(props: PopoverRootProps) -> Element {
 #[component]
 pub fn PopoverTrigger(props: PopoverTriggerProps) -> Element {
     rsx! {
-        popover::PopoverTrigger { class: "popover-trigger", attributes: props.attributes, {props.children} }
+        // `all: unset` strips the browser's default button chrome (border, padding, background).
+        // The trigger content supplies its own visual appearance; the wrapper should be invisible.
+        // -> Remove the built-in dioxus-components styling of the trigger.
+        popover::PopoverTrigger {
+            style: "all: unset; cursor: pointer; display: inline-flex; align-items: center; vertical-align: middle;",
+            attributes: props.attributes,
+            {props.children}
+        }
     }
 }
 

@@ -2,12 +2,12 @@ use crate::components::calendar::{
     Calendar, CalendarGrid, CalendarHeader, CalendarMonthTitle, CalendarNavigation,
     CalendarNextMonthButton, CalendarPreviousMonthButton, CalendarView,
 };
-use crate::components::popover::*;
+use crate::components::PlatformPopover;
 use chrono::{Datelike, Duration, NaiveDate};
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::io_icons::{IoCaretBackOutline, IoCaretForwardOutline};
 use dioxus_free_icons::Icon;
-use dioxus_primitives::{ContentAlign, ContentSide};
+use dioxus_primitives::ContentAlign;
 use time::Date;
 
 fn naive_to_time(date: NaiveDate) -> time::Date {
@@ -39,7 +39,7 @@ pub fn LogDatePicker(selected_date: NaiveDate, on_date_change: EventHandler<Naiv
                 Icon { icon: IoCaretBackOutline, width: 16, height: 16 }
             }
 
-            PopoverRoot {
+            PlatformPopover {
                 open: show_calendar(),
                 on_open_change: move |v| {
                     if v {
@@ -47,13 +47,14 @@ pub fn LogDatePicker(selected_date: NaiveDate, on_date_change: EventHandler<Naiv
                     }
                     show_calendar.set(v);
                 },
-                PopoverTrigger {
+                align: ContentAlign::Center,
+                trigger: rsx! {
                     div { class: "flex flex-col items-center cursor-pointer select-none",
                         span { class: "text-xs text-gray-500", "{year}" }
                         span { class: "text-sm font-medium", "{month_day}" }
                     }
-                }
-                PopoverContent { side: ContentSide::Bottom, align: ContentAlign::Center,
+                },
+                content: rsx! {
                     Calendar {
                         selected_date: Some(naive_to_time(selected_date)),
                         on_date_change: move |date: Option<Date>| {
@@ -77,7 +78,7 @@ pub fn LogDatePicker(selected_date: NaiveDate, on_date_change: EventHandler<Naiv
                             CalendarGrid {}
                         }
                     }
-                }
+                },
             }
 
             button {

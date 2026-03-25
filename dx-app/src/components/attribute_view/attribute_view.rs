@@ -13,6 +13,8 @@ use gv_core::{
 };
 use gv_sqlite::client::SqliteClient;
 
+use crate::components::{PlatformMenu, PlatformMenuItem, PlatformPopover};
+
 #[component]
 pub fn AttributeRow(label: String, children: Element) -> Element {
     rsx! {
@@ -101,7 +103,6 @@ fn SelectView(pair: SelectAttributePair) -> Element {
     let attr_id = pair.attr_id;
     let entry_id = pair.entry_id;
     let options = pair.config.options.clone();
-    let mut open = use_signal(|| false);
 
     let current = match &pair.actual {
         Some(SelectValue::Exact(s)) => s.clone(),
@@ -110,55 +111,38 @@ fn SelectView(pair: SelectAttributePair) -> Element {
 
     rsx! {
         AttributeRow { label: pair.name.clone(),
-            div { class: "select-wrapper",
-                // Backdrop: captures outside clicks to close the popover.
-                if open() {
-                    div {
-                        class: "select-backdrop",
-                        onclick: move |_| open.set(false),
+            PlatformMenu {
+                trigger: rsx! {
+                    div { class: "attribute-pill select-trigger",
+                        if current.is_empty() { "\u{00a0}" } else { "{current}" }
                     }
-                }
-                button {
-                    class: "attribute-pill select-trigger",
-                    onclick: move |_| open.set(!open()),
-                    if current.is_empty() {
-                        "\u{00a0}"
-                    } else {
-                        "{current}"
-                    }
-                }
-                if open() {
-                    div { class: "select-popover",
-                        for option in options {
-                            div {
-                                class: "select-option",
-                                onclick: {
-                                    let option = option.clone();
-                                    move |_| {
-                                        let option = option.clone();
-                                        open.set(false);
-                                        async move {
-                                            let client = consume_context::<SqliteClient>();
-                                            let _ = client
-                                                .run_action(
-                                                    UpdateAttributeValue {
-                                                        actor_id: SYSTEM_ACTOR_ID,
-                                                        entry_id,
-                                                        attribute_id: attr_id,
-                                                        field: ValueField::Actual,
-                                                        value: AttributeValue::Select(SelectValue::Exact(option)),
-                                                    }
-                                                        .into(),
-                                                )
-                                                .await;
-                                        }
-                                    }
-                                },
-                                "{option}"
-                            }
+                },
+                content: rsx! {
+                    for (i, option) in options.iter().enumerate() {
+                        PlatformMenuItem::<String> {
+                            value: option.clone(),
+                            index: i,
+                            on_select: move |selected: String| {
+                                spawn(async move {
+                                    let client = consume_context::<SqliteClient>();
+                                    let _ = client
+                                        .run_action(
+                                            UpdateAttributeValue {
+                                                actor_id: SYSTEM_ACTOR_ID,
+                                                entry_id,
+                                                attribute_id: attr_id,
+                                                field: ValueField::Actual,
+                                                value: AttributeValue::Select(SelectValue::Exact(selected)),
+                                            }
+                                            .into(),
+                                        )
+                                        .await;
+                                });
+                            },
+                            "{option}"
                         }
                     }
-                }
+                },
             }
         }
     }
@@ -255,37 +239,26 @@ fn MassView(pair: MassAttributePair) -> Element {
                 }
                 span { class: "mass-unit-label", "{format_mass_unit(unit)}" }
             }
-            div { class: "select-wrapper",
-                if show_picker() {
-                    div {
-                        class: "select-backdrop",
-                        onclick: move |_| show_picker.set(false),
+            PlatformPopover {
+                open: show_picker(),
+                on_open_change: move |v| show_picker.set(v),
+                trigger: rsx! {
+                    div { class: "mass-cog-btn",
+                        Icon { width: 14, height: 14, fill: "var(--gv-neutral-500)", icon: IoCog }
                     }
-                }
-                button {
-                    class: "mass-cog-btn",
-                    onclick: move |_| show_picker.set(!show_picker()),
-                    Icon {
-                        width: 14,
-                        height: 14,
-                        fill: "var(--gv-neutral-500)",
-                        icon: IoCog,
-                    }
-                }
-                if show_picker() {
-                    div { class: "select-popover unit-picker-popover",
-                        for unit in all_units {
-                            div { class: "unit-picker-row",
-                                span { class: "unit-picker-label", "{format_mass_unit(&unit)}" }
-                                input {
-                                    r#type: "checkbox",
-                                    checked: configured_units.contains(&unit),
-                                    disabled: true,
-                                }
+                },
+                content: rsx! {
+                    for unit in all_units {
+                        div { class: "unit-picker-row",
+                            span { class: "unit-picker-label", "{format_mass_unit(&unit)}" }
+                            input {
+                                r#type: "checkbox",
+                                checked: configured_units.contains(&unit),
+                                disabled: true,
                             }
                         }
                     }
-                }
+                },
             }
         }
     }
