@@ -8,6 +8,9 @@ Primary docs on the Gainzville project are in `/docs/*`.
 - [Properties](./docs/properties.md)
 - [Attributes/Values design decisions](./docs/attributes-design.md)
 - Documentation on UX and the Dioxus app is in `./docs/ui/*`.
+  - [UI Architecture decisions](./docs/ui/architecture.md) — platform targeting strategy, rendering approach, styling
+  - [UI Design decisions](./docs/ui/design.md) — navigation patterns, interaction models
+  - [Adaptive rendering decision record](./docs/ui/adaptive-rendering-decisions.md) — historical rationale for the above
 
 Additional Dioxus information can be found in the following files.
 `/dx-app/AGENTS.md`
