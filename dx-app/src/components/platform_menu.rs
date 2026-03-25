@@ -20,7 +20,9 @@ impl PlatformMenuCtx {
 #[cfg(not(feature = "mobile"))]
 #[component]
 pub fn PlatformMenu(trigger: Element, content: Element) -> Element {
-    use crate::components::dropdown_menu::{DropdownMenu, DropdownMenuContent, DropdownMenuTrigger};
+    use crate::components::dropdown_menu::{
+        DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
+    };
     rsx! {
         DropdownMenu {
             DropdownMenuTrigger { {trigger} }
@@ -61,7 +63,13 @@ pub fn PlatformMenuItem<T: Clone + PartialEq + 'static>(
 ) -> Element {
     use crate::components::dropdown_menu::DropdownMenuItem;
     rsx! {
-        DropdownMenuItem::<T> { value, index, on_select, disabled, {children} }
+        DropdownMenuItem::<T> {
+            value,
+            index,
+            on_select,
+            disabled,
+            {children}
+        }
     }
 }
 
@@ -78,7 +86,7 @@ pub fn PlatformMenuItem<T: Clone + PartialEq + 'static>(
     let mut ctx = use_context::<PlatformMenuCtx>();
     rsx! {
         div {
-            class: "dropdown-menu-item",
+            class: "flex dropdown-menu-item justify-center w-full items-center",
             onclick: move |_| {
                 if !disabled {
                     on_select.call(value.clone());

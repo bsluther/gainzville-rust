@@ -20,9 +20,7 @@ pub fn PlatformPopover(
     #[props(default = ContentAlign::Start)] align: ContentAlign,
 ) -> Element {
     rsx! {
-        PopoverRoot {
-            open,
-            on_open_change,
+        PopoverRoot { open, on_open_change,
             PopoverTrigger { {trigger} }
             PopoverContent { side, align, {content} }
         }
@@ -43,14 +41,16 @@ pub fn PlatformPopover(
     let _ = (side, align);
     rsx! {
         div {
-            style: "display: inline-flex; align-items: center; cursor: pointer;",
+            class: "flex flex-1 items-center",
             onclick: move |_| on_open_change.call(true),
             {trigger}
         }
-        Sheet {
-            open,
-            on_open_change,
-            SheetContent { side: SheetSide::Bottom, {content} }
+        Sheet { open, on_open_change,
+            SheetContent {
+                class: "w-full p-4 max-h-96 min-h-48 overflow-y-scroll",
+                side: SheetSide::Bottom,
+                {content}
+            }
         }
     }
 }

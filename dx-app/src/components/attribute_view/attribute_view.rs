@@ -114,12 +114,17 @@ fn SelectView(pair: SelectAttributePair) -> Element {
             PlatformMenu {
                 trigger: rsx! {
                     div { class: "attribute-pill select-trigger",
-                        if current.is_empty() { "\u{00a0}" } else { "{current}" }
+                        if current.is_empty() {
+                            "\u{00a0}"
+                        } else {
+                            "{current}"
+                        }
                     }
                 },
                 content: rsx! {
-                    for (i, option) in options.iter().enumerate() {
+                    for (i , option) in options.iter().enumerate() {
                         PlatformMenuItem::<String> {
+                            // class: "bg-green-500",
                             value: option.clone(),
                             index: i,
                             on_select: move |selected: String| {
@@ -134,7 +139,7 @@ fn SelectView(pair: SelectAttributePair) -> Element {
                                                 field: ValueField::Actual,
                                                 value: AttributeValue::Select(SelectValue::Exact(selected)),
                                             }
-                                            .into(),
+                                                .into(),
                                         )
                                         .await;
                                 });
@@ -244,7 +249,12 @@ fn MassView(pair: MassAttributePair) -> Element {
                 on_open_change: move |v| show_picker.set(v),
                 trigger: rsx! {
                     div { class: "mass-cog-btn",
-                        Icon { width: 14, height: 14, fill: "var(--gv-neutral-500)", icon: IoCog }
+                        Icon {
+                            width: 14,
+                            height: 14,
+                            fill: "var(--gv-neutral-500)",
+                            icon: IoCog,
+                        }
                     }
                 },
                 content: rsx! {
