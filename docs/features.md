@@ -1,6 +1,14 @@
 This is not an exhaustive list; the other docs include many features which fall under the model,
 collaboration, or other categories.
 
+### Categories
+
+#### Subcategories attribute
+Say I have a Push Up activity with sub-categories (eg sub-categories), Strict Push Up, Slow Push Up,
+etc. It'd be nice to have an alternate way to narrow an Entry: an attribute which is a dropdown (or
+maybe a multiselect) of all the sub-categories. This let's me express the specificy without needing
+to swap the activity.
+
 ### Standard Library
 Many activities and attributes are common and well-defined and can be included as part of
 Gainzville's standard library available to all users. Ideally this would be curated and maintained

@@ -7,6 +7,7 @@ Primary docs on the Gainzville project are in `/docs/*`.
 - [Generation](./docs/generation.md)
 - [Properties](./docs/properties.md)
 - [Attributes/Values design decisions](./docs/attributes-design.md)
+- Documentation on UX and the dioxus desktop/mobile app is in `./docs/ui/*`.
 
 Additional Dioxus information can be found in the following files.
 `/desktop/AGENTS.md`
