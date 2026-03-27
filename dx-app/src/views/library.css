@@ -9,22 +9,6 @@
     --library-profile-bg: var(--gv-neutral-950);
 }
 
-/* ── Layout ─────────────────────────────── */
-.library-layout {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    overflow: hidden;
-}
-
-@media (width >=48rem) {
-    .library-layout {
-        flex-direction: row;
-    }
-}
-
 /* ── Browser column ─────────────────────── */
 .library-browser {
     display: flex;
@@ -65,12 +49,6 @@
 }
 
 /* ── List ───────────────────────────────── */
-.library-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: var(--spacing-md) 0;
-}
-
 .library-item {
     padding: var(--spacing-lg);
     cursor: pointer;
@@ -119,25 +97,6 @@
         display: flex;
         flex-direction: column;
     }
-}
-
-.library-profile-empty {
-    color: var(--gv-neutral-600);
-    font-size: 0.9rem;
-    text-align: center;
-    margin-top: 4rem;
-}
-
-.library-profile-content {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xl);
-}
-
-/* ── Sheet content ──────────────────────── */
-.library-sheet-content {
-    padding: var(--spacing-lg);
-    overflow-y: auto;
 }
 
 /* ── Sheet override: hide on desktop ────── */

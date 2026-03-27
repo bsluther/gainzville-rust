@@ -31,6 +31,44 @@ pub fn Library() -> Element {
 }
 
 #[component]
+fn LibraryBrowser(
+    list: Element,
+    sheet_open: bool,
+    on_sheet_close: EventHandler<()>,
+    sheet_content: Element,
+) -> Element {
+    rsx! {
+        div { class: "flex flex-col flex-1 min-w-0 h-full overflow-hidden md:flex-row",
+            div { class: "library-browser",
+                nav { class: "library-tab-bar",
+                    Link { to: Route::LibraryActivitiesIndex {}, "Activities" }
+                    Link { to: Route::LibraryAttributesIndex {}, "Attributes" }
+                }
+                div { class: "flex-1 overflow-y-auto py-2", {list} }
+                div { class: "library-controls",
+                    Input { placeholder: "Search..." }
+                    Button {
+                        Icon { icon: IoAddOutline, width: 16, height: 16 }
+                    }
+                }
+            }
+            div { class: "library-profile", Outlet::<Route> {} }
+            Sheet {
+                open: sheet_open,
+                on_open_change: move |open: bool| {
+                    if !open {
+                        on_sheet_close.call(());
+                    }
+                },
+                SheetContent { side: SheetSide::Bottom,
+                    div { class: "p-3 overflow-y-auto", {sheet_content} }
+                }
+            }
+        }
+    }
+}
+
+#[component]
 pub fn LibraryActivities() -> Element {
     let client = consume_context::<SqliteClient>();
     let activities = use_stream(move || client.stream_activities());
@@ -44,61 +82,38 @@ pub fn LibraryActivities() -> Element {
 
     rsx! {
         document::Link { rel: "stylesheet", href: asset!("./library.css") }
-        div { class: "library-layout",
-            div { class: "library-browser",
-                nav { class: "library-tab-bar",
-                    Link {
-                        to: Route::LibraryActivitiesIndex {},
-                        class: "library-tab-active",
-                        "Activities"
-                    }
-                    Link { to: Route::LibraryAttributesIndex {}, "Attributes" }
-                }
-                div { class: "library-list",
-                    if let Some(activities) = activities() {
-                        for activity in activities.iter() {
-                            div {
-                                key: "{activity.id}",
-                                class: "library-item",
-                                "data-selected": selected_id == Some(activity.id),
-                                onclick: {
-                                    let id = activity.id;
-                                    move |_| {
-                                        nav.push(Route::LibraryActivityProfile {
-                                            id,
-                                        });
-                                    }
-                                },
-                                "{activity.name.to_string()}"
-                            }
+        LibraryBrowser {
+            sheet_open: is_detail,
+            on_sheet_close: move |_| {
+                nav.push(Route::LibraryActivitiesIndex {});
+            },
+            list: rsx! {
+                if let Some(activities) = activities() {
+                    for activity in activities.iter() {
+                        div {
+                            key: "{activity.id}",
+                            class: "library-item",
+                            "data-selected": selected_id == Some(activity.id),
+                            onclick: {
+                                let id = activity.id;
+                                move |_| {
+                                    nav.push(Route::LibraryActivityProfile {
+                                        id,
+                                    });
+                                }
+                            },
+                            "{activity.name.to_string()}"
                         }
                     }
                 }
-                div { class: "library-controls",
-                    Input { placeholder: "Search..." }
-                    Button {
-                        Icon { icon: IoAddOutline, width: 16, height: 16 }
-                    }
+            },
+            sheet_content: rsx! {
+                if let Some(activity) = activities()
+                    .and_then(|list| { list.into_iter().find(|a| Some(a.id) == selected_id) })
+                {
+                    ActivityProfile { activity }
                 }
-            }
-            div { class: "library-profile", Outlet::<Route> {} }
-            Sheet {
-                open: is_detail,
-                on_open_change: move |open: bool| {
-                    if !open {
-                        nav.push(Route::LibraryActivitiesIndex {});
-                    }
-                },
-                SheetContent { side: SheetSide::Bottom,
-                    div { class: "library-sheet-content",
-                        if let Some(activity) = activities()
-                            .and_then(|list| { list.into_iter().find(|a| Some(a.id) == selected_id) })
-                        {
-                            ActivityProfile { activity }
-                        }
-                    }
-                }
-            }
+            },
         }
     }
 }
@@ -117,61 +132,38 @@ pub fn LibraryAttributes() -> Element {
 
     rsx! {
         document::Link { rel: "stylesheet", href: asset!("./library.css") }
-        div { class: "library-layout",
-            div { class: "library-browser",
-                nav { class: "library-tab-bar",
-                    Link { to: Route::LibraryActivitiesIndex {}, "Activities" }
-                    Link {
-                        to: Route::LibraryAttributesIndex {},
-                        class: "library-tab-active",
-                        "Attributes"
-                    }
-                }
-                div { class: "library-list",
-                    if let Some(attributes) = attributes() {
-                        for attribute in attributes.iter() {
-                            div {
-                                key: "{attribute.id}",
-                                class: "library-item",
-                                "data-selected": selected_id == Some(attribute.id),
-                                onclick: {
-                                    let id = attribute.id;
-                                    move |_| {
-                                        nav.push(Route::LibraryAttributeProfile {
-                                            id,
-                                        });
-                                    }
-                                },
-                                "{attribute.name}"
-                            }
+        LibraryBrowser {
+            sheet_open: is_detail,
+            on_sheet_close: move |_| {
+                nav.push(Route::LibraryAttributesIndex {});
+            },
+            list: rsx! {
+                if let Some(attributes) = attributes() {
+                    for attribute in attributes.iter() {
+                        div {
+                            key: "{attribute.id}",
+                            class: "library-item",
+                            "data-selected": selected_id == Some(attribute.id),
+                            onclick: {
+                                let id = attribute.id;
+                                move |_| {
+                                    nav.push(Route::LibraryAttributeProfile {
+                                        id,
+                                    });
+                                }
+                            },
+                            "{attribute.name}"
                         }
                     }
                 }
-                div { class: "library-controls",
-                    Input { placeholder: "Search..." }
-                    Button {
-                        Icon { icon: IoAddOutline, width: 16, height: 16 }
-                    }
+            },
+            sheet_content: rsx! {
+                if let Some(attribute) = attributes()
+                    .and_then(|list| { list.into_iter().find(|a| Some(a.id) == selected_id) })
+                {
+                    AttributeProfile { attribute }
                 }
-            }
-            div { class: "library-profile", Outlet::<Route> {} }
-            Sheet {
-                open: is_detail,
-                on_open_change: move |open: bool| {
-                    if !open {
-                        nav.push(Route::LibraryAttributesIndex {});
-                    }
-                },
-                SheetContent { side: SheetSide::Bottom,
-                    div { class: "library-sheet-content",
-                        if let Some(attribute) = attributes()
-                            .and_then(|list| { list.into_iter().find(|a| Some(a.id) == selected_id) })
-                        {
-                            AttributeProfile { attribute }
-                        }
-                    }
-                }
-            }
+            },
         }
     }
 }
@@ -198,7 +190,7 @@ fn ProfileSectionHeader(
 #[component]
 pub fn LibraryActivitiesIndex() -> Element {
     rsx! {
-        div { class: "library-profile-empty", "Select an activity" }
+        div { class: "text-gv-neutral-600 text-[0.9rem] text-center mt-16", "Select an activity" }
     }
 }
 
@@ -221,14 +213,14 @@ fn ActivityProfile(activity: Activity) -> Element {
     let colors_signal = use_signal(heatmap_colors);
 
     rsx! {
-        div { class: "library-profile-content",
+        div { class: "flex flex-col gap-6",
             div {
                 ProfileSectionHeader { title: "Name", on_edit: move |_| {} }
-                div { class: "profile-section-body", "{activity.name.to_string()}" }
+                div { "{activity.name.to_string()}" }
             }
             div {
                 ProfileSectionHeader { title: "Description", on_edit: move |_| {} }
-                div { class: "profile-section-body", "Description for Activity {activity.id}" }
+                div { "Description for Activity {activity.id}" }
             }
             div {
                 ProfileSectionHeader { title: "Recent" }
@@ -242,15 +234,15 @@ fn ActivityProfile(activity: Activity) -> Element {
             }
             div {
                 ProfileSectionHeader { title: "Categories" }
-                div { class: "profile-section-body", "Categories for Activity {activity.id}" }
+                div { "Categories for Activity {activity.id}" }
             }
             div {
                 ProfileSectionHeader { title: "Sub-Categories" }
-                div { class: "profile-section-body", "Sub-categories for Activity {activity.id}" }
+                div { "Sub-categories for Activity {activity.id}" }
             }
             div {
                 ProfileSectionHeader { title: "Attributes" }
-                div { class: "profile-section-body", "Attributes for Activity {activity.id}" }
+                div { "Attributes for Activity {activity.id}" }
             }
         }
     }
@@ -259,7 +251,7 @@ fn ActivityProfile(activity: Activity) -> Element {
 #[component]
 pub fn LibraryAttributesIndex() -> Element {
     rsx! {
-        div { class: "library-profile-empty", "Select an attribute" }
+        div { class: "text-gv-neutral-600 text-[0.9rem] text-center mt-16", "Select an attribute" }
     }
 }
 
@@ -278,18 +270,18 @@ pub fn LibraryAttributeProfile(id: Uuid) -> Element {
 #[component]
 fn AttributeProfile(attribute: Attribute) -> Element {
     rsx! {
-        div { class: "library-profile-content",
+        div { class: "flex flex-col gap-6",
             div {
                 ProfileSectionHeader { title: "Name", on_edit: move |_| {} }
-                div { class: "profile-section-body", "{attribute.name}" }
+                div { "{attribute.name}" }
             }
             div {
                 ProfileSectionHeader { title: "Description", on_edit: move |_| {} }
-                div { class: "profile-section-body", "Description for Attribute {attribute.id}" }
+                div { "Description for Attribute {attribute.id}" }
             }
             div {
                 ProfileSectionHeader { title: "Configuration" }
-                div { class: "profile-section-body", "Configuration for Attribute {attribute.id}" }
+                div { "Configuration for Attribute {attribute.id}" }
             }
         }
     }
