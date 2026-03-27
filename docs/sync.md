@@ -1,4 +1,18 @@
 
+### Overview
+- Server maintains an integer sequence number, assigns to committed transactions.
+- Client commits mutations to sqlite in the same transaction the mutation is applied in.
+    - `run_action` assigns local sequence number and local unix timestamp to mutation.
+- Local mutation log table stores:
+    - Mutation
+    - Deltas, as a JSON column.
+    - Local unix timestamp
+    - Local sequence number
+    - Lifecycle state (pending, sent, acked, rejected, etc).
+- Mutation struct includes `last_seen_server_seq` to capture where in the server timeline the
+mutation was applied.
+
+
 ### Misc
 There will be 20+ database tables. Does each table have it's own change log? Or do you group all the
 changes together into a single log per client?
@@ -66,14 +80,11 @@ sync logs.
 - Manually maintain global seq_num + delta_offset, store in all rows. Why store in rows? We know
 when that row was updated, like an updated_at column. Not sure but it could be useful.
 
-#### Hybrid Logical Clocks for client sequence numbers
-Why hybrid logical clocks?
-If Alice edits Entry A while offline on her computer, then later that day edits Entry A on her
-phone, then the next day goes back online on her computer, we want the server to disregard the
-earlier write from her computer.
-Hybrid logical clocks provide a principled way of supporting this, and they're cheap and easy.
-- TODO: is this actually true?
-
+#### Hybrid Logical Clocks are overkill
+Why?
+HLC's establish causality in general distributed system. The server reconciliation approach assumes
+a single central server - that server can assign committed transactions an integer sequnce number.
+Instead, use `last_seen_server_seq` as a form of optimistic concurrency control.
 
 ### Electric Inspiration
 
