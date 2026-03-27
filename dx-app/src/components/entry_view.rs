@@ -238,7 +238,7 @@ fn EntryContextMenu(id: ReadSignal<Uuid>, children: Element) -> Element {
                                         actor_id: SYSTEM_ACTOR_ID,
                                         entry_id,
                                     }
-                                    .into(),
+                                        .into(),
                                 )
                                 .await
                             {
@@ -248,7 +248,23 @@ fn EntryContextMenu(id: ReadSignal<Uuid>, children: Element) -> Element {
                     },
                     "Delete"
                 }
+                PlatformMenuItem::<()> { value: (), index: 1, on_select: |_| {}, "Rename entry" }
+                // View activity should only be present if
+                PlatformMenuItem::<()> { value: (), index: 1, on_select: |_| {}, "View activity" }
             },
         }
     }
+}
+
+// Idea: enum for each menu action. The context menu filters out ones that don't apply given the
+// current state. Implement handlers here for clarity (basically just attach action handlers, maybe
+// with some partial application).
+#[allow(unused)]
+enum EntryMenuAction {
+    DeleteScalar,
+    DeleteRecursive,
+    DeleteUnbox,
+    Rename,
+    ViewActivity,
+    ChangeActivity,
 }
