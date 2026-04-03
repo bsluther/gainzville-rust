@@ -16,22 +16,26 @@ The high-level architecture is sound. The codebase is well-positioned:
 
 ---
 
-## Gap 1: The reactive model exists but without a cache layer
+## Gap 1: Cache strategy and subscription model — resolved direction
 
-The doc describes a future `QueryCache` + crossbeam channel + callback. What already exists in `SqliteClient`:
+The doc describes a `QueryCache` without specifying how subscriptions are registered or what the cache holds. The agreed direction:
 
-- `broadcast::Sender<()>` fires on every mutation
-- `stream_activities()`, `stream_entries()`, `stream_entries_rooted_in_time_interval()`, etc. re-query SQLite on each broadcast
+**In-memory AppState as the cache backing store.** Load all entries, activities, attributes, and values into memory at startup; keep in sync by applying deltas in-memory alongside each SQLite write. For a fitness app this is fine — even heavy users won't approach memory limits. This gives all read operations access to the full dataset without DB round-trips.
 
-This is the reactive model without an in-memory cache — every change triggers a fresh DB query per subscription.
+**`Query` enum in `core` as reified read intent** — parallel to `Action` for writes. Each read use case becomes a named `Query` variant carrying its parameters and `actor_id`. The Reader trait methods become internal implementations of query variants rather than the public API. Benefits beyond the cache:
+- Authorization: queries carry actor context, the query executor enforces read permissions the same way mutators enforce write permissions
+- Simulation/testing: sequences of Actions and Queries become the unit of deterministic test
+- FFI: Swift submits a `Query` value to subscribe; core stores it, re-runs it on change, caches the result
 
-**Two design paths for the FFI layer:**
-1. Bridge the existing streams to the callback/drain model (simpler — UniFFI can't expose Rust streams directly so translation is needed anyway)
-2. Build a `QueryCache` on top of `SqliteClient`, replacing per-subscription re-queries with shared in-memory cache
+**Subscription model (naive first, improvable):**
+```
+Swift registers Query → core stores (Query, result_slot)
+Any mutation fires → core re-runs all registered queries → notifies Swift
+Swift reads result_slot synchronously
+```
+The naive "re-run everything on any change" is exactly what the current `stream_*` methods do — same semantics, just in-memory instead of a DB query. Selective invalidation (re-run only queries affected by a given delta's model type) is an optimization added later without changing the API.
 
-Path 1 is the right starting point. Path 2 is the long-term approach for performance. The doc should treat this as a staged plan.
-
-**Natural first scope:** `entries_rooted_in_time_interval(from, to)` already exists as both a Reader method and a SqliteClient stream. This is the first cache scope to implement.
+**What changes in the existing code:** `SqliteClient`'s `stream_*` methods and `broadcast::Sender<()>` remain valid for the Dioxus app. The FFI layer builds the `AppState` + `Query` model on top of `SqliteClient`, using its mutation path and broadcast as the trigger.
 
 ---
 
@@ -120,9 +124,9 @@ The doc should state explicitly: native Swift iOS is the **replacement** for Dio
 
 | # | Question | Notes |
 |---|---|---|
-| 1 | **Cache strategy** | Bridge existing streams (simpler) vs. build QueryCache (more scalable)? Treat as staged. |
-| 2 | **entry_pool design** | Document the Forest + entry_pool split: structural traversal vs. join resolution |
-| 3 | **`EntryJoin` FFI representation** | Flat record with inlined attributes, or separate fetch? |
+| 1 | **`Query` enum design** | What are the initial variants? Maps directly to current Reader methods. |
+| 2 | **AppState / entry_pool design** | Document the AppState → Forest + entry_pool split: structural traversal vs. join resolution |
+| 3 | **`EntryJoin` FFI representation** | Flat record with inlined attributes, or separate fetch? Affects entry_pool design. |
 | 4 | **FFI actor context** | Embed `actor_id` in `GainzvilleCore` at init? |
 | 5 | **`MoveEntry` FFI API** | `(after: Uuid?, before: Uuid?)` — confirm this is the interface |
 | 6 | **`get_successor` definition** | Next sibling by frac_index? Nail down before implementing |
