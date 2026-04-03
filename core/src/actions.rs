@@ -7,9 +7,6 @@ use crate::models::{
     user::User,
 };
 
-// TODO: consider adding more structure to the action.
-// Action { actor_id, data: { ... }}
-
 #[derive(Debug, Clone)]
 pub enum Action {
     CreateUser(CreateUser),
