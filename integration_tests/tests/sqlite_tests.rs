@@ -8,9 +8,10 @@ use gv_core::{
         },
         entry::{Entry, Position, Temporal},
     },
-    reader::Reader,
+    queries::{FindAttributeById, FindDescendants, FindValueByKey},
+    query_executor::QueryExecutor,
 };
-use gv_sqlite::{client::SqliteClient, reader::SqliteReader};
+use gv_sqlite::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -56,10 +57,12 @@ async fn test_find_descendants(pool: SqlitePool) {
 
     let (a_descs, b_descs) = {
         let mut connection = sqlite_client.pool.acquire().await.unwrap();
-        let a_descs = SqliteReader::find_descendants(&mut *connection, a.id)
+        let a_descs = SqliteQueryExecutor::new(&mut *connection)
+            .execute(FindDescendants { entry_id: a.id })
             .await
             .unwrap();
-        let b_descs = SqliteReader::find_descendants(&mut *connection, b.id)
+        let b_descs = SqliteQueryExecutor::new(&mut *connection)
+            .execute(FindDescendants { entry_id: b.id })
             .await
             .unwrap();
         (a_descs, b_descs)
@@ -96,7 +99,8 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
     // Read attribute back.
     let read_attr = {
         let mut connection = sqlite_client.pool.acquire().await.unwrap();
-        SqliteReader::find_attribute_by_id(&mut *connection, attribute.id)
+        SqliteQueryExecutor::new(&mut *connection)
+            .execute(FindAttributeById { attribute_id: attribute.id })
             .await
             .unwrap()
             .expect("attribute should exist")
@@ -139,7 +143,8 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
     // Read value back.
     let read_value = {
         let mut connection = sqlite_client.pool.acquire().await.unwrap();
-        SqliteReader::find_value_by_key(&mut *connection, entry.id, attribute.id)
+        SqliteQueryExecutor::new(&mut *connection)
+            .execute(FindValueByKey { entry_id: entry.id, attribute_id: attribute.id })
             .await
             .unwrap()
             .expect("value should exist")

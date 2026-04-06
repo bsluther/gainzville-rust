@@ -68,9 +68,9 @@ impl PostgresServer {
 
 pub mod tests {
     pub use super::*;
-    pub use crate::reader::PostgresReader;
+    pub use crate::postgres_executor::PostgresQueryExecutor;
     pub use gv_core::{SYSTEM_ACTOR_ID, actions::CreateActivity};
-    pub use gv_core::{models::activity::Activity, reader::Reader};
+    pub use gv_core::{models::activity::Activity, queries::FindActivityById, query_executor::QueryExecutor};
     pub use uuid::Uuid;
 
     #[sqlx::test(migrations = "./migrations")]
@@ -92,7 +92,8 @@ pub mod tests {
 
         let queried_activity = {
             let mut connection = postgres_server.pool.acquire().await.unwrap();
-            PostgresReader::find_activity_by_id(&mut *connection, id)
+            PostgresQueryExecutor::new(&mut *connection)
+                .execute(FindActivityById { id })
                 .await
                 .unwrap()
         };

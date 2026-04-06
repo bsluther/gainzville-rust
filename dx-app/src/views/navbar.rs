@@ -5,13 +5,14 @@ use crate::{
 use dioxus::document::eval;
 use dioxus::prelude::*;
 use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
-use gv_core::reader::Reader;
 use gv_core::{
     actions::{CreateEntry, CreateValue},
     models::entry::Entry,
+    queries::{AllActivities, AllAttributes, AllEntries},
+    query_executor::QueryExecutor,
     SYSTEM_ACTOR_ID,
 };
-use gv_sqlite::{client::SqliteClient, reader::SqliteReader};
+use gv_sqlite::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
 
 fn all_commands() -> Vec<Command> {
     vec![
@@ -107,8 +108,8 @@ pub fn Navbar() -> Element {
             spawn(async move {
                 let client = consume_context::<SqliteClient>();
                 let mut conn = client.pool.acquire().await.unwrap();
-                let activities = SqliteReader::all_activities(&mut conn).await.unwrap();
-                let entries = SqliteReader::all_entries(&mut conn).await.unwrap();
+                let activities = SqliteQueryExecutor::new(&mut *conn).execute(AllActivities {}).await.unwrap();
+                let entries = SqliteQueryExecutor::new(&mut *conn).execute(AllEntries {}).await.unwrap();
                 drop(conn);
                 let mut rng = rand::rng();
                 let context = SimulationContext::default();
@@ -125,8 +126,8 @@ pub fn Navbar() -> Element {
             spawn(async move {
                 let client = consume_context::<SqliteClient>();
                 let mut conn = client.pool.acquire().await.unwrap();
-                let entries = SqliteReader::all_entries(&mut conn).await.unwrap();
-                let attrs = SqliteReader::all_attributes(&mut conn).await.unwrap();
+                let entries = SqliteQueryExecutor::new(&mut *conn).execute(AllEntries {}).await.unwrap();
+                let attrs = SqliteQueryExecutor::new(&mut *conn).execute(AllAttributes {}).await.unwrap();
                 drop(conn);
                 let mut rng = rand::rng();
                 let context = SimulationContext::default();

@@ -6,9 +6,10 @@ use gv_core::{
         activity::Activity,
         entry::{Entry, Position, Temporal},
     },
-    reader::Reader,
+    queries::{AllActorIds, AllActivities, AllAttributes, AllEntries},
+    query_executor::QueryExecutor,
 };
-use gv_postgres::{reader::PostgresReader, server::PostgresServer};
+use gv_postgres::{postgres_executor::PostgresQueryExecutor, server::PostgresServer};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use sqlx::PgPool;
@@ -26,7 +27,7 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
     let mut rng = rand::rng();
     let context = SimulationContext::default();
 
-    let actor_ids = PostgresReader::all_actor_ids(&mut *tx).await.unwrap();
+    let actor_ids = PostgresQueryExecutor::new(&mut *tx).execute(AllActorIds {}).await.unwrap();
     let actor_id = actor_ids[0];
 
     let mut entry_a = Entry::arbitrary(&mut rng, &context);
@@ -96,7 +97,7 @@ async fn test_arbitrary_create_entry(pool: PgPool) {
     let mut rng = rand::rng();
     let context = SimulationContext::default();
 
-    let actor_ids = PostgresReader::all_actor_ids(&mut *tx).await.unwrap();
+    let actor_ids = PostgresQueryExecutor::new(&mut *tx).execute(AllActorIds {}).await.unwrap();
     let activities = (0..100)
         .map(|_| Activity::arbitrary_from(&mut rng, &context, &actor_ids))
         .collect::<Vec<_>>();
@@ -133,16 +134,11 @@ async fn test_arbitrary_actions(pool: PgPool) {
     for _ in 0..1_000 {
         let (actor_ids, activities, entries, attributes) = {
             let mut connection = server.pool.acquire().await.unwrap();
-            let actor_ids = PostgresReader::all_actor_ids(&mut *connection)
-                .await
-                .unwrap();
-            let activities = PostgresReader::all_activities(&mut *connection)
-                .await
-                .unwrap();
-            let entries = PostgresReader::all_entries(&mut *connection).await.unwrap();
-            let attributes = PostgresReader::all_attributes(&mut *connection)
-                .await
-                .unwrap();
+            let mut executor = PostgresQueryExecutor::new(&mut *connection);
+            let actor_ids = executor.execute(AllActorIds {}).await.unwrap();
+            let activities = executor.execute(AllActivities {}).await.unwrap();
+            let entries = executor.execute(AllEntries {}).await.unwrap();
+            let attributes = executor.execute(AllAttributes {}).await.unwrap();
             (actor_ids, activities, entries, attributes)
         };
         let action = Action::arbitrary_from(

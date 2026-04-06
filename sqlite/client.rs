@@ -4,7 +4,11 @@ use gv_core::{
     error::Result,
     models::{activity::Activity, attribute::Attribute, entry::Entry, entry_join::EntryJoin},
     mutators,
-    reader::Reader,
+    queries::{
+        AllActivities, AllAttributes, AllEntries, EntriesRootedInTimeInterval, FindActivityById,
+        FindEntryJoinById,
+    },
+    query_executor::QueryExecutor,
 };
 
 use gv_core::error::DomainError;
@@ -17,7 +21,7 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use crate::{apply::SqliteApply, reader::SqliteReader, sqlite_executor::SqliteQueryExecutor};
+use crate::{apply::SqliteApply, sqlite_executor::SqliteQueryExecutor};
 
 #[derive(Debug, Clone)]
 pub struct SqliteClient {
@@ -128,7 +132,7 @@ impl SqliteClient {
         async_stream::stream! {
             let initial = async {
                 let mut connection = pool.acquire().await?;
-                SqliteReader::all_activities(&mut *connection).await
+                SqliteQueryExecutor::new(&mut *connection).execute(AllActivities {}).await
             }
             .await;
             yield initial;
@@ -136,7 +140,7 @@ impl SqliteClient {
             while let Ok(()) = change_rx.recv().await {
                 let next = async {
                     let mut connection = pool.acquire().await?;
-                    SqliteReader::all_activities(&mut *connection).await
+                    SqliteQueryExecutor::new(&mut *connection).execute(AllActivities {}).await
                 }
                 .await;
                 yield next;
@@ -151,7 +155,7 @@ impl SqliteClient {
         async_stream::stream! {
             let initial = async {
                 let mut connection = pool.acquire().await?;
-                SqliteReader::all_attributes(&mut *connection).await
+                SqliteQueryExecutor::new(&mut *connection).execute(AllAttributes {}).await
             }
             .await;
             yield initial;
@@ -159,7 +163,7 @@ impl SqliteClient {
             while let Ok(()) = change_rx.recv().await {
                 let next = async {
                     let mut connection = pool.acquire().await?;
-                    SqliteReader::all_attributes(&mut *connection).await
+                    SqliteQueryExecutor::new(&mut *connection).execute(AllAttributes {}).await
                 }
                 .await;
                 yield next;
@@ -174,7 +178,7 @@ impl SqliteClient {
         async_stream::stream! {
             let initial = async {
                 let mut connection = pool.acquire().await?;
-                SqliteReader::all_entries(&mut *connection).await
+                SqliteQueryExecutor::new(&mut *connection).execute(AllEntries {}).await
             }
             .await;
             yield initial;
@@ -182,7 +186,7 @@ impl SqliteClient {
             while let Ok(()) = change_rx.recv().await {
                 let next = async {
                     let mut connection = pool.acquire().await?;
-                    SqliteReader::all_entries(&mut *connection).await
+                    SqliteQueryExecutor::new(&mut *connection).execute(AllEntries {}).await
                 }
                 .await;
                 yield next;
@@ -201,7 +205,7 @@ impl SqliteClient {
         async_stream::stream! {
             let initial = async {
                 let mut connection = pool.acquire().await?;
-                SqliteReader::entries_rooted_in_time_interval(&mut *connection, min, max).await
+                SqliteQueryExecutor::new(&mut *connection).execute(EntriesRootedInTimeInterval { from: min, to: max }).await
             }
             .await;
             yield initial;
@@ -209,7 +213,7 @@ impl SqliteClient {
             while let Ok(()) = change_rx.recv().await {
                 let next = async {
                     let mut connection = pool.acquire().await?;
-                    SqliteReader::entries_rooted_in_time_interval(&mut *connection, min, max).await
+                    SqliteQueryExecutor::new(&mut *connection).execute(EntriesRootedInTimeInterval { from: min, to: max }).await
                 }
                 .await;
                 yield next;
@@ -227,7 +231,7 @@ impl SqliteClient {
         async_stream::stream! {
             let initial = async {
                 let mut connection = pool.acquire().await?;
-                SqliteReader::find_entry_join_by_id(&mut *connection, id)
+                SqliteQueryExecutor::new(&mut *connection).execute(FindEntryJoinById { entry_id: id })
                     .await
                     .and_then(|opt| opt.ok_or_else(|| DomainError::Other(format!("Entry not found: {}", id))))
             }
@@ -237,7 +241,7 @@ impl SqliteClient {
             while let Ok(()) = change_rx.recv().await {
                 let next = async {
                     let mut connection = pool.acquire().await?;
-                    SqliteReader::find_entry_join_by_id(&mut *connection, id)
+                    SqliteQueryExecutor::new(&mut *connection).execute(FindEntryJoinById { entry_id: id })
                         .await
                         .and_then(|opt| opt.ok_or_else(|| DomainError::Other(format!("Entry not found: {}", id))))
                 }
@@ -272,7 +276,8 @@ pub mod tests {
 
         let queried_activity = {
             let mut connection = sqlite_client.pool.acquire().await.unwrap();
-            SqliteReader::find_activity_by_id(&mut *connection, id)
+            SqliteQueryExecutor::new(&mut *connection)
+                .execute(FindActivityById { id })
                 .await
                 .unwrap()
         };

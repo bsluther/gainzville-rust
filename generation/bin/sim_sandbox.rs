@@ -4,9 +4,10 @@ use generation::{ArbitraryFrom, SimulationContext};
 use gv_core::{
     actions::{CreateActivity, CreateEntry},
     models::{activity::Activity, entry::Entry},
-    reader::Reader,
+    queries::AllActorIds,
+    query_executor::QueryExecutor,
 };
-use gv_postgres::{reader::PostgresReader, server::PostgresServer};
+use gv_postgres::{postgres_executor::PostgresQueryExecutor, server::PostgresServer};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
@@ -23,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = SimulationContext::default();
     let actor_ids = {
         let mut connection = server.pool.acquire().await?;
-        PostgresReader::all_actor_ids(&mut *connection).await?
+        PostgresQueryExecutor::new(&mut *connection).execute(AllActorIds {}).await?
     };
 
     let activities = (0..100)

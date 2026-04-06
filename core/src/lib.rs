@@ -8,6 +8,5 @@ pub mod forest;
 pub mod models;
 pub mod mutators;
 pub mod query_executor;
-pub mod reader;
 pub mod std_lib;
 pub mod validation;
