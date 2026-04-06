@@ -1,16 +1,8 @@
-// TODO: encode return types. Each struct's execute method returns a concrete type, but there is
-// no shared abstraction binding a Query variant to its output. A trait like:
-//
-//   trait ExecutableQuery<DB, R> { type Output; async fn execute(...) -> Result<Self::Output>; }
-//
-// would enable generic run_query dispatch without a QueryResult enum. The right shape depends on
-// subscription model needs and whether Output must be object-safe.
-
 use sqlx::types::chrono::{DateTime, Utc};
+use std::fmt::Debug;
 use uuid::Uuid;
 
 use crate::{
-    error::Result,
     models::{
         activity::Activity,
         attribute::{Attribute, Value},
@@ -19,12 +11,35 @@ use crate::{
         entry_join::EntryJoin,
         user::User,
     },
-    reader::Reader,
     validation::{Email, Username},
 };
 
+mod sealed {
+    pub trait Sealed {}
+}
+
+pub trait Query: sealed::Sealed + Clone + Debug + Send + 'static {
+    type Response: Clone + Debug + Send + 'static;
+}
+
+macro_rules! define_query {
+    (
+        $(#[$meta:meta])*
+        $vis:vis struct $name:ident $body:tt => $response:ty
+    ) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone)]
+        $vis struct $name $body
+
+        impl sealed::Sealed for $name {}
+        impl Query for $name {
+            type Response = $response;
+        }
+    };
+}
+
 #[derive(Debug, Clone)]
-pub enum Query {
+pub enum AnyQuery {
     // Auth
     IsEmailRegistered(IsEmailRegistered),
     FindUserById(FindUserById),
@@ -51,415 +66,211 @@ pub enum Query {
     FindAttributePairsForEntry(FindAttributePairsForEntry),
 }
 
-impl From<IsEmailRegistered> for Query {
+impl From<IsEmailRegistered> for AnyQuery {
     fn from(value: IsEmailRegistered) -> Self {
-        Query::IsEmailRegistered(value)
+        AnyQuery::IsEmailRegistered(value)
     }
 }
 
-impl From<FindUserById> for Query {
+impl From<FindUserById> for AnyQuery {
     fn from(value: FindUserById) -> Self {
-        Query::FindUserById(value)
+        AnyQuery::FindUserById(value)
     }
 }
 
-impl From<FindUserByUsername> for Query {
+impl From<FindUserByUsername> for AnyQuery {
     fn from(value: FindUserByUsername) -> Self {
-        Query::FindUserByUsername(value)
+        AnyQuery::FindUserByUsername(value)
     }
 }
 
-impl From<AllActorIds> for Query {
+impl From<AllActorIds> for AnyQuery {
     fn from(value: AllActorIds) -> Self {
-        Query::AllActorIds(value)
+        AnyQuery::AllActorIds(value)
     }
 }
 
-impl From<FindActivityById> for Query {
+impl From<FindActivityById> for AnyQuery {
     fn from(value: FindActivityById) -> Self {
-        Query::FindActivityById(value)
+        AnyQuery::FindActivityById(value)
     }
 }
 
-impl From<AllActivities> for Query {
+impl From<AllActivities> for AnyQuery {
     fn from(value: AllActivities) -> Self {
-        Query::AllActivities(value)
+        AnyQuery::AllActivities(value)
     }
 }
 
-impl From<AllEntries> for Query {
+impl From<AllEntries> for AnyQuery {
     fn from(value: AllEntries) -> Self {
-        Query::AllEntries(value)
+        AnyQuery::AllEntries(value)
     }
 }
 
-impl From<EntriesRootedInTimeInterval> for Query {
+impl From<EntriesRootedInTimeInterval> for AnyQuery {
     fn from(value: EntriesRootedInTimeInterval) -> Self {
-        Query::EntriesRootedInTimeInterval(value)
+        AnyQuery::EntriesRootedInTimeInterval(value)
     }
 }
 
-impl From<FindAncestors> for Query {
+impl From<FindAncestors> for AnyQuery {
     fn from(value: FindAncestors) -> Self {
-        Query::FindAncestors(value)
+        AnyQuery::FindAncestors(value)
     }
 }
 
-impl From<FindEntryById> for Query {
+impl From<FindEntryById> for AnyQuery {
     fn from(value: FindEntryById) -> Self {
-        Query::FindEntryById(value)
+        AnyQuery::FindEntryById(value)
     }
 }
 
-impl From<FindEntryJoinById> for Query {
+impl From<FindEntryJoinById> for AnyQuery {
     fn from(value: FindEntryJoinById) -> Self {
-        Query::FindEntryJoinById(value)
+        AnyQuery::FindEntryJoinById(value)
     }
 }
 
-impl From<FindDescendants> for Query {
+impl From<FindDescendants> for AnyQuery {
     fn from(value: FindDescendants) -> Self {
-        Query::FindDescendants(value)
+        AnyQuery::FindDescendants(value)
     }
 }
 
-impl From<FindAttributeById> for Query {
+impl From<FindAttributeById> for AnyQuery {
     fn from(value: FindAttributeById) -> Self {
-        Query::FindAttributeById(value)
+        AnyQuery::FindAttributeById(value)
     }
 }
 
-impl From<AllAttributes> for Query {
+impl From<AllAttributes> for AnyQuery {
     fn from(value: AllAttributes) -> Self {
-        Query::AllAttributes(value)
+        AnyQuery::AllAttributes(value)
     }
 }
 
-impl From<FindAttributesByOwner> for Query {
+impl From<FindAttributesByOwner> for AnyQuery {
     fn from(value: FindAttributesByOwner) -> Self {
-        Query::FindAttributesByOwner(value)
+        AnyQuery::FindAttributesByOwner(value)
     }
 }
 
-impl From<FindValueByKey> for Query {
+impl From<FindValueByKey> for AnyQuery {
     fn from(value: FindValueByKey) -> Self {
-        Query::FindValueByKey(value)
+        AnyQuery::FindValueByKey(value)
     }
 }
 
-impl From<FindValuesForEntry> for Query {
+impl From<FindValuesForEntry> for AnyQuery {
     fn from(value: FindValuesForEntry) -> Self {
-        Query::FindValuesForEntry(value)
+        AnyQuery::FindValuesForEntry(value)
     }
 }
 
-impl From<FindValuesForEntries> for Query {
+impl From<FindValuesForEntries> for AnyQuery {
     fn from(value: FindValuesForEntries) -> Self {
-        Query::FindValuesForEntries(value)
+        AnyQuery::FindValuesForEntries(value)
     }
 }
 
-impl From<FindAttributePairsForEntry> for Query {
+impl From<FindAttributePairsForEntry> for AnyQuery {
     fn from(value: FindAttributePairsForEntry) -> Self {
-        Query::FindAttributePairsForEntry(value)
+        AnyQuery::FindAttributePairsForEntry(value)
     }
 }
 
 // --- Auth ---
 
-#[derive(Debug, Clone)]
-pub struct IsEmailRegistered {
-    pub email: Email,
+define_query! {
+    pub struct IsEmailRegistered { pub email: Email } => bool
 }
 
-impl IsEmailRegistered {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<bool>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::is_email_registered(connection, self.email.clone()).await
-    }
+define_query! {
+    pub struct FindUserById { pub actor_id: Uuid } => Option<User>
 }
 
-/// `actor_id` here is the lookup key (the actor's primary key), not an auth context.
-#[derive(Debug, Clone)]
-pub struct FindUserById {
-    pub actor_id: Uuid,
+define_query! {
+    pub struct FindUserByUsername { pub username: Username } => Option<User>
 }
 
-impl FindUserById {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Option<User>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_user_by_id(connection, self.actor_id).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct FindUserByUsername {
-    pub username: Username,
-}
-
-impl FindUserByUsername {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Option<User>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_user_by_username(connection, self.username.clone()).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct AllActorIds;
-
-impl AllActorIds {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Vec<Uuid>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::all_actor_ids(connection).await
-    }
+define_query! {
+    pub struct AllActorIds; => Vec<Uuid>
 }
 
 // --- Activity ---
 
-#[derive(Debug, Clone)]
-pub struct FindActivityById {
-    pub id: Uuid,
+define_query! {
+    pub struct FindActivityById { pub id: Uuid } => Option<Activity>
 }
 
-impl FindActivityById {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Option<Activity>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_activity_by_id(connection, self.id).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct AllActivities;
-
-impl AllActivities {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Vec<Activity>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::all_activities(connection).await
-    }
+define_query! {
+    pub struct AllActivities; => Vec<Activity>
 }
 
 // --- Entry ---
 
-#[derive(Debug, Clone)]
-pub struct AllEntries;
-
-impl AllEntries {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Vec<Entry>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::all_entries(connection).await
-    }
+define_query! {
+    pub struct AllEntries; => Vec<Entry>
 }
 
-#[derive(Debug, Clone)]
-pub struct EntriesRootedInTimeInterval {
-    pub from: DateTime<Utc>,
-    pub to: DateTime<Utc>,
+define_query! {
+    pub struct EntriesRootedInTimeInterval {
+        pub from: DateTime<Utc>,
+        pub to: DateTime<Utc>,
+    } => Vec<Entry>
 }
 
-impl EntriesRootedInTimeInterval {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Vec<Entry>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::entries_rooted_in_time_interval(connection, self.from, self.to).await
-    }
+define_query! {
+    pub struct FindAncestors { pub entry_id: Uuid } => Vec<Uuid>
 }
 
-#[derive(Debug, Clone)]
-pub struct FindAncestors {
-    pub entry_id: Uuid,
+define_query! {
+    pub struct FindEntryById { pub entry_id: Uuid } => Option<Entry>
 }
 
-impl FindAncestors {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Vec<Uuid>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_ancestors(connection, self.entry_id).await
-    }
+define_query! {
+    pub struct FindEntryJoinById { pub entry_id: Uuid } => Option<EntryJoin>
 }
 
-#[derive(Debug, Clone)]
-pub struct FindEntryById {
-    pub entry_id: Uuid,
-}
-
-impl FindEntryById {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Option<Entry>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_entry_by_id(connection, self.entry_id).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct FindEntryJoinById {
-    pub entry_id: Uuid,
-}
-
-impl FindEntryJoinById {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Option<EntryJoin>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_entry_join_by_id(connection, self.entry_id).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct FindDescendants {
-    pub entry_id: Uuid,
-}
-
-impl FindDescendants {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Vec<Entry>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_descendants(connection, self.entry_id).await
-    }
+define_query! {
+    pub struct FindDescendants { pub entry_id: Uuid } => Vec<Entry>
 }
 
 // --- Attribute ---
 
-#[derive(Debug, Clone)]
-pub struct FindAttributeById {
-    pub attribute_id: Uuid,
+define_query! {
+    pub struct FindAttributeById { pub attribute_id: Uuid } => Option<Attribute>
 }
 
-impl FindAttributeById {
-    pub async fn execute<DB, R>(
-        &self,
-        connection: &mut DB::Connection,
-    ) -> Result<Option<Attribute>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_attribute_by_id(connection, self.attribute_id).await
-    }
+define_query! {
+    pub struct AllAttributes; => Vec<Attribute>
 }
 
-#[derive(Debug, Clone)]
-pub struct AllAttributes;
-
-impl AllAttributes {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Vec<Attribute>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::all_attributes(connection).await
-    }
-}
-
-/// `owner_id` is the query dimension: returns all attributes owned by this actor.
-#[derive(Debug, Clone)]
-pub struct FindAttributesByOwner {
-    pub owner_id: Uuid,
-}
-
-impl FindAttributesByOwner {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Vec<Attribute>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_attributes_by_owner(connection, self.owner_id).await
-    }
+define_query! {
+    /// `owner_id` is the query dimension: returns all attributes owned by this actor.
+    pub struct FindAttributesByOwner { pub owner_id: Uuid } => Vec<Attribute>
 }
 
 // --- Value ---
 
-#[derive(Debug, Clone)]
-pub struct FindValueByKey {
-    pub entry_id: Uuid,
-    pub attribute_id: Uuid,
+define_query! {
+    pub struct FindValueByKey {
+        pub entry_id: Uuid,
+        pub attribute_id: Uuid,
+    } => Option<Value>
 }
 
-impl FindValueByKey {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Option<Value>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_value_by_key(connection, self.entry_id, self.attribute_id).await
-    }
+define_query! {
+    pub struct FindValuesForEntry { pub entry_id: Uuid } => Vec<Value>
 }
 
-#[derive(Debug, Clone)]
-pub struct FindValuesForEntry {
-    pub entry_id: Uuid,
+define_query! {
+    /// `entry_ids` is owned (not borrowed) so that this struct can implement `Clone` and be stored
+    /// in the `AnyQuery` enum.
+    pub struct FindValuesForEntries { pub entry_ids: Vec<Uuid> } => Vec<Value>
 }
 
-impl FindValuesForEntry {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Vec<Value>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_values_for_entry(connection, self.entry_id).await
-    }
-}
-
-/// `entry_ids` is owned (not borrowed) so that this struct can implement `Clone` and be stored
-/// in the `Query` enum.
-#[derive(Debug, Clone)]
-pub struct FindValuesForEntries {
-    pub entry_ids: Vec<Uuid>,
-}
-
-impl FindValuesForEntries {
-    pub async fn execute<DB, R>(&self, connection: &mut DB::Connection) -> Result<Vec<Value>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_values_for_entries(connection, &self.entry_ids).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct FindAttributePairsForEntry {
-    pub entry_id: Uuid,
-}
-
-impl FindAttributePairsForEntry {
-    pub async fn execute<DB, R>(
-        &self,
-        connection: &mut DB::Connection,
-    ) -> Result<Vec<AttributePair>>
-    where
-        DB: sqlx::Database,
-        R: Reader<DB>,
-    {
-        R::find_attribute_pairs_for_entry(connection, self.entry_id).await
-    }
+define_query! {
+    pub struct FindAttributePairsForEntry { pub entry_id: Uuid } => Vec<AttributePair>
 }
