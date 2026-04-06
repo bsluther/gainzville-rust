@@ -1,12 +1,13 @@
 pub mod actions;
-pub mod queries;
 pub mod constants;
+pub mod queries;
 pub use constants::SYSTEM_ACTOR_ID;
 pub mod delta;
 pub mod error;
 pub mod forest;
 pub mod models;
 pub mod mutators;
+pub mod query_executor;
 pub mod reader;
 pub mod std_lib;
 pub mod validation;
