@@ -328,6 +328,30 @@ The old `Reader<DB>` trait had one method per query (20+ methods). The per-query
 
 ### 4. `QueryExecutor<Q>` generic over Q (vs. a single-method generic trait)
 
+This design is inspired by [Tower's `Service` trait](https://tokio.rs/blog/2021-05-14-inventing-the-service-trait).
+Tower parameterizes over the request type — `impl Service<HttpRequest> { type Response = HttpResponse }`
+— so the compiler knows concretely what response type a given service produces for a given request.
+We want the same property inside `core`: `FindUserById` should statically return `Option<User>`.
+
+The alternative would be to merge the executor and query into a single trait:
+
+```rust
+#[allow(async_fn_in_trait)]
+pub trait ExecutableQuery<Request> {
+    type Response;
+    async fn execute(req: Request) -> Result<Self::Response>;
+}
+```
+
+But `core` cannot implement this — `core` defines the request-to-response connection, but doesn't
+know how to execute. Moving the impl to the DB crate breaks the connection: consumers lose the
+compile-time guarantee that `FindUserById` returns `Option<User>` unless they're already coupled
+to a specific executor.
+
+The solution is the split:
+- `Query` (in `core`) — declares the request→response association once, sealed so only `core` defines it
+- `QueryExecutor<Q>` (in `core`) — the execution interface, generic over Q so each DB crate can impl it per query
+
 A single-method approach — `trait QueryExecutor { async fn execute<Q: Query>(&mut self, Q) }` —
 cannot narrow the bound in a concrete impl. You cannot write
 `impl QueryExecutor for SqliteQueryExecutor { async fn execute<Q: Query + SqliteSpecific>(...)` —
