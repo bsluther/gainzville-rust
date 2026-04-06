@@ -1,280 +1,46 @@
-Primary docs on the Gainzville project are in `/docs/*`.
-- [Domain model](./docs/model.md), this is the primary high-level description of the domain model.
-- [Domain model diagram](./docs/2025-11-23-core-model.png)
-- [Permissions](./docs/permissions.md)
-- [Sync](./docs/sync.md)
-- [Features](./docs/features.md)
-- [Generation](./docs/generation.md)
-- [Properties](./docs/properties.md)
-- [Attributes/Values design decisions](./docs/attributes-design.md)
-- Documentation on UX and the Dioxus app is in `./docs/ui/*`.
-  - [UI Architecture decisions](./docs/ui/architecture.md) — platform targeting strategy, rendering approach, styling
-  - [UI Design decisions](./docs/ui/design.md) — navigation patterns, interaction models
-  - [Adaptive rendering decision record](./docs/ui/adaptive-rendering-decisions.md) — historical rationale for the above
+# Gainzville — Project Index
 
-Additional Dioxus information can be found in the following files.
-`/dx-app/AGENTS.md`
-`/dx-app/docs/00-OVERVIEW.md`
-`/dx-app/docs/01-CORE.md`
-`/dx-app/docs/02-CLI.md`
-`/dx-app/docs/03-RSX.md`
-`/dx-app/docs/04-SIGNALS.md`
-`/dx-app/docs/05-FULLSTACK.md`
-`/dx-app/docs/06-RENDERERS.md`
-`/dx-app/docs/07-HOTRELOAD.md`
-`/dx-app/docs/08-ASSETS.md`
-`/dx-app/docs/09-ROUTER.md`
-`/dx-app/docs/10-WASM-SPLIT.md`
+## Crates
 
-# Project Overview
+| Crate | Role |
+|-------|------|
+| `core` | Domain model, actions, mutators, queries, delta/mutation types. No sqlx types in public API. |
+| `sqlite` | SQLite client: `SqliteQueryExecutor`, `SqliteApply`, `SqliteClient`. Offline-first target. |
+| `postgres` | Postgres server: `PostgresQueryExecutor`, `PgApply`, `PostgresServer`. HTTP API + sync target. |
+| `generation` | Arbitrary data generation traits for deterministic simulation and integration tests. |
+| `dx-app` | Cross-platform Dioxus app (desktop, mobile, web). |
+| `ivm` | Experimental DBSP/incremental view maintenance for sync. |
 
-`./core`
-Contains the domain model and core business logic implemented via database-agnostic reads
-via the `Reader` trait and writes via `Actions`. Writes to the database are reified as `Mutation`s
-which contain the action (user intent), the actor, and the insert/update/delete deltas.
+## Docs
 
-`./generation`
-Traits for generating arbitrary test data. Intended to be used for deterministic simulation testing,
-eventually, but very helpful for integration and unit tests.
+| Doc | When to consult |
+|-----|----------------|
+| [Domain model](./docs/model.md) | Understanding entities (Entry, Activity, Attribute, Value) and the ordered-forest structure |
+| [Actions and queries](./docs/actions_and_queries.md) | Write path (Action→Mutator→Mutation→Apply) and read path (Query→QueryExecutor→DB) — the core I/O architecture |
+| [Permissions](./docs/permissions.md) | Authorization rules and actor/user model |
+| [Sync](./docs/sync.md) | Offline-first sync design: rebasing, HLC, global sequence numbers |
+| [Features](./docs/features.md) | Product feature roadmap |
+| [Generation](./docs/generation.md) | How arbitrary test data generation works |
+| [Properties](./docs/properties.md) | Property-based testing strategy |
+| [Attributes/Values design](./docs/attributes-design.md) | Typed attribute system and serde gotchas (`arbitrary_precision`) |
+| [UI Architecture](./docs/ui/architecture.md) | Platform targeting, rendering approach, styling |
+| [UI Design](./docs/ui/design.md) | Navigation patterns, interaction models |
+| [Adaptive rendering decisions](./docs/ui/adaptive-rendering-decisions.md) | Historical rationale for rendering choices |
 
-`./postgres`
-Gainzville server which implements `Reader` and `Apply` traits for Postgres and processes `Actions`.
-Planned to support both an HTTP API as well as offline-first sync.
-
-`./sqlite`
-Gainzville client. Implements `Reader` and `Apply` traits for Sqlite and processes `Actions`.
-Planned to support offline-first sync.
-
-`./dx-app`
-Cross-platform Dioxus app (desktop, mobile, web). Supports a single codebase with shared logic and standard web primitives.
-
-`./ivm`
-Experimentation with the DBSP library for incremental view maintenance to potentially support sync.
+Additional Dioxus reference: `/dx-app/AGENTS.md` and `/dx-app/docs/00-OVERVIEW.md` through `10-WASM-SPLIT.md`.
 
 ## Project Goals
-- Offline-first sync.
-- HTTP API.
-- Utilize LLM to process unstructured training log data (markdown files, handwritten notes) into Gainzville.
-- Desktop app (roadmap to come).
-- Deterministic simulation testing.
 
-## Domain Model
+- Offline-first sync
+- HTTP API
+- LLM-assisted import of unstructured training logs (markdown → `Action` arrays)
+- Desktop app
+- Deterministic simulation testing
 
-**Summary**: Gainzville uses an **ordered forest** data structure where nodes are `Entries`:
-- Entries represent events (past or planned) and form tree structures
-- Root entries are ordered by user-set timestamps
-- Each entry can optionally instantiate an `Activity` (exercise template)
-- Entries are described by typed `Attributes` with `Planned` and `Actual` values
-- Non-leaf entries are sequences that contain ordered child entries
+## Development Notes
 
-**Key implementation details**:
-- **Sets**: Stored as sequences of homogeneous entries with `display_as_sets` flag for UI rendering. Each set is its own entry with its own values.
-- **Sibling ordering**: Explicit sequence order between children (not just timestamp-based)
-- **Nesting**: Arbitrary depth - sequences can contain sequences recursively
-- **Activities**: Templates with default attributes/values that entries can instantiate
-- **Libraries**: Collections of shareable Activities/Attributes with copy-on-add semantics
-- **Categories**: Sets of Activities (affects all entries of those activities)
-- **Tags**: Per-entry strings (can tag individual entries, not all entries of an activity)
-
-**Not yet modeled**: Recurring activities
-
-## Tech Stack Decisions
-
-### Database: sqlx
-- **Chosen over**: tokio-postgres, Diesel, SeaORM
-- **Why**: Compile-time query verification, raw SQL flexibility, solid connection pooling
-- **Tradeoff**: Requires running database during development, but provides excellent type safety without fighting an ORM
-
-### Web Framework (eventual): axum
-- **Chosen over**: actix-web, rocket, warp
-- **Why**: Clean extractor pattern, seamless tokio integration, minimal magic, Tower middleware ecosystem
-- **Tradeoff**: Requires learning Tower, but aligns with "transparent, not too much abstraction" philosophy
-
-### Authentication Strategy (eventual)
-- **Approach**: OAuth (Google/GitHub) + custom JWT-based sessions + custom authorization
-- **Why**: Skips password management complexity while maintaining full control over permissions
-
-### Error Handling
-- **Primary**: thiserror for domain errors
-- **Future**: anyhow for internal operations if needed
-
-## Core Architecture Philosophy
-
-### Action-Based Design (Not REST-First)
-
-The project uses **hexagonal architecture** - business logic at the core, transport layers (REST, batch sync, LLM commands) as adapters.
-
-**Key insight**: Actions like `CreateActivity`, `CreateEntry`, `MoveEntry` are the domain model. They should work identically whether invoked via:
-- HTTP POST from REST client
-- Batch of operations from sync protocol
-- JSON array generated by LLM parsing markdown
-
-## Implementation Patterns
-
-### Reader Trait and Mutators
-
-**Reader**: Database-agnostic trait providing read methods. Implementations are pure functions which accept sqlx `Executor`s as parameters, giving the caller transaction control.
-
-```rust
-#[allow(async_fn_in_trait)]
-pub trait Reader<DB: sqlx::Database> {
-    async fn find_user_by_id<'e>(
-        executor: impl Executor<'e, Database = DB>,
-        actor_id: Uuid,
-    ) -> Result<Option<User>>;
-
-    async fn find_entry_by_id<'e>(
-        executor: impl Executor<'e, Database = DB>,
-        entry_id: Uuid,
-    ) -> Result<Option<Entry>>;
-    // ...
-}
-```
-
-**Mutators**: Database-agnostic functions that validate actions and produce `Mutation`s containing deltas. Each mutator function takes a transaction and an action, performs validation, and returns a `Mutation` with the changes to apply.
-
-```rust
-pub async fn create_entry<'t, DB, R>(
-    tx: &mut Transaction<'t, DB>,
-    action: CreateEntry,
-) -> Result<Mutation>
-where
-    DB: Database,
-    R: Reader<DB>,
-{
-    // Validate action...
-    // Return Mutation with deltas
-}
-```
-
-**Execution**: `client.run_action(action)` and `server.run_action(action)` execute actions through the appropriate `Reader` implementation.
-
-### Delta Tracking
-
-**Pattern**: Two-level design for tracking database changes that balances type safety with flexibility.
-
-**Level 1 - Generic `Delta<T>`**: Type-safe operations for specific models.
-
-```rust
-pub enum Delta<M> {
-    Insert { id: Uuid, new: M },
-    Update { id: Uuid, old: M, new: M },
-    Delete { id: Uuid, old: M },
-}
-```
-
-**Level 2 - `ModelDelta` enum**: Concrete enum with one variant per model, enabling heterogeneous collections.
-
-```rust
-pub enum ModelDelta {
-    User(Delta<User>),
-    Actor(Delta<Actor>),
-    Activity(Delta<Activity>),
-    Entry(Delta<Entry>),
-}
-```
-
-**Mutations** bundle an action with its resulting deltas:
-
-```rust
-pub struct Mutation {
-    pub id: Uuid,
-    pub timestamp: DateTime<Utc>,
-    pub action: Action,
-    pub changes: Vec<ModelDelta>,
-}
-```
-
-### Parse, Don't Validate
-
-**Pattern**: Use type-safe value objects instead of primitive types. Validation happens once at construction, then types guarantee correctness.
-
-**Value objects** (in `core/src/validation.rs`):
-
-```rust
-pub struct Email(String);
-
-impl Email {
-    pub fn parse(email: String) -> Result<Self, DomainError> {
-        // Validation logic...
-        Ok(Self(email.to_lowercase()))
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-```
-
-**Benefits**:
-- Validation happens once at system boundaries
-- No shotgun validation scattered throughout codebase
-- Types make invalid states unrepresentable
-- Compiler enforces correctness
-
-### Database Design Patterns
-
-**Weak entity for 1:1 relationships**: When two tables have a strict 1:1 relationship, use the foreign key as the primary key.
-
-```sql
-CREATE TABLE actors (
-    id UUID PRIMARY KEY,
-    actor_type VARCHAR(50) NOT NULL
-);
-
-CREATE TABLE users (
-    actor_id UUID PRIMARY KEY REFERENCES actors(id),  -- PK and FK!
-    email TEXT UNIQUE NOT NULL,
-    username TEXT NOT NULL
-);
-```
-
-**When to use**: Strict 1:1 relationships that won't become 1:many (e.g., actor/user).
-
-## Near-Term Use Case: Markdown Training Log Import
-
-**Goal**: Parse personal markdown training logs into database operations using an LLM
-
-**Process**:
-1. Export database snapshot (activities, attributes) as JSON
-2. Provide snapshot + markdown to Claude API
-3. Claude generates array of `Action` objects
-4. Execute actions via `client.run_action()` or `server.run_action()`
-
-**Example**:
-```markdown
-## 2025-11-20
-- Back Squat: 225 lbs x 5 reps
-- New exercise: Romanian Deadlift
-```
-
-## Sync System
-
-See [./docs/sync.md](./docs/sync.md) for detailed sync design notes including:
-- Rebasing strategy for offline writes
-- Global sequence numbers
-- Hybrid logical clocks for client ordering
-- Electric-inspired patterns (durable streams, per-client change logs)
-
-## Development Environment
-
-- **Database**: PostgreSQL via docker-compose
-- **Migrations**: sqlx migrations
-- **Testing**: Integration tests with test database
-
-## UX Design Assets
-
-Reference screenshots and Figma prototypes are in `./docs/ux-design-assets/`. Key files:
-- `swift-*` — Swift iOS app (Oct/Nov 2025): Log/Library/Analysis tabs, inline attribute editing, drag reorder, breadcrumb nav
-- `gv-desktop-figma-proto-*` — Desktop Figma prototype: multi-day calendar columns, command palette (scoped Add + fuzzy search), right-click context menu
-- `figma-planning-{log,plan}-mode.PNG` — Plan/Log toggle pattern; same layout, different fill state on checkboxes
-- `figma-log-scroll-*.png` — Per-set inline editing with set selector (1/2/3/+/−), Plan/Log toggle per entry
-- `figma-viz-frequency.PNG` — Training frequency heatmap; configurable categories and count metric
-- `gv-2022-web-viewing-record.png`, `create-climb-outcome-web.png`, `use-climb-outcome.png`, `Screenshot 2025-09-28*` — Older web app showing attribute type editor and powerset/enum attribute design
-
-## Previous Gainzville Versions (Reference Only)
-
-These are prior implementations useful as reference. Do not modify them.
-
-- `/Users/brianluther/dev/swift/gv-2025-05-19/Gainzville` — Swift app (May 2025)
-- `/Users/brianluther/dev/gv/gv-2025-01-15` — React Native app (Jan 2025)
+- **postgres docker required at compile time**: `cargo build` for `gv_postgres` connects to the live DB for sqlx compile-time verification. Start postgres before building.
+- **Test from workspace root**: `cargo test` (not `--package`) to catch feature-unification issues. The `ivm` crate enables `serde_json/arbitrary_precision` workspace-wide, which breaks internally-tagged enums with numeric fields.
+- **Previous versions (reference only, do not modify)**:
+  - `/Users/brianluther/dev/swift/gv-2025-05-19/Gainzville` — Swift app (May 2025)
+  - `/Users/brianluther/dev/gv/gv-2025-01-15` — React Native app (Jan 2025)
