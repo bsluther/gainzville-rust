@@ -9,6 +9,7 @@ use gv_core::{
         user::User,
     },
     queries::*,
+    query_executor::QueryExecutor,
 };
 use itertools::Itertools;
 use sqlx::{FromRow, SqliteConnection};
@@ -17,6 +18,19 @@ use uuid::Uuid;
 #[allow(async_fn_in_trait)]
 pub(crate) trait SqliteExecute: Query {
     async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response>;
+}
+
+pub struct SqliteQueryExecutor<'c> {
+    conn: &'c mut SqliteConnection,
+}
+impl<'c> SqliteQueryExecutor<'c> {
+    pub fn new(conn: &'c mut SqliteConnection) -> Self {
+        SqliteQueryExecutor { conn }
+    }
+}
+impl QueryExecutor for SqliteQueryExecutor<'_> {
+    // Cannot narrow trait bound in impl!
+    async fn execute<Q: Query + SqliteExecute>(&mut self, query: Q) -> Result<Q::Response> {}
 }
 
 // --- Auth ---

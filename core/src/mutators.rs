@@ -1,6 +1,4 @@
 use chrono::{DateTime, Utc};
-use sqlx::{Database, Transaction};
-use tracing::debug;
 use uuid::Uuid;
 
 use crate::{
@@ -15,7 +13,11 @@ use crate::{
         attribute::Value,
         user::User,
     },
-    reader::Reader,
+    queries::{
+        FindActivityById, FindAncestors, FindAttributeById, FindDescendants, FindEntryById,
+        FindUserById, FindUserByUsername, FindValueByKey, FindValuesForEntries, IsEmailRegistered,
+    },
+    query_executor::QueryExecutor,
 };
 
 // TODO: make randomness/time deterministic in mutations.
@@ -33,22 +35,26 @@ pub struct Mutation {
     pub changes: Vec<ModelDelta>,
 }
 
-pub async fn create_user<'t, DB, R>(
-    tx: &mut Transaction<'t, DB>,
+pub async fn create_user(
+    executor: &mut impl QueryExecutor,
     action: CreateUser,
-) -> Result<Mutation>
-where
-    DB: Database,
-    R: Reader<DB>,
-{
+) -> Result<Mutation> {
     let user = action.user;
     // Check if email is already registered.
-    if R::is_email_registered(&mut **tx, user.email.clone()).await? {
+    if executor
+        .execute(IsEmailRegistered {
+            email: user.email.clone(),
+        })
+        .await?
+    {
         return Err(DomainError::EmailAlreadyExists);
     }
 
     // Check if username is in use.
-    if R::find_user_by_username(&mut **tx, user.username.clone())
+    if executor
+        .execute(FindUserByUsername {
+            username: user.username.clone(),
+        })
         .await?
         .is_some()
     {
@@ -56,14 +62,16 @@ where
     }
 
     // Check if ID is in use.
-    if R::find_user_by_id(&mut **tx, user.actor_id)
+    if executor
+        .execute(FindUserById {
+            actor_id: user.actor_id,
+        })
         .await?
         .is_some()
     {
         return Err(DomainError::Other("actor_id already in use".to_string()));
     }
 
-    // Create user and actor insert deltas.
     let insert_actor = Delta::<Actor>::Insert {
         new: Actor {
             actor_id: user.actor_id,
@@ -73,8 +81,6 @@ where
     };
     let insert_user = Delta::<User>::Insert { new: user.clone() };
 
-    // Create mutation.
-    // - Might make more sense just to return deltas from here, we'll see.
     Ok(Mutation {
         id: Uuid::new_v4(),
         timestamp: Utc::now(),
@@ -83,15 +89,10 @@ where
     })
 }
 
-pub async fn create_activity<'t, DB, R>(
-    tx: &mut Transaction<'t, DB>,
+pub async fn create_activity(
+    executor: &mut impl QueryExecutor,
     action: CreateActivity,
-) -> Result<Mutation>
-where
-    DB: Database,
-    R: Reader<DB>,
-{
-    let _all_activities = R::all_activities(&mut **tx);
+) -> Result<Mutation> {
     let activity = action.activity.clone();
     // Check if actor has permission to create activities for owner.
     // For now, only allow if actor == owner.
@@ -112,14 +113,10 @@ where
     })
 }
 
-pub async fn create_entry<'t, DB, R>(
-    tx: &mut Transaction<'t, DB>,
+pub async fn create_entry(
+    executor: &mut impl QueryExecutor,
     action: CreateEntry,
-) -> Result<Mutation>
-where
-    DB: Database,
-    R: Reader<DB>,
-{
+) -> Result<Mutation> {
     // Check if actor has permission to create entry at the given position.
     // For now, only allow the owner to create.
     if action.actor_id != action.entry.owner_id {
@@ -131,9 +128,10 @@ where
         )));
     }
 
-    // Check if referenced activity exists,
+    // Check if referenced activity exists.
     if let Some(activity_id) = action.entry.activity_id {
-        if R::find_activity_by_id(&mut **tx, activity_id)
+        if executor
+            .execute(FindActivityById { id: activity_id })
             .await?
             .is_none()
         {
@@ -159,16 +157,14 @@ where
 /// Move an entry by changing it's parent, fractional index, and temporal. Does not allow
 /// moving to root without a defined start or end time; while the model allows for this, it
 /// should be intentional and utilize a different action.
-pub async fn move_entry<'t, DB, R>(
-    tx: &mut Transaction<'t, DB>,
-    action: MoveEntry,
-) -> Result<Mutation>
-where
-    DB: Database,
-    R: Reader<DB>,
-{
+pub async fn move_entry(executor: &mut impl QueryExecutor, action: MoveEntry) -> Result<Mutation> {
     // Moving entry should exist.
-    let Some(entry) = R::find_entry_by_id(&mut **tx, action.entry_id).await? else {
+    let Some(entry) = executor
+        .execute(FindEntryById {
+            entry_id: action.entry_id,
+        })
+        .await?
+    else {
         return Err(DomainError::Consistency(
             "entry that does not exist cannot be moved".to_string(),
         ));
@@ -176,14 +172,22 @@ where
 
     if let Some(position) = &action.position {
         // Check for cycles.
-        let parent_ancestors: Vec<Uuid> = R::find_ancestors(&mut **tx, position.parent_id).await?;
+        let parent_ancestors: Vec<Uuid> = executor
+            .execute(FindAncestors {
+                entry_id: position.parent_id,
+            })
+            .await?;
         if parent_ancestors.contains(&action.entry_id) {
             return Err(DomainError::Consistency(
                 "move_entry would create a cycle".to_string(),
             ));
         }
 
-        let parent = R::find_entry_by_id(&mut **tx, action.entry_id)
+        // TOOD: this is a bug, should look up the parent_id in position.
+        let parent = executor
+            .execute(FindEntryById {
+                entry_id: action.entry_id,
+            })
             .await?
             .expect("parent should exist after earlier condition");
 
@@ -228,24 +232,28 @@ where
     })
 }
 
-pub async fn delete_entry_recursive<'t, DB, R>(
-    tx: &mut Transaction<'t, DB>,
+pub async fn delete_entry_recursive(
+    executor: &mut impl QueryExecutor,
     action: DeleteEntryRecursive,
-) -> Result<Mutation>
-where
-    DB: Database,
-    R: Reader<DB>,
-{
+) -> Result<Mutation> {
     // Get entry and all descendants.
     // - Once attributes are in place, will need get/delete them as well.
-    let subtree = R::find_descendants(&mut **tx, action.entry_id).await?;
+    let subtree = executor
+        .execute(FindDescendants {
+            entry_id: action.entry_id,
+        })
+        .await?;
     let subtree_ids: Vec<Uuid> = subtree.iter().map(|e| e.id).collect();
-    let subtree_attr_values = R::find_values_for_entries(&mut **tx, &subtree_ids).await?;
+    let subtree_attr_values = executor
+        .execute(FindValuesForEntries {
+            entry_ids: subtree_ids,
+        })
+        .await?;
 
     let Some(root) = subtree.iter().find(|e| e.id == action.entry_id) else {
         assert!(
             subtree.is_empty(),
-            "descendants query must include the root entry or be null, 
+            "descendants query must include the root entry or be null,
             found a non-empty tree which does not contain the root"
         );
         return Err(DomainError::Other(
@@ -266,7 +274,7 @@ where
         .map(|e| Delta::Delete { old: e }.into())
         .collect();
 
-    // Create delete deltas for entry and descedants attribute values.
+    // Create delete deltas for entry and descendants attribute values.
     let attr_value_deltas: Vec<ModelDelta> = subtree_attr_values
         .into_iter()
         .map(|v| Delta::Delete { old: v }.into())
@@ -283,14 +291,10 @@ where
     })
 }
 
-pub async fn create_attribute<'t, DB, R>(
-    _tx: &mut Transaction<'t, DB>,
+pub async fn create_attribute(
+    executor: &mut impl QueryExecutor,
     action: CreateAttribute,
-) -> Result<Mutation>
-where
-    DB: Database,
-    R: Reader<DB>,
-{
+) -> Result<Mutation> {
     let attribute = action.attribute.clone();
 
     // Only the owner can create attributes for themselves (for now).
@@ -311,18 +315,17 @@ where
     })
 }
 
-pub async fn update_entry_completion<'t, DB, R>(
-    tx: &mut Transaction<'t, DB>,
+pub async fn update_entry_completion(
+    executor: &mut impl QueryExecutor,
     action: UpdateEntryCompletion,
-) -> Result<Mutation>
-where
-    DB: Database,
-    R: Reader<DB>,
-{
-    let Some(entry) = R::find_entry_by_id(&mut **tx, action.entry_id).await? else {
-        return Err(DomainError::Consistency(
-            "entry does not exist".to_string(),
-        ));
+) -> Result<Mutation> {
+    let Some(entry) = executor
+        .execute(FindEntryById {
+            entry_id: action.entry_id,
+        })
+        .await?
+    else {
+        return Err(DomainError::Consistency("entry does not exist".to_string()));
     };
 
     // Only the owner may complete their own entries.
@@ -347,10 +350,7 @@ where
         ));
     }
 
-    let update_delta = entry
-        .update()
-        .is_complete(action.is_complete)
-        .to_delta();
+    let update_delta = entry.update().is_complete(action.is_complete).to_delta();
 
     Ok(Mutation {
         id: Uuid::new_v4(),
@@ -360,18 +360,17 @@ where
     })
 }
 
-pub async fn create_value<'t, DB, R>(
-    tx: &mut Transaction<'t, DB>,
+pub async fn create_value(
+    executor: &mut impl QueryExecutor,
     action: CreateValue,
-) -> Result<Mutation>
-where
-    DB: Database,
-    R: Reader<DB>,
-{
+) -> Result<Mutation> {
     let value = action.value.clone();
 
     // The entry must exist.
-    let entry = R::find_entry_by_id(&mut **tx, value.entry_id)
+    let entry = executor
+        .execute(FindEntryById {
+            entry_id: value.entry_id,
+        })
         .await?
         .ok_or_else(|| DomainError::Other(format!("entry '{}' not found", value.entry_id)))?;
 
@@ -384,7 +383,10 @@ where
     }
 
     // The attribute must exist and be owned by the same actor as the entry.
-    let attribute = R::find_attribute_by_id(&mut **tx, value.attribute_id)
+    let attribute = executor
+        .execute(FindAttributeById {
+            attribute_id: value.attribute_id,
+        })
         .await?
         .ok_or_else(|| {
             DomainError::Other(format!("attribute '{}' not found", value.attribute_id))
@@ -407,15 +409,16 @@ where
     })
 }
 
-pub async fn update_attribute_value<'t, DB, R>(
-    tx: &mut Transaction<'t, DB>,
+pub async fn update_attribute_value(
+    executor: &mut impl QueryExecutor,
     action: UpdateAttributeValue,
-) -> Result<Mutation>
-where
-    DB: Database,
-    R: Reader<DB>,
-{
-    let Some(entry) = R::find_entry_by_id(&mut **tx, action.entry_id).await? else {
+) -> Result<Mutation> {
+    let Some(entry) = executor
+        .execute(FindEntryById {
+            entry_id: action.entry_id,
+        })
+        .await?
+    else {
         return Err(DomainError::Consistency("entry does not exist".to_string()));
     };
 
@@ -426,7 +429,10 @@ where
         )));
     }
 
-    if R::find_attribute_by_id(&mut **tx, action.attribute_id)
+    if executor
+        .execute(FindAttributeById {
+            attribute_id: action.attribute_id,
+        })
         .await?
         .is_none()
     {
@@ -435,7 +441,12 @@ where
         ));
     }
 
-    let Some(old) = R::find_value_by_key(&mut **tx, action.entry_id, action.attribute_id).await?
+    let Some(old) = executor
+        .execute(FindValueByKey {
+            entry_id: action.entry_id,
+            attribute_id: action.attribute_id,
+        })
+        .await?
     else {
         return Err(DomainError::Consistency(
             "value does not exist; use CreateValue before UpdateAttributeValue".to_string(),

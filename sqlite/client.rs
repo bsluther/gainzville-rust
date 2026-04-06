@@ -17,7 +17,7 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use crate::{apply::SqliteApply, reader::SqliteReader};
+use crate::{apply::SqliteApply, reader::SqliteReader, sqlite_execute::SqliteExecute};
 
 #[derive(Debug, Clone)]
 pub struct SqliteClient {
@@ -55,6 +55,19 @@ impl SqliteClient {
             .run(&self.pool)
             .await
             .map_err(|e| gv_core::error::DomainError::Other(e.to_string()))
+    }
+
+    #[instrument(skip_all)]
+    pub async fn run_action2(&self, action: Action) -> Result<()> {
+        debug!("Began running action = {:?}", action);
+        debug!(
+            "Active broadcast receivers: {}",
+            self.change_transmitter.receiver_count()
+        );
+
+        // Begin Sqlite transaction.
+        let mut tx = self.pool.begin().await?;
+        let mut executor = ::new(&mut tx);
     }
 
     #[instrument(skip_all)]
