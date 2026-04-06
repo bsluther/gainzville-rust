@@ -17,7 +17,7 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use crate::{apply::SqliteApply, reader::SqliteReader, sqlite_execute::SqliteExecute};
+use crate::{apply::SqliteApply, reader::SqliteReader, sqlite_executor::SqliteQueryExecutor};
 
 #[derive(Debug, Clone)]
 pub struct SqliteClient {
@@ -58,19 +58,6 @@ impl SqliteClient {
     }
 
     #[instrument(skip_all)]
-    pub async fn run_action2(&self, action: Action) -> Result<()> {
-        debug!("Began running action = {:?}", action);
-        debug!(
-            "Active broadcast receivers: {}",
-            self.change_transmitter.receiver_count()
-        );
-
-        // Begin Sqlite transaction.
-        let mut tx = self.pool.begin().await?;
-        let mut executor = ::new(&mut tx);
-    }
-
-    #[instrument(skip_all)]
     pub async fn run_action(&self, action: Action) -> Result<()> {
         debug!("Began running action = {:?}", action);
         debug!(
@@ -80,38 +67,28 @@ impl SqliteClient {
 
         // Begin Sqlite transaction.
         let mut tx = self.pool.begin().await?;
+        let mut executor = SqliteQueryExecutor::new(&mut tx);
 
         // Create mutation.
         let mx = match action {
             Action::CreateActivity(action) => {
-                mutators::create_activity::<sqlx::Sqlite, SqliteReader>(&mut tx, action).await?
+                mutators::create_activity(&mut executor, action).await?
             }
-            Action::CreateUser(action) => {
-                mutators::create_user::<sqlx::Sqlite, SqliteReader>(&mut tx, action).await?
-            }
-            Action::CreateEntry(action) => {
-                mutators::create_entry::<sqlx::Sqlite, SqliteReader>(&mut tx, action).await?
-            }
-            Action::MoveEntry(action) => {
-                mutators::move_entry::<sqlx::Sqlite, SqliteReader>(&mut tx, action).await?
-            }
+            Action::CreateUser(action) => mutators::create_user(&mut executor, action).await?,
+            Action::CreateEntry(action) => mutators::create_entry(&mut executor, action).await?,
+            Action::MoveEntry(action) => mutators::move_entry(&mut executor, action).await?,
             Action::DeleteEntryRecursive(action) => {
-                mutators::delete_entry_recursive::<sqlx::Sqlite, SqliteReader>(&mut tx, action)
-                    .await?
+                mutators::delete_entry_recursive(&mut executor, action).await?
             }
             Action::CreateAttribute(action) => {
-                mutators::create_attribute::<sqlx::Sqlite, SqliteReader>(&mut tx, action).await?
+                mutators::create_attribute(&mut executor, action).await?
             }
-            Action::CreateValue(action) => {
-                mutators::create_value::<sqlx::Sqlite, SqliteReader>(&mut tx, action).await?
-            }
+            Action::CreateValue(action) => mutators::create_value(&mut executor, action).await?,
             Action::UpdateEntryCompletion(action) => {
-                mutators::update_entry_completion::<sqlx::Sqlite, SqliteReader>(&mut tx, action)
-                    .await?
+                mutators::update_entry_completion(&mut executor, action).await?
             }
             Action::UpdateAttributeValue(action) => {
-                mutators::update_attribute_value::<sqlx::Sqlite, SqliteReader>(&mut tx, action)
-                    .await?
+                mutators::update_attribute_value(&mut executor, action).await?
             }
         };
 

@@ -3,7 +3,7 @@ use gv_core::{actions::Action, error::Result, mutators};
 use sqlx::PgPool;
 use tracing::instrument;
 
-use crate::{apply::PgApply, reader::PostgresReader};
+use crate::{apply::PgApply, postgres_executor::PostgresQueryExecutor};
 
 pub struct PostgresServer {
     pub pool: PgPool,
@@ -18,39 +18,28 @@ impl PostgresServer {
     pub async fn run_action(&self, action: Action) -> Result<()> {
         // Begin Postgres transaction.
         let mut tx = self.pool.begin().await?;
+        let mut executor = PostgresQueryExecutor::new(&mut tx);
 
         // Create mutation.
         let mx = match action {
             Action::CreateActivity(action) => {
-                mutators::create_activity::<sqlx::Postgres, PostgresReader>(&mut tx, action).await?
+                mutators::create_activity(&mut executor, action).await?
             }
-            Action::CreateUser(action) => {
-                mutators::create_user::<sqlx::Postgres, PostgresReader>(&mut tx, action).await?
-            }
-            Action::CreateEntry(action) => {
-                mutators::create_entry::<sqlx::Postgres, PostgresReader>(&mut tx, action).await?
-            }
-            Action::MoveEntry(action) => {
-                mutators::move_entry::<sqlx::Postgres, PostgresReader>(&mut tx, action).await?
-            }
+            Action::CreateUser(action) => mutators::create_user(&mut executor, action).await?,
+            Action::CreateEntry(action) => mutators::create_entry(&mut executor, action).await?,
+            Action::MoveEntry(action) => mutators::move_entry(&mut executor, action).await?,
             Action::DeleteEntryRecursive(action) => {
-                mutators::delete_entry_recursive::<sqlx::Postgres, PostgresReader>(&mut tx, action)
-                    .await?
+                mutators::delete_entry_recursive(&mut executor, action).await?
             }
             Action::CreateAttribute(action) => {
-                mutators::create_attribute::<sqlx::Postgres, PostgresReader>(&mut tx, action)
-                    .await?
+                mutators::create_attribute(&mut executor, action).await?
             }
-            Action::CreateValue(action) => {
-                mutators::create_value::<sqlx::Postgres, PostgresReader>(&mut tx, action).await?
-            }
+            Action::CreateValue(action) => mutators::create_value(&mut executor, action).await?,
             Action::UpdateEntryCompletion(action) => {
-                mutators::update_entry_completion::<sqlx::Postgres, PostgresReader>(&mut tx, action)
-                    .await?
+                mutators::update_entry_completion(&mut executor, action).await?
             }
             Action::UpdateAttributeValue(action) => {
-                mutators::update_attribute_value::<sqlx::Postgres, PostgresReader>(&mut tx, action)
-                    .await?
+                mutators::update_attribute_value(&mut executor, action).await?
             }
         };
 

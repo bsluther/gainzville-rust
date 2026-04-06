@@ -9,57 +9,69 @@ use gv_core::{
         user::User,
     },
     queries::*,
+    query_executor::QueryExecutor,
 };
 use itertools::Itertools;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-#[allow(async_fn_in_trait)]
-pub(crate) trait PostgresExecute: Query {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response>;
+pub struct PostgresQueryExecutor<'c> {
+    conn: &'c mut PgConnection,
+}
+
+impl<'c> PostgresQueryExecutor<'c> {
+    pub fn new(conn: &'c mut PgConnection) -> Self {
+        PostgresQueryExecutor { conn }
+    }
 }
 
 // --- Auth ---
 
-impl PostgresExecute for IsEmailRegistered {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<IsEmailRegistered> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: IsEmailRegistered,
+    ) -> Result<<IsEmailRegistered as Query>::Response> {
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE email = $1")
-            .bind(self.email.as_str())
-            .fetch_one(&mut *conn)
+            .bind(query.email.as_str())
+            .fetch_one(&mut *self.conn)
             .await?;
 
         Ok(count > 0)
     }
 }
 
-impl PostgresExecute for FindUserById {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindUserById> for PostgresQueryExecutor<'_> {
+    async fn execute(&mut self, query: FindUserById) -> Result<<FindUserById as Query>::Response> {
         let user = sqlx::query_as::<_, User>(
             "SELECT actor_id, username, email FROM users WHERE actor_id = $1",
         )
-        .bind(self.actor_id)
-        .fetch_optional(&mut *conn)
+        .bind(query.actor_id)
+        .fetch_optional(&mut *self.conn)
         .await?;
 
         Ok(user)
     }
 }
 
-impl PostgresExecute for FindUserByUsername {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindUserByUsername> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindUserByUsername,
+    ) -> Result<<FindUserByUsername as Query>::Response> {
         let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = $1")
-            .bind(self.username.as_str())
-            .fetch_optional(&mut *conn)
+            .bind(query.username.as_str())
+            .fetch_optional(&mut *self.conn)
             .await?;
 
         Ok(user)
     }
 }
 
-impl PostgresExecute for AllActorIds {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<AllActorIds> for PostgresQueryExecutor<'_> {
+    async fn execute(&mut self, _query: AllActorIds) -> Result<<AllActorIds as Query>::Response> {
         let actor_ids = sqlx::query_scalar("SELECT id FROM actors")
-            .fetch_all(&mut *conn)
+            .fetch_all(&mut *self.conn)
             .await?;
         Ok(actor_ids)
     }
@@ -67,25 +79,31 @@ impl PostgresExecute for AllActorIds {
 
 // --- Activity ---
 
-impl PostgresExecute for FindActivityById {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindActivityById> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindActivityById,
+    ) -> Result<<FindActivityById as Query>::Response> {
         let activity = sqlx::query_as::<_, Activity>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities WHERE id = $1",
         )
-        .bind(self.id)
-        .fetch_optional(&mut *conn)
+        .bind(query.id)
+        .fetch_optional(&mut *self.conn)
         .await?;
 
         Ok(activity)
     }
 }
 
-impl PostgresExecute for AllActivities {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<AllActivities> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        _query: AllActivities,
+    ) -> Result<<AllActivities as Query>::Response> {
         let activities = sqlx::query_as::<_, Activity>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities",
         )
-        .fetch_all(&mut *conn)
+        .fetch_all(&mut *self.conn)
         .await?;
 
         Ok(activities)
@@ -94,10 +112,10 @@ impl PostgresExecute for AllActivities {
 
 // --- Entry ---
 
-impl PostgresExecute for AllEntries {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<AllEntries> for PostgresQueryExecutor<'_> {
+    async fn execute(&mut self, _query: AllEntries) -> Result<<AllEntries as Query>::Response> {
         sqlx::query_as::<_, EntryRow>("SELECT * FROM entries")
-            .fetch_all(&mut *conn)
+            .fetch_all(&mut *self.conn)
             .await?
             .into_iter()
             .map(|r| r.to_entry())
@@ -105,8 +123,11 @@ impl PostgresExecute for AllEntries {
     }
 }
 
-impl PostgresExecute for EntriesRootedInTimeInterval {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<EntriesRootedInTimeInterval> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: EntriesRootedInTimeInterval,
+    ) -> Result<<EntriesRootedInTimeInterval as Query>::Response> {
         sqlx::query_as::<sqlx::Postgres, EntryRow>(
             r#"
             WITH RECURSIVE forest AS (
@@ -120,9 +141,9 @@ impl PostgresExecute for EntriesRootedInTimeInterval {
             SELECT * FROM forest
             "#,
         )
-        .bind(self.from)
-        .bind(self.to)
-        .fetch_all(&mut *conn)
+        .bind(query.from)
+        .bind(query.to)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|r| r.to_entry())
@@ -130,8 +151,11 @@ impl PostgresExecute for EntriesRootedInTimeInterval {
     }
 }
 
-impl PostgresExecute for FindAncestors {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindAncestors> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindAncestors,
+    ) -> Result<<FindAncestors as Query>::Response> {
         let results: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as(
             r#"
             WITH RECURSIVE ancestors AS (
@@ -147,8 +171,8 @@ impl PostgresExecute for FindAncestors {
             ORDER BY dist
             "#,
         )
-        .bind(self.entry_id)
-        .fetch_all(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_all(&mut *self.conn)
         .await?;
 
         if results.is_empty() {
@@ -181,8 +205,11 @@ impl PostgresExecute for FindAncestors {
     }
 }
 
-impl PostgresExecute for FindEntryById {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindEntryById> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindEntryById,
+    ) -> Result<<FindEntryById as Query>::Response> {
         sqlx::query_as::<_, EntryRow>(
             r#"
             SELECT id, owner_id, activity_id, parent_id, frac_index, is_template, display_as_sets, is_sequence, is_complete, start_time, end_time, duration_ms
@@ -190,16 +217,19 @@ impl PostgresExecute for FindEntryById {
             WHERE id = $1
             "#,
         )
-        .bind(self.entry_id)
-        .fetch_optional(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_optional(&mut *self.conn)
         .await?
         .map(|e| e.to_entry())
         .transpose()
     }
 }
 
-impl PostgresExecute for FindEntryJoinById {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindEntryJoinById> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindEntryJoinById,
+    ) -> Result<<FindEntryJoinById as Query>::Response> {
         let row = sqlx::query_as::<_, EntryJoinRow>(
             r#"
             SELECT
@@ -214,18 +244,18 @@ impl PostgresExecute for FindEntryJoinById {
             WHERE e.id = $1
             "#,
         )
-        .bind(self.entry_id)
-        .fetch_optional(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_optional(&mut *self.conn)
         .await?;
 
         match row {
             None => Ok(None),
             Some(row) => {
-                let pairs = (FindAttributePairsForEntry {
-                    entry_id: self.entry_id,
-                })
-                .execute_postgres(conn)
-                .await?;
+                let pairs = self
+                    .execute(FindAttributePairsForEntry {
+                        entry_id: query.entry_id,
+                    })
+                    .await?;
                 let attributes = pairs.into_iter().map(|p| (p.attr_id(), p)).collect();
                 Ok(Some(EntryJoin::from_row(row, attributes)?))
             }
@@ -233,8 +263,11 @@ impl PostgresExecute for FindEntryJoinById {
     }
 }
 
-impl PostgresExecute for FindDescendants {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindDescendants> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindDescendants,
+    ) -> Result<<FindDescendants as Query>::Response> {
         sqlx::query_as::<sqlx::Postgres, EntryRow>(
             r#"
             WITH RECURSIVE tree AS (
@@ -247,8 +280,8 @@ impl PostgresExecute for FindDescendants {
             SELECT * FROM tree
             "#,
         )
-        .bind(self.entry_id)
-        .fetch_all(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|e| e.to_entry())
@@ -258,25 +291,31 @@ impl PostgresExecute for FindDescendants {
 
 // --- Attribute ---
 
-impl PostgresExecute for FindAttributeById {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindAttributeById> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindAttributeById,
+    ) -> Result<<FindAttributeById as Query>::Response> {
         sqlx::query_as::<_, AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes WHERE id = $1",
         )
-        .bind(self.attribute_id)
-        .fetch_optional(&mut *conn)
+        .bind(query.attribute_id)
+        .fetch_optional(&mut *self.conn)
         .await?
         .map(|row| row.to_attribute())
         .transpose()
     }
 }
 
-impl PostgresExecute for AllAttributes {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<AllAttributes> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        _query: AllAttributes,
+    ) -> Result<<AllAttributes as Query>::Response> {
         sqlx::query_as::<_, AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes",
         )
-        .fetch_all(&mut *conn)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|row| row.to_attribute())
@@ -284,13 +323,16 @@ impl PostgresExecute for AllAttributes {
     }
 }
 
-impl PostgresExecute for FindAttributesByOwner {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindAttributesByOwner> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindAttributesByOwner,
+    ) -> Result<<FindAttributesByOwner as Query>::Response> {
         sqlx::query_as::<_, AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes WHERE owner_id = $1",
         )
-        .bind(self.owner_id)
-        .fetch_all(&mut *conn)
+        .bind(query.owner_id)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|row| row.to_attribute())
@@ -300,27 +342,33 @@ impl PostgresExecute for FindAttributesByOwner {
 
 // --- Value ---
 
-impl PostgresExecute for FindValueByKey {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindValueByKey> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindValueByKey,
+    ) -> Result<<FindValueByKey as Query>::Response> {
         sqlx::query_as::<_, ValueRow>(
             "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id = $1 AND attribute_id = $2",
         )
-        .bind(self.entry_id)
-        .bind(self.attribute_id)
-        .fetch_optional(&mut *conn)
+        .bind(query.entry_id)
+        .bind(query.attribute_id)
+        .fetch_optional(&mut *self.conn)
         .await?
         .map(|row| row.to_value())
         .transpose()
     }
 }
 
-impl PostgresExecute for FindValuesForEntry {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindValuesForEntry> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindValuesForEntry,
+    ) -> Result<<FindValuesForEntry as Query>::Response> {
         sqlx::query_as::<_, ValueRow>(
             "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id = $1",
         )
-        .bind(self.entry_id)
-        .fetch_all(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|row| row.to_value())
@@ -328,13 +376,16 @@ impl PostgresExecute for FindValuesForEntry {
     }
 }
 
-impl PostgresExecute for FindValuesForEntries {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindValuesForEntries> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindValuesForEntries,
+    ) -> Result<<FindValuesForEntries as Query>::Response> {
         sqlx::query_as::<_, ValueRow>(
             "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id = ANY($1)",
         )
-        .bind(&self.entry_ids[..])
-        .fetch_all(&mut *conn)
+        .bind(&query.entry_ids[..])
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|row| row.to_value())
@@ -342,8 +393,11 @@ impl PostgresExecute for FindValuesForEntries {
     }
 }
 
-impl PostgresExecute for FindAttributePairsForEntry {
-    async fn execute_postgres(&self, conn: &mut PgConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindAttributePairsForEntry> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindAttributePairsForEntry,
+    ) -> Result<<FindAttributePairsForEntry as Query>::Response> {
         sqlx::query_as::<_, AttributePairRow>(
             r#"
             SELECT
@@ -357,8 +411,8 @@ impl PostgresExecute for FindAttributePairsForEntry {
             WHERE v.entry_id = $1
             "#,
         )
-        .bind(self.entry_id)
-        .fetch_all(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|row| row.to_attribute_pair())

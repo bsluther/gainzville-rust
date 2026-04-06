@@ -17,7 +17,7 @@ use crate::{
         FindActivityById, FindAncestors, FindAttributeById, FindDescendants, FindEntryById,
         FindUserById, FindUserByUsername, FindValueByKey, FindValuesForEntries, IsEmailRegistered,
     },
-    query_executor::QueryExecutor,
+    query_executor::AnyQueryExecutor,
 };
 
 // TODO: make randomness/time deterministic in mutations.
@@ -36,7 +36,7 @@ pub struct Mutation {
 }
 
 pub async fn create_user(
-    executor: &mut impl QueryExecutor,
+    executor: &mut impl AnyQueryExecutor,
     action: CreateUser,
 ) -> Result<Mutation> {
     let user = action.user;
@@ -90,7 +90,7 @@ pub async fn create_user(
 }
 
 pub async fn create_activity(
-    executor: &mut impl QueryExecutor,
+    executor: &mut impl AnyQueryExecutor,
     action: CreateActivity,
 ) -> Result<Mutation> {
     let activity = action.activity.clone();
@@ -114,7 +114,7 @@ pub async fn create_activity(
 }
 
 pub async fn create_entry(
-    executor: &mut impl QueryExecutor,
+    executor: &mut impl AnyQueryExecutor,
     action: CreateEntry,
 ) -> Result<Mutation> {
     // Check if actor has permission to create entry at the given position.
@@ -157,7 +157,10 @@ pub async fn create_entry(
 /// Move an entry by changing it's parent, fractional index, and temporal. Does not allow
 /// moving to root without a defined start or end time; while the model allows for this, it
 /// should be intentional and utilize a different action.
-pub async fn move_entry(executor: &mut impl QueryExecutor, action: MoveEntry) -> Result<Mutation> {
+pub async fn move_entry(
+    executor: &mut impl AnyQueryExecutor,
+    action: MoveEntry,
+) -> Result<Mutation> {
     // Moving entry should exist.
     let Some(entry) = executor
         .execute(FindEntryById {
@@ -233,7 +236,7 @@ pub async fn move_entry(executor: &mut impl QueryExecutor, action: MoveEntry) ->
 }
 
 pub async fn delete_entry_recursive(
-    executor: &mut impl QueryExecutor,
+    executor: &mut impl AnyQueryExecutor,
     action: DeleteEntryRecursive,
 ) -> Result<Mutation> {
     // Get entry and all descendants.
@@ -292,7 +295,7 @@ pub async fn delete_entry_recursive(
 }
 
 pub async fn create_attribute(
-    executor: &mut impl QueryExecutor,
+    executor: &mut impl AnyQueryExecutor,
     action: CreateAttribute,
 ) -> Result<Mutation> {
     let attribute = action.attribute.clone();
@@ -316,7 +319,7 @@ pub async fn create_attribute(
 }
 
 pub async fn update_entry_completion(
-    executor: &mut impl QueryExecutor,
+    executor: &mut impl AnyQueryExecutor,
     action: UpdateEntryCompletion,
 ) -> Result<Mutation> {
     let Some(entry) = executor
@@ -361,7 +364,7 @@ pub async fn update_entry_completion(
 }
 
 pub async fn create_value(
-    executor: &mut impl QueryExecutor,
+    executor: &mut impl AnyQueryExecutor,
     action: CreateValue,
 ) -> Result<Mutation> {
     let value = action.value.clone();
@@ -410,7 +413,7 @@ pub async fn create_value(
 }
 
 pub async fn update_attribute_value(
-    executor: &mut impl QueryExecutor,
+    executor: &mut impl AnyQueryExecutor,
     action: UpdateAttributeValue,
 ) -> Result<Mutation> {
     let Some(entry) = executor

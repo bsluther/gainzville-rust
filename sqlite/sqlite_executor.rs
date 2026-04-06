@@ -15,65 +15,69 @@ use itertools::Itertools;
 use sqlx::{FromRow, SqliteConnection};
 use uuid::Uuid;
 
-#[allow(async_fn_in_trait)]
-pub(crate) trait SqliteExecute: Query {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response>;
-}
-
 pub struct SqliteQueryExecutor<'c> {
     conn: &'c mut SqliteConnection,
 }
+
 impl<'c> SqliteQueryExecutor<'c> {
     pub fn new(conn: &'c mut SqliteConnection) -> Self {
         SqliteQueryExecutor { conn }
     }
 }
-impl QueryExecutor for SqliteQueryExecutor<'_> {
-    // Cannot narrow trait bound in impl!
-    async fn execute<Q: Query + SqliteExecute>(&mut self, query: Q) -> Result<Q::Response> {}
-}
 
 // --- Auth ---
 
-impl SqliteExecute for IsEmailRegistered {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<IsEmailRegistered> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: IsEmailRegistered,
+    ) -> Result<<IsEmailRegistered as Query>::Response> {
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE email = ?")
-            .bind(self.email.as_str())
-            .fetch_one(&mut *conn)
+            .bind(query.email.as_str())
+            .fetch_one(&mut *self.conn)
             .await?;
 
         Ok(count > 0)
     }
 }
 
-impl SqliteExecute for FindUserById {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindUserById> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindUserById,
+    ) -> Result<<FindUserById as Query>::Response> {
         let user = sqlx::query_as::<_, User>(
             "SELECT actor_id, username, email FROM users WHERE actor_id = ?",
         )
-        .bind(self.actor_id)
-        .fetch_optional(&mut *conn)
+        .bind(query.actor_id)
+        .fetch_optional(&mut *self.conn)
         .await?;
 
         Ok(user)
     }
 }
 
-impl SqliteExecute for FindUserByUsername {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindUserByUsername> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindUserByUsername,
+    ) -> Result<<FindUserByUsername as Query>::Response> {
         let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = ?")
-            .bind(self.username.as_str())
-            .fetch_optional(&mut *conn)
+            .bind(query.username.as_str())
+            .fetch_optional(&mut *self.conn)
             .await?;
 
         Ok(user)
     }
 }
 
-impl SqliteExecute for AllActorIds {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<AllActorIds> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        _query: AllActorIds,
+    ) -> Result<<AllActorIds as Query>::Response> {
         let actor_ids = sqlx::query_scalar("SELECT id FROM actors")
-            .fetch_all(&mut *conn)
+            .fetch_all(&mut *self.conn)
             .await?;
         Ok(actor_ids)
     }
@@ -81,24 +85,30 @@ impl SqliteExecute for AllActorIds {
 
 // --- Activity ---
 
-impl SqliteExecute for FindActivityById {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindActivityById> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindActivityById,
+    ) -> Result<<FindActivityById as Query>::Response> {
         let activity = sqlx::query_as::<_, Activity>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities WHERE id = ?",
         )
-        .bind(self.id)
-        .fetch_optional(&mut *conn)
+        .bind(query.id)
+        .fetch_optional(&mut *self.conn)
         .await?;
         Ok(activity)
     }
 }
 
-impl SqliteExecute for AllActivities {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<AllActivities> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        _query: AllActivities,
+    ) -> Result<<AllActivities as Query>::Response> {
         let activities = sqlx::query_as::<_, Activity>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities",
         )
-        .fetch_all(&mut *conn)
+        .fetch_all(&mut *self.conn)
         .await?;
         Ok(activities)
     }
@@ -106,10 +116,13 @@ impl SqliteExecute for AllActivities {
 
 // --- Entry ---
 
-impl SqliteExecute for AllEntries {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<AllEntries> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        _query: AllEntries,
+    ) -> Result<<AllEntries as Query>::Response> {
         sqlx::query_as::<_, EntryRow>("SELECT * FROM entries")
-            .fetch_all(&mut *conn)
+            .fetch_all(&mut *self.conn)
             .await?
             .into_iter()
             .map(|r| r.to_entry())
@@ -117,8 +130,11 @@ impl SqliteExecute for AllEntries {
     }
 }
 
-impl SqliteExecute for EntriesRootedInTimeInterval {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<EntriesRootedInTimeInterval> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: EntriesRootedInTimeInterval,
+    ) -> Result<<EntriesRootedInTimeInterval as Query>::Response> {
         sqlx::query_as::<sqlx::Sqlite, EntryRow>(
             r#"
             WITH RECURSIVE forest AS (
@@ -132,9 +148,9 @@ impl SqliteExecute for EntriesRootedInTimeInterval {
             SELECT * FROM forest
             "#,
         )
-        .bind(self.from)
-        .bind(self.to)
-        .fetch_all(&mut *conn)
+        .bind(query.from)
+        .bind(query.to)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|r| r.to_entry())
@@ -142,8 +158,11 @@ impl SqliteExecute for EntriesRootedInTimeInterval {
     }
 }
 
-impl SqliteExecute for FindAncestors {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindAncestors> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindAncestors,
+    ) -> Result<<FindAncestors as Query>::Response> {
         let results: Vec<AncestorRow> = sqlx::query_as(
             r#"
             WITH RECURSIVE ancestors AS (
@@ -159,8 +178,8 @@ impl SqliteExecute for FindAncestors {
             ORDER BY dist
             "#,
         )
-        .bind(self.entry_id)
-        .fetch_all(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_all(&mut *self.conn)
         .await?;
 
         if results.is_empty() {
@@ -189,8 +208,11 @@ impl SqliteExecute for FindAncestors {
     }
 }
 
-impl SqliteExecute for FindEntryById {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindEntryById> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindEntryById,
+    ) -> Result<<FindEntryById as Query>::Response> {
         sqlx::query_as::<_, EntryRow>(
             r#"
             SELECT id, owner_id, activity_id, parent_id, frac_index, is_template, display_as_sets, is_sequence, is_complete, start_time, end_time, duration_ms
@@ -198,16 +220,19 @@ impl SqliteExecute for FindEntryById {
             WHERE id = ?
             "#,
         )
-        .bind(self.entry_id)
-        .fetch_optional(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_optional(&mut *self.conn)
         .await?
         .map(|e| e.to_entry())
         .transpose()
     }
 }
 
-impl SqliteExecute for FindEntryJoinById {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindEntryJoinById> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindEntryJoinById,
+    ) -> Result<<FindEntryJoinById as Query>::Response> {
         let row = sqlx::query_as::<_, EntryJoinRow>(
             r#"
             SELECT
@@ -222,18 +247,18 @@ impl SqliteExecute for FindEntryJoinById {
             WHERE e.id = ?
             "#,
         )
-        .bind(self.entry_id)
-        .fetch_optional(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_optional(&mut *self.conn)
         .await?;
 
         match row {
             None => Ok(None),
             Some(row) => {
-                let pairs = (FindAttributePairsForEntry {
-                    entry_id: self.entry_id,
-                })
-                .execute_sqlite(conn)
-                .await?;
+                let pairs = self
+                    .execute(FindAttributePairsForEntry {
+                        entry_id: query.entry_id,
+                    })
+                    .await?;
                 let attributes = pairs.into_iter().map(|p| (p.attr_id(), p)).collect();
                 Ok(Some(EntryJoin::from_row(row, attributes)?))
             }
@@ -241,8 +266,11 @@ impl SqliteExecute for FindEntryJoinById {
     }
 }
 
-impl SqliteExecute for FindDescendants {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindDescendants> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindDescendants,
+    ) -> Result<<FindDescendants as Query>::Response> {
         sqlx::query_as::<sqlx::Sqlite, EntryRow>(
             r#"
             WITH RECURSIVE tree AS (
@@ -255,8 +283,8 @@ impl SqliteExecute for FindDescendants {
             SELECT * FROM tree
             "#,
         )
-        .bind(self.entry_id)
-        .fetch_all(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|e| e.to_entry())
@@ -266,25 +294,31 @@ impl SqliteExecute for FindDescendants {
 
 // --- Attribute ---
 
-impl SqliteExecute for FindAttributeById {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindAttributeById> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindAttributeById,
+    ) -> Result<<FindAttributeById as Query>::Response> {
         sqlx::query_as::<_, AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes WHERE id = ?",
         )
-        .bind(self.attribute_id)
-        .fetch_optional(&mut *conn)
+        .bind(query.attribute_id)
+        .fetch_optional(&mut *self.conn)
         .await?
         .map(|row| row.to_attribute())
         .transpose()
     }
 }
 
-impl SqliteExecute for AllAttributes {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<AllAttributes> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        _query: AllAttributes,
+    ) -> Result<<AllAttributes as Query>::Response> {
         sqlx::query_as::<_, AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes",
         )
-        .fetch_all(&mut *conn)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|row| row.to_attribute())
@@ -292,13 +326,16 @@ impl SqliteExecute for AllAttributes {
     }
 }
 
-impl SqliteExecute for FindAttributesByOwner {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindAttributesByOwner> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindAttributesByOwner,
+    ) -> Result<<FindAttributesByOwner as Query>::Response> {
         sqlx::query_as::<_, AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes WHERE owner_id = ?",
         )
-        .bind(self.owner_id)
-        .fetch_all(&mut *conn)
+        .bind(query.owner_id)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|row| row.to_attribute())
@@ -308,27 +345,33 @@ impl SqliteExecute for FindAttributesByOwner {
 
 // --- Value ---
 
-impl SqliteExecute for FindValueByKey {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindValueByKey> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindValueByKey,
+    ) -> Result<<FindValueByKey as Query>::Response> {
         sqlx::query_as::<_, ValueRow>(
             "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id = ? AND attribute_id = ?",
         )
-        .bind(self.entry_id)
-        .bind(self.attribute_id)
-        .fetch_optional(&mut *conn)
+        .bind(query.entry_id)
+        .bind(query.attribute_id)
+        .fetch_optional(&mut *self.conn)
         .await?
         .map(|row| row.to_value())
         .transpose()
     }
 }
 
-impl SqliteExecute for FindValuesForEntry {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindValuesForEntry> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindValuesForEntry,
+    ) -> Result<<FindValuesForEntry as Query>::Response> {
         sqlx::query_as::<_, ValueRow>(
             "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id = ?",
         )
-        .bind(self.entry_id)
-        .fetch_all(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|row| row.to_value())
@@ -336,22 +379,25 @@ impl SqliteExecute for FindValuesForEntry {
     }
 }
 
-impl SqliteExecute for FindValuesForEntries {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
-        if self.entry_ids.is_empty() {
+impl QueryExecutor<FindValuesForEntries> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindValuesForEntries,
+    ) -> Result<<FindValuesForEntries as Query>::Response> {
+        if query.entry_ids.is_empty() {
             return Ok(vec![]);
         }
         let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
             "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id IN (",
         );
         let mut separated = builder.separated(", ");
-        for id in &self.entry_ids {
+        for id in &query.entry_ids {
             separated.push_bind(*id);
         }
         builder.push(")");
         builder
             .build_query_as::<ValueRow>()
-            .fetch_all(&mut *conn)
+            .fetch_all(&mut *self.conn)
             .await?
             .into_iter()
             .map(|row| row.to_value())
@@ -359,8 +405,11 @@ impl SqliteExecute for FindValuesForEntries {
     }
 }
 
-impl SqliteExecute for FindAttributePairsForEntry {
-    async fn execute_sqlite(&self, conn: &mut SqliteConnection) -> Result<Self::Response> {
+impl QueryExecutor<FindAttributePairsForEntry> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindAttributePairsForEntry,
+    ) -> Result<<FindAttributePairsForEntry as Query>::Response> {
         sqlx::query_as::<_, AttributePairRow>(
             r#"
             SELECT
@@ -374,8 +423,8 @@ impl SqliteExecute for FindAttributePairsForEntry {
             WHERE v.entry_id = ?
             "#,
         )
-        .bind(self.entry_id)
-        .fetch_all(&mut *conn)
+        .bind(query.entry_id)
+        .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
         .map(|row| row.to_attribute_pair())
