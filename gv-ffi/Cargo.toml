@@ -9,8 +9,20 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 gv_core   = { path = "../core" }
 gv_sqlite = { path = "../sqlite" }
-uniffi    = { version = "0.31", features = ["tokio"] }
+# "tokio" — static runtime for sync FFI wrappers.
+# "cli"   — enables uniffi_bindgen for the uniffi-bindgen binary target below.
+uniffi    = { version = "0.31", features = ["tokio", "cli"] }
 tokio     = { workspace = true }
 uuid      = { workspace = true }
 chrono    = { workspace = true }
 thiserror = { workspace = true }
+
+# Generates Swift/Kotlin bindings by reading metadata from the compiled cdylib.
+# Usage (from workspace root):
+#   cargo run --bin uniffi-bindgen -- generate \
+#     --library target/debug/libgv_ffi.so \   # or .dylib on macOS
+#     --language swift \
+#     --out-dir gv-ffi/bindings/
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
