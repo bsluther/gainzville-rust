@@ -84,13 +84,23 @@ This produces a ready-to-use Swift package directory. Useful once the API stabil
 
 ### Option A: Direct XCFramework (simplest for now)
 
-1. Drag `GvFfi.xcframework` into your Xcode project (or a `Frameworks/` subfolder).
-2. In **Build Phases → Link Binary With Libraries**, confirm `GvFfi.xcframework` is listed.
-3. Add the three generated Swift binding files to your target:
-   - `gv-ffi/bindings/gv_ffi.swift`
-   - `gv-ffi/bindings/gv_ffiFFI.h`
-   - `gv-ffi/bindings/gv_ffiFFI.modulemap`
-4. In **Build Settings**, set **Objective-C Bridging Header** if not already configured, or ensure the `.modulemap` is picked up via the framework's module map.
+> **Important:** Xcode tracks files explicitly in `project.pbxproj` — dropping files into the directory on disk is not enough. All files must be added through the Xcode GUI or they will be invisible to the build system. Use **File → New → File** to create new files, or drag existing files into the navigator to register them.
+
+1. Create a `Frameworks/` group in the project navigator (right-click the project root → New Group).
+2. Drag `GvFfi.xcframework` into the `Frameworks/` group. When prompted, check "Copy items if needed" and select the app target.
+3. In **Build Phases → Link Binary With Libraries**, confirm `GvFfi.xcframework` is listed.
+4. Add `gv-ffi/bindings/gv_ffi.swift` to the app target by dragging it into the source group in the navigator.
+5. Drag `gv-ffi/bindings/gv_ffiFFI.h` and `gv-ffi/bindings/gv_ffiFFI.modulemap` into the `Frameworks/` group (no target membership needed).
+6. Create a bridging header via **File → New → File → Other → Empty**, name it `GainzvilleBridgingHeader.h`, and add it to the app target. Contents:
+   ```c
+   #include "gv_ffiFFI.h"
+   ```
+7. In **Build Settings**, search for "Objective-C Bridging Header" (set filter to "All" if not visible). Set it to:
+   ```
+   Gainzville/GainzvilleBridgingHeader.h
+   ```
+
+**Why the bridging header?** `gv_ffi.swift` uses C types (`RustBuffer`, `RustCallStatus`, etc.) from `gv_ffiFFI.h` via a conditional `#if canImport(gv_ffiFFI)` block. For a static library XCFramework, Xcode does not automatically expose the bundled headers as a Swift module, so `canImport` returns false. The bridging header is what makes those C types visible to Swift.
 
 ### Option B: Swift Package Manager
 

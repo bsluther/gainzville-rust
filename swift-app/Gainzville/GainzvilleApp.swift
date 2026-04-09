@@ -9,9 +9,15 @@ import SwiftUI
 
 @main
 struct GainzvilleApp: App {
+    let core: GainzvilleCore
+    
+    init() {
+        core = try! makeCore()
+    }
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ProofOfConceptView(core: core)
         }
     }
 }

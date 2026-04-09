@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		9B434D0D2F881B6B0048C622 /* GvFfi.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B434D0C2F881B6B0048C622 /* GvFfi.xcframework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		9B52084E2F881687002F2B0F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,9 +28,12 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		9B434D0C2F881B6B0048C622 /* GvFfi.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = GvFfi.xcframework; sourceTree = "<group>"; };
 		9B5208402F881686002F2B0F /* Gainzville.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gainzville.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9B52084D2F881687002F2B0F /* GainzvilleTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GainzvilleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9B5208572F881687002F2B0F /* GainzvilleUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GainzvilleUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9B569ADB2F8821B700F3A6D0 /* gv_ffiFFI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = gv_ffiFFI.h; sourceTree = "<group>"; };
+		9B569ADC2F8821B700F3A6D0 /* gv_ffiFFI.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = gv_ffiFFI.modulemap; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +59,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9B434D0D2F881B6B0048C622 /* GvFfi.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,9 +80,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		9B434D0B2F881A340048C622 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				9B434D0C2F881B6B0048C622 /* GvFfi.xcframework */,
+				9B569ADB2F8821B700F3A6D0 /* gv_ffiFFI.h */,
+				9B569ADC2F8821B700F3A6D0 /* gv_ffiFFI.modulemap */,
+			);
+			path = Frameworks;
+			sourceTree = "<group>";
+		};
 		9B5208372F881686002F2B0F = {
 			isa = PBXGroup;
 			children = (
+				9B434D0B2F881A340048C622 /* Frameworks */,
 				9B5208422F881686002F2B0F /* Gainzville */,
 				9B5208502F881687002F2B0F /* GainzvilleTests */,
 				9B52085A2F881687002F2B0F /* GainzvilleUITests */,
@@ -413,6 +432,8 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Frameworks";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/Gainzville/GainzvilleBridgingHeader.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -444,6 +465,8 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Frameworks";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/Gainzville/GainzvilleBridgingHeader.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
