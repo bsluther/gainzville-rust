@@ -20,3 +20,6 @@
 *.swp
 *.swo
 *~
+
+# Swift build artifacts
+GvFfi.xcframework/
