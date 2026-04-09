@@ -1,4 +1,4 @@
-use sqlx::types::chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc};
 use std::fmt::Debug;
 use uuid::Uuid;
 

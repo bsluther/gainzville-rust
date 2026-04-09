@@ -1,0 +1,16 @@
+[package]
+name = "gv_ffi"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+gv_core   = { path = "../core" }
+gv_sqlite = { path = "../sqlite" }
+uniffi    = { version = "0.29", features = ["tokio"] }
+tokio     = { workspace = true }
+uuid      = { workspace = true }
+chrono    = { workspace = true }
+thiserror = { workspace = true }

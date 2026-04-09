@@ -3,6 +3,7 @@ members = [
     "core",
     "dx-app",
     "generation",
+    "gv-ffi",
     "integration_tests",
     "ivm",
     "postgres",
