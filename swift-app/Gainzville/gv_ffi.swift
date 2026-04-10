@@ -467,6 +467,200 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 /**
+ * Swift implements this protocol to receive live activity list updates.
+ * Called on a background thread — dispatch to the main thread before touching UI.
+ */
+public protocol ActivitiesListener: AnyObject, Sendable {
+    
+    func onActivitiesChanged(activities: [FfiActivity]) 
+    
+}
+/**
+ * Swift implements this protocol to receive live activity list updates.
+ * Called on a background thread — dispatch to the main thread before touching UI.
+ */
+open class ActivitiesListenerImpl: ActivitiesListener, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_gv_ffi_fn_clone_activitieslistener(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_gv_ffi_fn_free_activitieslistener(handle, $0) }
+    }
+
+    
+
+    
+open func onActivitiesChanged(activities: [FfiActivity])  {try! rustCall() {
+    uniffi_gv_ffi_fn_method_activitieslistener_on_activities_changed(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeFfiActivity.lower(activities),$0
+    )
+}
+}
+    
+
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceActivitiesListener {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceActivitiesListener] = [UniffiVTableCallbackInterfaceActivitiesListener(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeActivitiesListener.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface ActivitiesListener: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeActivitiesListener.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface ActivitiesListener: handle missing in uniffiClone")
+            }
+        },
+        onActivitiesChanged: { (
+            uniffiHandle: UInt64,
+            activities: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeActivitiesListener.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onActivitiesChanged(
+                     activities: try FfiConverterSequenceTypeFfiActivity.lift(activities)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )]
+}
+
+private func uniffiCallbackInitActivitiesListener() {
+    uniffi_gv_ffi_fn_init_callback_vtable_activitieslistener(UniffiCallbackInterfaceActivitiesListener.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeActivitiesListener: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<ActivitiesListener>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = ActivitiesListener
+
+    public static func lift(_ handle: UInt64) throws -> ActivitiesListener {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return ActivitiesListenerImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: ActivitiesListener) -> UInt64 {
+         if let rustImpl = value as? ActivitiesListenerImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ActivitiesListener {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ActivitiesListener, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActivitiesListener_lift(_ handle: UInt64) throws -> ActivitiesListener {
+    return try FfiConverterTypeActivitiesListener.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActivitiesListener_lower(_ value: ActivitiesListener) -> UInt64 {
+    return FfiConverterTypeActivitiesListener.lower(value)
+}
+
+
+
+
+
+
+/**
  * Swift implements this protocol to receive change notifications.
  */
 public protocol CoreListener: AnyObject, Sendable {
@@ -681,6 +875,23 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
      */
     func runAction(action: FfiAction) throws 
     
+    /**
+     * Spawn a background task that creates a new activity every 10 seconds.
+     * Each write broadcasts on the internal change channel, which automatically
+     * wakes any active `subscribe_activities` subscribers.
+     */
+    func startBackgroundTicker() 
+    
+    /**
+     * Subscribe to live activity updates. Drives `client.stream_activities()` on the
+     * internal runtime. The listener is called immediately with the current list, then
+     * again after every write that touches activities.
+     *
+     * Called on a background thread — the Swift listener must dispatch to the main
+     * thread before touching UI state.
+     */
+    func subscribeActivities(listener: ActivitiesListener) 
+    
 }
 /**
  * The main entry point for Swift. Wraps `SqliteClient` with a static tokio
@@ -776,6 +987,34 @@ open func runAction(action: FfiAction)throws   {try rustCallWithError(FfiConvert
     uniffi_gv_ffi_fn_method_gainzvillecore_run_action(
             self.uniffiCloneHandle(),
         FfiConverterTypeFfiAction_lower(action),$0
+    )
+}
+}
+    
+    /**
+     * Spawn a background task that creates a new activity every 10 seconds.
+     * Each write broadcasts on the internal change channel, which automatically
+     * wakes any active `subscribe_activities` subscribers.
+     */
+open func startBackgroundTicker()  {try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_start_background_ticker(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
+    
+    /**
+     * Subscribe to live activity updates. Drives `client.stream_activities()` on the
+     * internal runtime. The listener is called immediately with the current list, then
+     * again after every write that touches activities.
+     *
+     * Called on a background thread — the Swift listener must dispatch to the main
+     * thread before touching UI state.
+     */
+open func subscribeActivities(listener: ActivitiesListener)  {try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_activities(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeActivitiesListener_lower(listener),$0
     )
 }
 }
@@ -1174,6 +1413,9 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_gv_ffi_checksum_method_activitieslistener_on_activities_changed() != 62019) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gv_ffi_checksum_method_corelistener_on_data_changed() != 28032) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -1183,10 +1425,17 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_run_action() != 37126) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_start_background_ticker() != 20199) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_activities() != 52225) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gv_ffi_checksum_constructor_gainzvillecore_new() != 13348) {
         return InitializationResult.apiChecksumMismatch
     }
 
+    uniffiCallbackInitActivitiesListener()
     uniffiCallbackInitCoreListener()
     return InitializationResult.ok
 }()

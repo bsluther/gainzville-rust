@@ -9,15 +9,15 @@ import SwiftUI
 
 struct ProofOfConceptView: View {
     let core: GainzvilleCore
+    @ObservedObject var viewModel: ActivitiesViewModel
 
-    @State private var activities: [FfiActivity] = []
     @State private var newName: String = ""
     @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                List(activities, id: \.id) { activity in
+                List(viewModel.activities, id: \.id) { activity in
                     VStack(alignment: .leading) {
                         Text(activity.name)
                         if let desc = activity.description {
@@ -39,12 +39,9 @@ struct ProofOfConceptView: View {
                 .padding()
             }
             .navigationTitle("Activities")
-            .onAppear { refresh() }
+            // No onAppear refresh needed — subscribe_activities yields the initial
+            // snapshot immediately and keeps the list live thereafter.
         }
-    }
-
-    private func refresh() {
-        activities = core.getActivities()
     }
 
     private func createActivity() {
@@ -55,7 +52,8 @@ struct ProofOfConceptView: View {
                 description: nil
             )))
             newName = ""
-            refresh()
+            // No manual refresh — run_action broadcasts on the change channel,
+            // which wakes the stream and calls onActivitiesChanged automatically.
         } catch {
             errorMessage = error.localizedDescription
         }

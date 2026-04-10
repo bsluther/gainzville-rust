@@ -243,11 +243,27 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureRes
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_ACTIVITIES_LISTENER_METHOD0
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_ACTIVITIES_LISTENER_METHOD0
+typedef void (*UniffiCallbackInterfaceActivitiesListenerMethod0)(uint64_t, RustBuffer, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_LISTENER_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CORE_LISTENER_METHOD0
 typedef void (*UniffiCallbackInterfaceCoreListenerMethod0)(uint64_t, void* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
+
+#endif
+#ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_ACTIVITIES_LISTENER
+#define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_ACTIVITIES_LISTENER
+typedef struct UniffiVTableCallbackInterfaceActivitiesListener {
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
+    UniffiCallbackInterfaceActivitiesListenerMethod0 _Nonnull onActivitiesChanged;
+} UniffiVTableCallbackInterfaceActivitiesListener;
 
 #endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_CORE_LISTENER
@@ -258,6 +274,26 @@ typedef struct UniffiVTableCallbackInterfaceCoreListener {
     UniffiCallbackInterfaceCoreListenerMethod0 _Nonnull onDataChanged;
 } UniffiVTableCallbackInterfaceCoreListener;
 
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_ACTIVITIESLISTENER
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_ACTIVITIESLISTENER
+uint64_t uniffi_gv_ffi_fn_clone_activitieslistener(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FREE_ACTIVITIESLISTENER
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FREE_ACTIVITIESLISTENER
+void uniffi_gv_ffi_fn_free_activitieslistener(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_INIT_CALLBACK_VTABLE_ACTIVITIESLISTENER
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_INIT_CALLBACK_VTABLE_ACTIVITIESLISTENER
+void uniffi_gv_ffi_fn_init_callback_vtable_activitieslistener(const UniffiVTableCallbackInterfaceActivitiesListener* _Nonnull vtable
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_ACTIVITIESLISTENER_ON_ACTIVITIES_CHANGED
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_ACTIVITIESLISTENER_ON_ACTIVITIES_CHANGED
+void uniffi_gv_ffi_fn_method_activitieslistener_on_activities_changed(uint64_t ptr, RustBuffer activities, RustCallStatus *_Nonnull out_status
+);
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_CORELISTENER
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_CORELISTENER
@@ -302,6 +338,16 @@ RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_get_activities(uint64_t ptr, R
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_RUN_ACTION
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_RUN_ACTION
 void uniffi_gv_ffi_fn_method_gainzvillecore_run_action(uint64_t ptr, RustBuffer action, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_START_BACKGROUND_TICKER
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_START_BACKGROUND_TICKER
+void uniffi_gv_ffi_fn_method_gainzvillecore_start_background_ticker(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_SUBSCRIBE_ACTIVITIES
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_SUBSCRIBE_ACTIVITIES
+void uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_activities(uint64_t ptr, uint64_t listener, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_GV_FFI_RUSTBUFFER_ALLOC
@@ -564,6 +610,12 @@ void ffi_gv_ffi_rust_future_free_void(uint64_t handle
 void ffi_gv_ffi_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_ACTIVITIESLISTENER_ON_ACTIVITIES_CHANGED
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_ACTIVITIESLISTENER_ON_ACTIVITIES_CHANGED
+uint16_t uniffi_gv_ffi_checksum_method_activitieslistener_on_activities_changed(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_CORELISTENER_ON_DATA_CHANGED
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_CORELISTENER_ON_DATA_CHANGED
 uint16_t uniffi_gv_ffi_checksum_method_corelistener_on_data_changed(void
@@ -579,6 +631,18 @@ uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_get_activities(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_RUN_ACTION
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_RUN_ACTION
 uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_run_action(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_START_BACKGROUND_TICKER
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_START_BACKGROUND_TICKER
+uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_start_background_ticker(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_SUBSCRIBE_ACTIVITIES
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_SUBSCRIBE_ACTIVITIES
+uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_activities(void
     
 );
 #endif
