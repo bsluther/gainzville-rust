@@ -33,7 +33,7 @@ class ActivitiesViewModel: ObservableObject {
     }
 
     func refresh(from core: GainzvilleCore) {
-        if case .activities(let list) = core.readQuery(query: .allActivities) {
+        if case .allActivities(let list) = core.readQuery(query: .allActivities) {
             activities = list
         }
     }

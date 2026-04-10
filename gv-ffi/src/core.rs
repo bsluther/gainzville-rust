@@ -1,16 +1,20 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
+use futures_util::stream::Any;
 use gv_core::actions::{Action, CreateActivity};
 use gv_core::models::activity::{Activity, ActivityName};
-use gv_core::queries::AllActivities;
+use gv_core::queries::{AllActivities, AnyQuery, AnyQueryResponse, Query};
 use gv_core::query_executor::QueryExecutor;
 use gv_sqlite::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
-use crate::types::{FfiAction, FfiActivity, FfiError, FfiQuery, FfiQueryResult, ffi_action_to_core, parse_uuid};
+use crate::types::{
+    FfiAction, FfiActivity, FfiAnyQuery, FfiAnyQueryResponse, FfiError, ffi_action_to_core,
+    parse_uuid,
+};
 
 // Single shared runtime for all FFI calls. Swift calls into Rust without a tokio
 // context, so we drive all async work through this runtime via block_on.
@@ -29,28 +33,16 @@ pub trait CoreListener: Send + Sync {
     fn on_data_changed(&self);
 }
 
-// --- Internal cache types (not exposed via FFI) ---
+// WORKING HERE
+// - Fill in AnyQueryResponse (work in progress - do it one at a time for now)
+// - Consider where Result<AnyQueryResponse> should enter the picture.
+// - Goal: move logic out of ffi layer into Client.
 
-#[derive(Hash, Eq, PartialEq, Clone)]
-enum CacheKey {
-    AllActivities,
-}
-
-impl From<FfiQuery> for CacheKey {
-    fn from(q: FfiQuery) -> Self {
-        match q {
-            FfiQuery::AllActivities => CacheKey::AllActivities,
-        }
-    }
-}
-
-// Core types are stored in the cache; conversion to FFI types happens only on read_query.
-enum CachedResult {
-    Activities(Vec<Activity>),
-}
-
+// The hash map does not enforce that entries correctly pair as (Q: Query, Q::Response), that
+// pairing must be enforced by the QueryCache and exposed via the public API, eg something like
+// `run_query<Q: Query>(query: Q) -> Result<Q::Response>`.
 struct QueryCache {
-    entries: HashMap<CacheKey, CachedResult>,
+    entries: HashMap<AnyQuery, AnyQueryResponse>,
 }
 
 impl QueryCache {
@@ -64,16 +56,28 @@ impl QueryCache {
 // --- Shared async helpers ---
 
 /// Run a single query for one CacheKey against the database.
-async fn run_query_for_key(client: &SqliteClient, key: &CacheKey) -> Result<CachedResult, FfiError> {
+/// TODO: this is basically just client.run_query(query: AnyQuery) -> Result<AnyQueryResponse>
+async fn run_query_for_key(
+    client: &SqliteClient,
+    key: AnyQuery,
+) -> Result<AnyQueryResponse, FfiError> {
     match key {
-        CacheKey::AllActivities => {
-            let mut conn = client.pool.acquire().await.map_err(|e| FfiError::Generic(e.to_string()))?;
+        AnyQuery::AllActivities(q) => {
+            let mut conn = client
+                .pool
+                .acquire()
+                .await
+                .map_err(|e| FfiError::Generic(e.to_string()))?;
             let activities = SqliteQueryExecutor::new(&mut *conn)
-                .execute(AllActivities {})
+                .execute(q)
                 .await
                 .map_err(FfiError::from)?;
-            Ok(CachedResult::Activities(activities))
+            Ok(AnyQueryResponse::AllActivities(activities))
         }
+        _ => Err(FfiError::Generic(format!(
+            "query not implemented: {:?}",
+            key
+        ))),
     }
 }
 
@@ -85,9 +89,9 @@ async fn refresh_subscribed_queries(
     client: &SqliteClient,
     cache: &Mutex<QueryCache>,
 ) -> Result<(), FfiError> {
-    let keys: Vec<CacheKey> = cache.lock().unwrap().entries.keys().cloned().collect();
+    let keys: Vec<AnyQuery> = cache.lock().unwrap().entries.keys().cloned().collect();
     for key in keys {
-        let result = run_query_for_key(client, &key).await?;
+        let result = run_query_for_key(client, key.clone()).await?;
         cache.lock().unwrap().entries.insert(key, result);
     }
     Ok(())
@@ -100,7 +104,7 @@ async fn refresh_subscribed_queries(
 /// the Drop impl — no manual unsubscribe call needed.
 #[derive(uniffi::Object)]
 pub struct QuerySubscription {
-    key: CacheKey,
+    key: AnyQuery,
     cache: Arc<Mutex<QueryCache>>,
 }
 
@@ -165,12 +169,15 @@ impl GainzvilleCore {
     /// Subscribe to a query. Runs the initial query immediately, populates the
     /// cache, and returns a `QuerySubscription` handle. Dropping the handle
     /// (Swift releasing the reference) auto-removes the query from the cache.
-    pub fn subscribe_query(&self, query: FfiQuery) -> Result<Arc<QuerySubscription>, FfiError> {
-        let key = CacheKey::from(query);
-        let initial = RUNTIME.block_on(run_query_for_key(&self.client, &key))?;
-        self.cache.lock().unwrap().entries.insert(key.clone(), initial);
+    pub fn subscribe_query(&self, query: FfiAnyQuery) -> Result<Arc<QuerySubscription>, FfiError> {
+        let initial = RUNTIME.block_on(run_query_for_key(&self.client, query.clone().into()))?;
+        self.cache
+            .lock()
+            .unwrap()
+            .entries
+            .insert(query.clone().into(), initial);
         Ok(Arc::new(QuerySubscription {
-            key,
+            key: query.clone().into(),
             cache: Arc::clone(&self.cache),
         }))
     }
@@ -178,13 +185,18 @@ impl GainzvilleCore {
     /// Read the current cached result for a query. Returns `None` if the query
     /// is not subscribed. Swift calls this synchronously from the main thread
     /// after receiving `on_data_changed()`.
-    pub fn read_query(&self, query: FfiQuery) -> Option<FfiQueryResult> {
-        let key = CacheKey::from(query);
-        self.cache.lock().unwrap().entries.get(&key).map(|r| match r {
-            CachedResult::Activities(v) => {
-                FfiQueryResult::Activities(v.iter().cloned().map(FfiActivity::from).collect())
-            }
-        })
+    pub fn read_query(&self, query: FfiAnyQuery) -> Option<FfiAnyQueryResponse> {
+        let key: AnyQuery = query.into();
+        self.cache
+            .lock()
+            .unwrap()
+            .entries
+            .get(&key)
+            .map(|r| match r {
+                AnyQueryResponse::AllActivities(v) => FfiAnyQueryResponse::AllActivities(
+                    v.iter().cloned().map(FfiActivity::from).collect(),
+                ),
+            })
     }
 
     /// Spawn a background task that creates a new activity every 10 seconds.

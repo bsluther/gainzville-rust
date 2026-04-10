@@ -4,7 +4,7 @@ use sqlx::{Decode, Postgres, Sqlite, Type};
 // NOTE: Mostly AI generated.
 
 /// A very naive type representing an email. Not production ready, but good enough for now.
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow, PartialEq, Eq, Hash)]
 pub struct Email(String);
 impl Email {
     pub fn parse(email: String) -> Result<Self, DomainError> {
@@ -83,7 +83,7 @@ impl<'r> Decode<'r, Sqlite> for Email {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, sqlx::FromRow)]
 pub struct Username(String);
 
 impl Username {

@@ -1,4 +1,7 @@
-use gv_core::models::activity::{Activity, ActivityName};
+use gv_core::{
+    models::activity::{Activity, ActivityName},
+    queries::{AllActivities, AnyQuery, AnyQueryResponse},
+};
 use uuid::Uuid;
 
 // --- Errors ---
@@ -41,13 +44,31 @@ impl From<Activity> for FfiActivity {
 // --- Queries ---
 
 #[derive(uniffi::Enum, Clone)]
-pub enum FfiQuery {
+pub enum FfiAnyQuery {
     AllActivities,
 }
 
 #[derive(uniffi::Enum)]
-pub enum FfiQueryResult {
-    Activities(Vec<FfiActivity>),
+pub enum FfiAnyQueryResponse {
+    AllActivities(Vec<FfiActivity>),
+}
+
+impl From<FfiAnyQuery> for AnyQuery {
+    fn from(q: FfiAnyQuery) -> Self {
+        match q {
+            FfiAnyQuery::AllActivities => AnyQuery::AllActivities(AllActivities {}),
+        }
+    }
+}
+
+impl From<AnyQueryResponse> for FfiAnyQueryResponse {
+    fn from(r: AnyQueryResponse) -> Self {
+        match r {
+            AnyQueryResponse::AllActivities(v) => {
+                FfiAnyQueryResponse::AllActivities(v.into_iter().map(FfiActivity::from).collect())
+            }
+        }
+    }
 }
 
 // --- Actions ---

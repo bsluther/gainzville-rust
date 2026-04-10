@@ -467,207 +467,13 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 /**
- * Swift implements this protocol to receive live activity list updates.
- * Called on a background thread — dispatch to the main thread before touching UI.
- */
-public protocol ActivitiesListener: AnyObject, Sendable {
-    
-    func onActivitiesChanged(activities: [FfiActivity]) 
-    
-}
-/**
- * Swift implements this protocol to receive live activity list updates.
- * Called on a background thread — dispatch to the main thread before touching UI.
- */
-open class ActivitiesListenerImpl: ActivitiesListener, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_gv_ffi_fn_clone_activitieslistener(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_gv_ffi_fn_free_activitieslistener(handle, $0) }
-    }
-
-    
-
-    
-open func onActivitiesChanged(activities: [FfiActivity])  {try! rustCall() {
-    uniffi_gv_ffi_fn_method_activitieslistener_on_activities_changed(
-            self.uniffiCloneHandle(),
-        FfiConverterSequenceTypeFfiActivity.lower(activities),$0
-    )
-}
-}
-    
-
-    
-}
-
-
-
-// Put the implementation in a struct so we don't pollute the top-level namespace
-fileprivate struct UniffiCallbackInterfaceActivitiesListener {
-
-    // Create the VTable using a series of closures.
-    // Swift automatically converts these into C callback functions.
-    //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceActivitiesListener] = [UniffiVTableCallbackInterfaceActivitiesListener(
-        uniffiFree: { (uniffiHandle: UInt64) -> () in
-            do {
-                try FfiConverterTypeActivitiesListener.handleMap.remove(handle: uniffiHandle)
-            } catch {
-                print("Uniffi callback interface ActivitiesListener: handle missing in uniffiFree")
-            }
-        },
-        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
-            do {
-                return try FfiConverterTypeActivitiesListener.handleMap.clone(handle: uniffiHandle)
-            } catch {
-                fatalError("Uniffi callback interface ActivitiesListener: handle missing in uniffiClone")
-            }
-        },
-        onActivitiesChanged: { (
-            uniffiHandle: UInt64,
-            activities: RustBuffer,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
-        ) in
-            let makeCall = {
-                () throws -> () in
-                guard let uniffiObj = try? FfiConverterTypeActivitiesListener.handleMap.get(handle: uniffiHandle) else {
-                    throw UniffiInternalError.unexpectedStaleHandle
-                }
-                return uniffiObj.onActivitiesChanged(
-                     activities: try FfiConverterSequenceTypeFfiActivity.lift(activities)
-                )
-            }
-
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCall(
-                callStatus: uniffiCallStatus,
-                makeCall: makeCall,
-                writeReturn: writeReturn
-            )
-        }
-    )]
-}
-
-private func uniffiCallbackInitActivitiesListener() {
-    uniffi_gv_ffi_fn_init_callback_vtable_activitieslistener(UniffiCallbackInterfaceActivitiesListener.vtable)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeActivitiesListener: FfiConverter {
-    fileprivate static let handleMap = UniffiHandleMap<ActivitiesListener>()
-
-    typealias FfiType = UInt64
-    typealias SwiftType = ActivitiesListener
-
-    public static func lift(_ handle: UInt64) throws -> ActivitiesListener {
-        if ((handle & 1) == 0) {
-            // Rust-generated handle, construct a new class that uses the handle to implement the
-            // interface
-            return ActivitiesListenerImpl(unsafeFromHandle: handle)
-        } else {
-            // Swift-generated handle, get the object from the handle map
-            return try handleMap.remove(handle: handle)
-        }
-    }
-
-    public static func lower(_ value: ActivitiesListener) -> UInt64 {
-         if let rustImpl = value as? ActivitiesListenerImpl {
-             // Rust-implemented object.  Clone the handle and return it
-            return rustImpl.uniffiCloneHandle()
-         } else {
-            // Swift object, generate a new vtable handle and return that.
-            return handleMap.insert(obj: value)
-         }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ActivitiesListener {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: ActivitiesListener, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeActivitiesListener_lift(_ handle: UInt64) throws -> ActivitiesListener {
-    return try FfiConverterTypeActivitiesListener.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeActivitiesListener_lower(_ value: ActivitiesListener) -> UInt64 {
-    return FfiConverterTypeActivitiesListener.lower(value)
-}
-
-
-
-
-
-
-/**
  * Swift implements this protocol to receive change notifications.
  */
 public protocol CoreListener: AnyObject, Sendable {
     
     /**
-     * Called after any successful `run_action`. Swift should read fresh data
-     * synchronously after receiving this callback.
+     * Called after any successful `run_action`. Swift reads from the cache
+     * synchronously via `read_query` after receiving this callback.
      */
     func onDataChanged() 
     
@@ -729,8 +535,8 @@ open class CoreListenerImpl: CoreListener, @unchecked Sendable {
 
     
     /**
-     * Called after any successful `run_action`. Swift should read fresh data
-     * synchronously after receiving this callback.
+     * Called after any successful `run_action`. Swift reads from the cache
+     * synchronously via `read_query` after receiving this callback.
      */
 open func onDataChanged()  {try! rustCall() {
     uniffi_gv_ffi_fn_method_corelistener_on_data_changed(
@@ -864,33 +670,32 @@ public func FfiConverterTypeCoreListener_lower(_ value: CoreListener) -> UInt64 
 public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     
     /**
-     * Return a snapshot of all activities. Synchronous; performs a live SQLite
-     * query on the internal runtime (no in-memory cache yet).
+     * Read the current cached result for a query. Returns `None` if the query
+     * is not subscribed. Swift calls this synchronously from the main thread
+     * after receiving `on_data_changed()`.
      */
-    func getActivities()  -> [FfiActivity]
+    func readQuery(query: FfiAnyQuery)  -> FfiAnyQueryResponse?
     
     /**
      * Execute a write action. Synchronous at the FFI boundary; async work runs
-     * on the internal runtime. Calls `listener.on_data_changed()` on success.
+     * on the internal runtime. After the write commits, all subscribed queries
+     * are refreshed in the cache, then `listener.on_data_changed()` is called once.
      */
     func runAction(action: FfiAction) throws 
     
     /**
      * Spawn a background task that creates a new activity every 10 seconds.
-     * Each write broadcasts on the internal change channel, which automatically
-     * wakes any active `subscribe_activities` subscribers.
+     * After each write the cache is refreshed and `on_data_changed()` is fired,
+     * matching the same notification path as `run_action`.
      */
     func startBackgroundTicker() 
     
     /**
-     * Subscribe to live activity updates. Drives `client.stream_activities()` on the
-     * internal runtime. The listener is called immediately with the current list, then
-     * again after every write that touches activities.
-     *
-     * Called on a background thread — the Swift listener must dispatch to the main
-     * thread before touching UI state.
+     * Subscribe to a query. Runs the initial query immediately, populates the
+     * cache, and returns a `QuerySubscription` handle. Dropping the handle
+     * (Swift releasing the reference) auto-removes the query from the cache.
      */
-    func subscribeActivities(listener: ActivitiesListener) 
+    func subscribeQuery(query: FfiAnyQuery) throws  -> QuerySubscription
     
 }
 /**
@@ -939,7 +744,7 @@ open class GainzvilleCore: GainzvilleCoreProtocol, @unchecked Sendable {
     /**
      * Initialise the database at `db_path` and return a ready-to-use core.
      *
-     * - `db_path`: SQLite connection string, e.g. `"sqlite:///path/to/db.sqlite"` or `":memory:"`.
+     * - `db_path`: SQLite connection string, e.g. `"sqlite:///path/to/db.sqlite"`.
      * - `actor_id`: UUID string identifying the current user's actor.
      * - `listener`: Swift-side callback object for change notifications.
      */
@@ -968,20 +773,23 @@ public convenience init(dbPath: String, actorId: String, listener: CoreListener)
 
     
     /**
-     * Return a snapshot of all activities. Synchronous; performs a live SQLite
-     * query on the internal runtime (no in-memory cache yet).
+     * Read the current cached result for a query. Returns `None` if the query
+     * is not subscribed. Swift calls this synchronously from the main thread
+     * after receiving `on_data_changed()`.
      */
-open func getActivities() -> [FfiActivity]  {
-    return try!  FfiConverterSequenceTypeFfiActivity.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_get_activities(
-            self.uniffiCloneHandle(),$0
+open func readQuery(query: FfiAnyQuery) -> FfiAnyQueryResponse?  {
+    return try!  FfiConverterOptionTypeFfiAnyQueryResponse.lift(try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_read_query(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiAnyQuery_lower(query),$0
     )
 })
 }
     
     /**
      * Execute a write action. Synchronous at the FFI boundary; async work runs
-     * on the internal runtime. Calls `listener.on_data_changed()` on success.
+     * on the internal runtime. After the write commits, all subscribed queries
+     * are refreshed in the cache, then `listener.on_data_changed()` is called once.
      */
 open func runAction(action: FfiAction)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
     uniffi_gv_ffi_fn_method_gainzvillecore_run_action(
@@ -993,8 +801,8 @@ open func runAction(action: FfiAction)throws   {try rustCallWithError(FfiConvert
     
     /**
      * Spawn a background task that creates a new activity every 10 seconds.
-     * Each write broadcasts on the internal change channel, which automatically
-     * wakes any active `subscribe_activities` subscribers.
+     * After each write the cache is refreshed and `on_data_changed()` is fired,
+     * matching the same notification path as `run_action`.
      */
 open func startBackgroundTicker()  {try! rustCall() {
     uniffi_gv_ffi_fn_method_gainzvillecore_start_background_ticker(
@@ -1004,19 +812,17 @@ open func startBackgroundTicker()  {try! rustCall() {
 }
     
     /**
-     * Subscribe to live activity updates. Drives `client.stream_activities()` on the
-     * internal runtime. The listener is called immediately with the current list, then
-     * again after every write that touches activities.
-     *
-     * Called on a background thread — the Swift listener must dispatch to the main
-     * thread before touching UI state.
+     * Subscribe to a query. Runs the initial query immediately, populates the
+     * cache, and returns a `QuerySubscription` handle. Dropping the handle
+     * (Swift releasing the reference) auto-removes the query from the cache.
      */
-open func subscribeActivities(listener: ActivitiesListener)  {try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_activities(
+open func subscribeQuery(query: FfiAnyQuery)throws  -> QuerySubscription  {
+    return try  FfiConverterTypeQuerySubscription_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+    uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_query(
             self.uniffiCloneHandle(),
-        FfiConverterTypeActivitiesListener_lower(listener),$0
+        FfiConverterTypeFfiAnyQuery_lower(query),$0
     )
-}
+})
 }
     
 
@@ -1062,6 +868,122 @@ public func FfiConverterTypeGainzvilleCore_lift(_ handle: UInt64) throws -> Gain
 #endif
 public func FfiConverterTypeGainzvilleCore_lower(_ value: GainzvilleCore) -> UInt64 {
     return FfiConverterTypeGainzvilleCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Opaque handle returned by `subscribe_query`. Dropping this value (when Swift
+ * releases its reference) automatically removes the query from the cache via
+ * the Drop impl — no manual unsubscribe call needed.
+ */
+public protocol QuerySubscriptionProtocol: AnyObject, Sendable {
+    
+}
+/**
+ * Opaque handle returned by `subscribe_query`. Dropping this value (when Swift
+ * releases its reference) automatically removes the query from the cache via
+ * the Drop impl — no manual unsubscribe call needed.
+ */
+open class QuerySubscription: QuerySubscriptionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_gv_ffi_fn_clone_querysubscription(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_gv_ffi_fn_free_querysubscription(handle, $0) }
+    }
+
+    
+
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQuerySubscription: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = QuerySubscription
+
+    public static func lift(_ handle: UInt64) throws -> QuerySubscription {
+        return QuerySubscription(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: QuerySubscription) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QuerySubscription {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: QuerySubscription, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuerySubscription_lift(_ handle: UInt64) throws -> QuerySubscription {
+    return try FfiConverterTypeQuerySubscription.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuerySubscription_lower(_ value: QuerySubscription) -> UInt64 {
+    return FfiConverterTypeQuerySubscription.lower(value)
 }
 
 
@@ -1275,6 +1197,129 @@ public func FfiConverterTypeFfiAction_lower(_ value: FfiAction) -> RustBuffer {
 }
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum FfiAnyQuery: Equatable, Hashable {
+    
+    case allActivities
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiAnyQuery: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiAnyQuery: FfiConverterRustBuffer {
+    typealias SwiftType = FfiAnyQuery
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiAnyQuery {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .allActivities
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FfiAnyQuery, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .allActivities:
+            writeInt(&buf, Int32(1))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiAnyQuery_lift(_ buf: RustBuffer) throws -> FfiAnyQuery {
+    return try FfiConverterTypeFfiAnyQuery.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiAnyQuery_lower(_ value: FfiAnyQuery) -> RustBuffer {
+    return FfiConverterTypeFfiAnyQuery.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum FfiAnyQueryResponse: Equatable, Hashable {
+    
+    case allActivities([FfiActivity]
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiAnyQueryResponse: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiAnyQueryResponse: FfiConverterRustBuffer {
+    typealias SwiftType = FfiAnyQueryResponse
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiAnyQueryResponse {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .allActivities(try FfiConverterSequenceTypeFfiActivity.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FfiAnyQueryResponse, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .allActivities(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterSequenceTypeFfiActivity.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiAnyQueryResponse_lift(_ buf: RustBuffer) throws -> FfiAnyQueryResponse {
+    return try FfiConverterTypeFfiAnyQueryResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiAnyQueryResponse_lower(_ value: FfiAnyQueryResponse) -> RustBuffer {
+    return FfiConverterTypeFfiAnyQueryResponse.lower(value)
+}
+
+
 
 public enum FfiError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -1376,6 +1421,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiAnyQueryResponse: FfiConverterRustBuffer {
+    typealias SwiftType = FfiAnyQueryResponse?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiAnyQueryResponse.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiAnyQueryResponse.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFfiActivity: FfiConverterRustBuffer {
     typealias SwiftType = [FfiActivity]
 
@@ -1413,29 +1482,25 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_activitieslistener_on_activities_changed() != 62019) {
+    if (uniffi_gv_ffi_checksum_method_corelistener_on_data_changed() != 48934) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_corelistener_on_data_changed() != 28032) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_read_query() != 6277) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_get_activities() != 25177) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_run_action() != 33965) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_run_action() != 37126) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_start_background_ticker() != 13975) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_start_background_ticker() != 20199) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_query() != 57726) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_activities() != 52225) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_constructor_gainzvillecore_new() != 13348) {
+    if (uniffi_gv_ffi_checksum_constructor_gainzvillecore_new() != 15001) {
         return InitializationResult.apiChecksumMismatch
     }
 
-    uniffiCallbackInitActivitiesListener()
     uniffiCallbackInitCoreListener()
     return InitializationResult.ok
 }()

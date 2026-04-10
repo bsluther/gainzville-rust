@@ -2,7 +2,7 @@ use crate::error::{Result, ValidationError};
 use sqlx::prelude::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, FromRow)]
 pub struct Activity {
     pub id: Uuid,
     pub owner_id: Uuid,
@@ -11,7 +11,7 @@ pub struct Activity {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct ActivityName(String);
 impl ActivityName {

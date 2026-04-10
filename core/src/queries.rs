@@ -28,7 +28,7 @@ macro_rules! define_query {
         $vis:vis struct $name:ident $body:tt => $response:ty
     ) => {
         $(#[$meta])*
-        #[derive(Debug, Clone)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         $vis struct $name $body
 
         impl sealed::Sealed for $name {}
@@ -38,7 +38,7 @@ macro_rules! define_query {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AnyQuery {
     // Auth
     IsEmailRegistered(IsEmailRegistered),
@@ -64,6 +64,11 @@ pub enum AnyQuery {
     FindValuesForEntry(FindValuesForEntry),
     FindValuesForEntries(FindValuesForEntries),
     FindAttributePairsForEntry(FindAttributePairsForEntry),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum AnyQueryResponse {
+    AllActivities(<AllActivities as Query>::Response),
 }
 
 impl From<IsEmailRegistered> for AnyQuery {
