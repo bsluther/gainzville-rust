@@ -12,7 +12,7 @@ use gv_core::{
     query_executor::QueryExecutor,
     SYSTEM_ACTOR_ID,
 };
-use gv_sqlite::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
+use gv_client::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
 
 fn all_commands() -> Vec<Command> {
     vec![

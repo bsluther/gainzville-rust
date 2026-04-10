@@ -7,7 +7,7 @@ use gv_core::{
     models::{attribute_pair::AttributePair, entry::Temporal},
     SYSTEM_ACTOR_ID,
 };
-use gv_sqlite::client::SqliteClient;
+use gv_client::client::SqliteClient;
 use uuid::Uuid;
 
 use crate::{

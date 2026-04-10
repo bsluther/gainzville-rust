@@ -1,4 +1,5 @@
 use fractional_index::FractionalIndex;
+use gv_client::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
 use gv_core::{
     SYSTEM_ACTOR_ID,
     actions::{CreateAttribute, CreateEntry, CreateValue},
@@ -11,11 +12,10 @@ use gv_core::{
     queries::{FindAttributeById, FindDescendants, FindValueByKey},
     query_executor::QueryExecutor,
 };
-use gv_sqlite::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "../sqlite/migrations")]
+#[sqlx::test(migrations = "../client/migrations")]
 async fn test_find_descendants(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
 
@@ -73,7 +73,7 @@ async fn test_find_descendants(pool: SqlitePool) {
     assert_eq!(b_descs.len(), 1);
 }
 
-#[sqlx::test(migrations = "../sqlite/migrations")]
+#[sqlx::test(migrations = "../client/migrations")]
 async fn test_create_attribute_and_value(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
 
@@ -100,7 +100,9 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
     let read_attr = {
         let mut connection = sqlite_client.pool.acquire().await.unwrap();
         SqliteQueryExecutor::new(&mut *connection)
-            .execute(FindAttributeById { attribute_id: attribute.id })
+            .execute(FindAttributeById {
+                attribute_id: attribute.id,
+            })
             .await
             .unwrap()
             .expect("attribute should exist")
@@ -144,7 +146,10 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
     let read_value = {
         let mut connection = sqlite_client.pool.acquire().await.unwrap();
         SqliteQueryExecutor::new(&mut *connection)
-            .execute(FindValueByKey { entry_id: entry.id, attribute_id: attribute.id })
+            .execute(FindValueByKey {
+                entry_id: entry.id,
+                attribute_id: attribute.id,
+            })
             .await
             .unwrap()
             .expect("value should exist")

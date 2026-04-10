@@ -11,7 +11,7 @@ use gv_core::{
     },
     SYSTEM_ACTOR_ID,
 };
-use gv_sqlite::client::SqliteClient;
+use gv_client::client::SqliteClient;
 
 use crate::components::{PlatformMenu, PlatformMenuItem, PlatformPopover};
 

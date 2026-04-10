@@ -3,7 +3,7 @@ use std::fs;
 use dioxus::prelude::*;
 
 use gv_core::{actions::CreateAttribute, std_lib};
-use gv_sqlite::client::SqliteClient;
+use gv_client::client::SqliteClient;
 use tracing::Level;
 use uuid::Uuid;
 use views::{

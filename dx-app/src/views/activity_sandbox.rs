@@ -4,7 +4,7 @@ use gv_core::{
     models::activity::{Activity, ActivityName},
     SYSTEM_ACTOR_ID,
 };
-use gv_sqlite::client::SqliteClient;
+use gv_client::client::SqliteClient;
 use uuid::Uuid;
 
 use crate::hooks::use_stream::use_stream;

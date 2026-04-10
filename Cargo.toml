@@ -6,8 +6,8 @@ members = [
     "gv-ffi",
     "integration_tests",
     "ivm",
-    "postgres",
-    "sqlite",
+    "client",
+    "server",
 ]
 resolver = "2"
 

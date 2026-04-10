@@ -1,7 +1,7 @@
 use chrono;
 use dioxus::prelude::*;
 use gv_core::forest::Forest;
-use gv_sqlite::client::SqliteClient;
+use gv_client::client::SqliteClient;
 
 use crate::{
     components::{EntryView, LogDatePicker},

@@ -8,7 +8,7 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 gv_core   = { path = "../core" }
-gv_sqlite = { path = "../sqlite" }
+gv_client = { path = "../client" }
 # "tokio" — static runtime for sync FFI wrappers.
 # "cli"   — enables uniffi_bindgen for the uniffi-bindgen binary target below.
 uniffi    = { version = "0.31", features = ["tokio", "cli"] }

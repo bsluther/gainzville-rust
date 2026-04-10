@@ -10,7 +10,7 @@ use gv_core::{
     },
     validation::{Email, Username},
 };
-use gv_sqlite::client::SqliteClient;
+use gv_client::client::SqliteClient;
 
 use uuid::Uuid;
 

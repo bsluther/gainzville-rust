@@ -4,7 +4,7 @@ use dioxus_free_icons::icons::io_icons::IoAddOutline;
 use dioxus_free_icons::icons::ld_icons::LdSquarePen;
 use dioxus_free_icons::Icon;
 use gv_core::models::{activity::Activity, attribute::Attribute};
-use gv_sqlite::client::SqliteClient;
+use gv_client::client::SqliteClient;
 use uuid::Uuid;
 
 use crate::components::FrequencyHeatmap;

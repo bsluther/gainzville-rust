@@ -6,16 +6,16 @@ use gv_core::{
         activity::Activity,
         entry::{Entry, Position, Temporal},
     },
-    queries::{AllActorIds, AllActivities, AllAttributes, AllEntries},
+    queries::{AllActivities, AllActorIds, AllAttributes, AllEntries},
     query_executor::QueryExecutor,
 };
-use gv_postgres::{postgres_executor::PostgresQueryExecutor, server::PostgresServer};
+use gv_server::{postgres_executor::PostgresQueryExecutor, server::PostgresServer};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use sqlx::PgPool;
 use tracing::info;
 
-#[sqlx::test(migrations = "../postgres/migrations")]
+#[sqlx::test(migrations = "../server/migrations")]
 async fn test_move_entry_disallows_cycles(pool: PgPool) {
     let server = PostgresServer::new(pool);
     let mut tx = server
@@ -27,7 +27,10 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
     let mut rng = rand::rng();
     let context = SimulationContext::default();
 
-    let actor_ids = PostgresQueryExecutor::new(&mut *tx).execute(AllActorIds {}).await.unwrap();
+    let actor_ids = PostgresQueryExecutor::new(&mut *tx)
+        .execute(AllActorIds {})
+        .await
+        .unwrap();
     let actor_id = actor_ids[0];
 
     let mut entry_a = Entry::arbitrary(&mut rng, &context);
@@ -72,7 +75,7 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
     assert!(matches!(err, gv_core::error::DomainError::Consistency(_)));
 }
 
-#[sqlx::test(migrations = "../postgres/migrations")]
+#[sqlx::test(migrations = "../server/migrations")]
 async fn test_arbitrary_create_user(pool: PgPool) {
     let server = PostgresServer::new(pool);
     let mut rng = rand::rng();
@@ -86,7 +89,7 @@ async fn test_arbitrary_create_user(pool: PgPool) {
         .expect("create_user action should succeed");
 }
 
-#[sqlx::test(migrations = "../postgres/migrations")]
+#[sqlx::test(migrations = "../server/migrations")]
 async fn test_arbitrary_create_entry(pool: PgPool) {
     let server = PostgresServer::new(pool);
     let mut tx = server
@@ -97,7 +100,10 @@ async fn test_arbitrary_create_entry(pool: PgPool) {
     let mut rng = rand::rng();
     let context = SimulationContext::default();
 
-    let actor_ids = PostgresQueryExecutor::new(&mut *tx).execute(AllActorIds {}).await.unwrap();
+    let actor_ids = PostgresQueryExecutor::new(&mut *tx)
+        .execute(AllActorIds {})
+        .await
+        .unwrap();
     let activities = (0..100)
         .map(|_| Activity::arbitrary_from(&mut rng, &context, &actor_ids))
         .collect::<Vec<_>>();
@@ -118,7 +124,7 @@ async fn test_arbitrary_create_entry(pool: PgPool) {
     }
 }
 
-#[sqlx::test(migrations = "../postgres/migrations")]
+#[sqlx::test(migrations = "../server/migrations")]
 async fn test_arbitrary_actions(pool: PgPool) {
     let _ = tracing_subscriber::FmtSubscriber::builder()
         .with_max_level(tracing::Level::WARN)

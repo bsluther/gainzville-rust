@@ -7,7 +7,7 @@ use gv_core::actions::{Action, CreateActivity};
 use gv_core::models::activity::{Activity, ActivityName};
 use gv_core::queries::{AllActivities, AnyQuery, AnyQueryResponse, Query};
 use gv_core::query_executor::QueryExecutor;
-use gv_sqlite::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
+use gv_client::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 

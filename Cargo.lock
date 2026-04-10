@@ -2488,8 +2488,8 @@ dependencies = [
  "dotenvy",
  "futures-util",
  "generation",
+ "gv_client",
  "gv_core",
- "gv_sqlite",
  "rand 0.9.2",
  "serde",
  "serde_json",
@@ -3154,7 +3154,7 @@ dependencies = [
  "dotenvy",
  "fractional_index",
  "gv_core",
- "gv_postgres",
+ "gv_server",
  "rand 0.9.2",
  "rand_chacha 0.9.0",
  "rand_distr",
@@ -3460,6 +3460,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gv_client"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "dotenvy",
+ "futures-core",
+ "gv_core",
+ "itertools 0.14.0",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "gv_core"
 version = "0.1.0"
 dependencies = [
@@ -3488,8 +3503,8 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "futures-util",
+ "gv_client",
  "gv_core",
- "gv_sqlite",
  "thiserror 2.0.17",
  "tokio",
  "uniffi",
@@ -3497,7 +3512,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gv_postgres"
+name = "gv_server"
 version = "0.1.0"
 dependencies = [
  "dotenvy",
@@ -3510,21 +3525,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "gv_sqlite"
-version = "0.1.0"
-dependencies = [
- "async-stream",
- "dotenvy",
- "futures-core",
- "gv_core",
- "itertools 0.14.0",
- "sqlx",
- "tokio",
- "tracing",
  "uuid",
 ]
 
@@ -4030,9 +4030,9 @@ dependencies = [
  "dotenvy",
  "fractional_index",
  "generation",
+ "gv_client",
  "gv_core",
- "gv_postgres",
- "gv_sqlite",
+ "gv_server",
  "rand 0.9.2",
  "rand_chacha 0.9.0",
  "sqlx",
