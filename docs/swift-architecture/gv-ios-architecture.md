@@ -227,6 +227,28 @@ on-demand access rather than a single streaming shape.
 **Rust never blocks waiting for Swift.** Enqueue and move on — same reason Ghostty
 uses a mailbox instead of direct callbacks.
 
+**Architectural flexibility — cache update mechanism is an internal detail.** The
+contract Swift sees is: subscribe to a query, get notified on change, read the latest
+result. *How* the cache gets populated is entirely behind that interface and can
+evolve without touching the FFI boundary or Swift:
+
+- **Now:** re-run subscribed SQLite queries on any write. Simple, correct, no
+  optimization needed.
+- **Later:** apply mutation deltas directly from the mutator (which already has the
+  new data in hand), skipping the DB read entirely.
+- **Later:** use Change Data Capture from Turso (a ground-up Rust rewrite of SQLite)
+  to receive row-level change events and update the cache incrementally.
+
+Batching is also a free variable on the Rust side. During a sync operation that
+applies hundreds of mutations, the core can collect changes for a debounce window
+(e.g. 100ms) before notifying Swift — one UI update instead of hundreds. Swift
+never needs to know this is happening.
+
+The reified `Query` / `AnyQuery` types fit naturally as the subscription and cache
+key: Swift hands the core an `AnyQuery` value to subscribe; the core stores it,
+re-executes it on change, and caches the result under the same key. The subscription
+API and the cache key are the same thing.
+
 ### Implementation shape
 
 ```rust
