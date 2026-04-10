@@ -39,8 +39,8 @@ struct ProofOfConceptView: View {
                 .padding()
             }
             .navigationTitle("Activities")
-            // No onAppear refresh needed — subscribe_activities yields the initial
-            // snapshot immediately and keeps the list live thereafter.
+            // No onAppear refresh needed — subscribeQuery populates the cache
+            // immediately on subscribe, and on_data_changed triggers refresh.
         }
     }
 
@@ -52,8 +52,8 @@ struct ProofOfConceptView: View {
                 description: nil
             )))
             newName = ""
-            // No manual refresh — run_action broadcasts on the change channel,
-            // which wakes the stream and calls onActivitiesChanged automatically.
+            // No manual refresh — run_action refreshes the cache and calls
+            // on_data_changed, which triggers viewModel.refresh via AppListener.
         } catch {
             errorMessage = error.localizedDescription
         }

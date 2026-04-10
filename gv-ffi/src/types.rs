@@ -38,6 +38,18 @@ impl From<Activity> for FfiActivity {
     }
 }
 
+// --- Queries ---
+
+#[derive(uniffi::Enum, Clone)]
+pub enum FfiQuery {
+    AllActivities,
+}
+
+#[derive(uniffi::Enum)]
+pub enum FfiQueryResult {
+    Activities(Vec<FfiActivity>),
+}
+
 // --- Actions ---
 
 /// Minimal action surface for the PoC — only CreateActivity.

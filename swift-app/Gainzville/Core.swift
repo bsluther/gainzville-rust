@@ -9,44 +9,37 @@ import Foundation
 import SwiftUI
 internal import Combine
 
-// No-op CoreListener — still required by GainzvilleCore's constructor.
-// Live updates flow through ActivitiesListenerBridge / subscribe_activities instead.
+// Bridges CoreListener callbacks from Rust to the main thread.
+// The onChanged closure is set after both `core` and `viewModel` exist,
+// avoiding the circular dependency at construction time.
 class AppListener: CoreListener {
-    func onDataChanged() {}
-}
+    var onChanged: (@Sendable () -> Void)?
 
-// Bridges ActivitiesListener callbacks from Rust's background thread to the main thread.
-class ActivitiesListenerBridge: ActivitiesListener {
-    private let callback: ([FfiActivity]) -> Void
-
-    init(_ callback: @escaping ([FfiActivity]) -> Void) {
-        self.callback = callback
-    }
-
-    func onActivitiesChanged(activities: [FfiActivity]) {
-        DispatchQueue.main.async { self.callback(activities) }
+    func onDataChanged() {
+        onChanged?()
     }
 }
 
-// View model for the activity list. Subscribes once; stays live for the app's lifetime.
+// View model for the activity list. Subscribes once via subscribe_query;
+// stays live for the app's lifetime. Dropping `subscription` auto-unsubscribes.
+@MainActor
 class ActivitiesViewModel: ObservableObject {
     @Published var activities: [FfiActivity] = []
-
-    // Holds the bridge strongly — Rust's spawn also holds it, but keeping it here
-    // makes the lifetime explicit and avoids relying on UniFFI's internal refcount.
-    private var bridge: ActivitiesListenerBridge?
+    private var subscription: QuerySubscription?
 
     func subscribe(to core: GainzvilleCore) {
-        let bridge = ActivitiesListenerBridge { [weak self] activities in
-            self?.activities = activities
+        subscription = try? core.subscribeQuery(query: .allActivities)
+        refresh(from: core)
+    }
+
+    func refresh(from core: GainzvilleCore) {
+        if case .activities(let list) = core.readQuery(query: .allActivities) {
+            activities = list
         }
-        self.bridge = bridge
-        core.subscribeActivities(listener: bridge)
-        core.startBackgroundTicker()
     }
 }
 
-func makeCore() throws -> GainzvilleCore {
+func makeCore(listener: AppListener) throws -> GainzvilleCore {
     let dbURL = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("gainzville.sqlite")
@@ -59,6 +52,6 @@ func makeCore() throws -> GainzvilleCore {
     return try GainzvilleCore(
         dbPath: "sqlite://\(dbURL.path)",
         actorId: "eee9e6ae-6531-4580-8356-427604a0dc02",
-        listener: AppListener()
+        listener: listener
     )
 }

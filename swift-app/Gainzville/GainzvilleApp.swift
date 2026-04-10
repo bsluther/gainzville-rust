@@ -13,9 +13,17 @@ struct GainzvilleApp: App {
     let viewModel: ActivitiesViewModel
 
     init() {
-        let c = try! makeCore()
+        let listener = AppListener()
+        let c = try! makeCore(listener: listener)
         let vm = ActivitiesViewModel()
         vm.subscribe(to: c)
+        // Wire the listener callback after both core and viewModel exist.
+        listener.onChanged = { [weak vm] in
+            Task { @MainActor [weak vm] in
+                vm?.refresh(from: c)
+            }
+        }
+        c.startBackgroundTicker()
         core = c
         viewModel = vm
     }
