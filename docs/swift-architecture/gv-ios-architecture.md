@@ -191,14 +191,41 @@ The pattern is: producers (background tokio tasks updating cache) enqueue lightw
 the main thread (called by Swift, either on a timer or triggered by a wakeup signal)
 processes the queue and dispatches reads.
 
-### Why the channel, not direct callbacks per change
+### Why the channel + cache, not direct data-carrying callbacks per change
 
-- Multiple changes can land in rapid succession (sync patch arrives, several cache
-  entries update). The channel batches them — Swift does one read pass rather than
-  thrashing.
-- Rust never blocks waiting for Swift to handle a notification. Enqueue and move on.
-- Absorbs the impedance mismatch between Rust's internal thread activity and Swift's
-  threading model — same reason Ghostty uses a mailbox instead of direct callbacks.
+**Batching — no thrashing under write bursts.** Multiple changes can land in rapid
+succession (sync patch arrives, several cache entries update). The channel batches them
+— Swift does one read pass rather than re-rendering on every intermediate state.
+
+**Latest-wins semantics.** With a streaming approach, Swift receives every intermediate
+value in sequence. With the cache model, Rust just overwrites the cached value; Swift
+always reads the *current* state when it drains, never a stale snapshot from several
+writes ago. The notification is "go look," not "here is the value."
+
+**Cross-query snapshot coherence.** Multiple active subscriptions (activities, entries,
+attributes) firing independently can leave Swift in a transiently inconsistent state —
+activities from T1, entries from T2. With a single `on_data_changed()` driving reads
+across all view models from the same cache, Swift sees a consistent picture at one
+logical point in time.
+
+**Write path already has the data — cache updates are free.** The mutator that executes
+a `CreateActivity` has the new activity in hand before committing. Updating the cache
+is a cheap in-memory write. With streams, every committed write triggers a fresh SQLite
+query to rebuild the list. The cache model eliminates that read round-trip entirely.
+
+**Simpler threading model.** A streaming approach spawns one tokio task per active
+subscription, each firing callbacks from its own worker thread. With the cache model
+there is one `on_data_changed()` signal and Swift owns all reads from the main thread.
+Much less to reason about: one notification path, one reader.
+
+**Slimmer FFI boundary.** Callbacks carry no payload — just a wakeup. Large data
+structures (Vec<Entry>, Forest query results) cross the boundary only when Swift
+explicitly reads them, not on every write. This matters especially for the Forest,
+where multiple traversal methods (`get_children`, `get_ancestors`, `can_drop`) need
+on-demand access rather than a single streaming shape.
+
+**Rust never blocks waiting for Swift.** Enqueue and move on — same reason Ghostty
+uses a mailbox instead of direct callbacks.
 
 ### Implementation shape
 
