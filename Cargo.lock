@@ -3502,7 +3502,6 @@ name = "gv_ffi"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "futures-util",
  "gv_client",
  "gv_core",
  "thiserror 2.0.17",

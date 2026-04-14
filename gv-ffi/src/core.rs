@@ -1,20 +1,10 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, LazyLock, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, LazyLock};
 
-use futures_util::stream::Any;
-use gv_core::actions::{Action, CreateActivity};
-use gv_core::models::activity::{Activity, ActivityName};
-use gv_core::queries::{AllActivities, AnyQuery, AnyQueryResponse, Query};
-use gv_core::query_executor::QueryExecutor;
-use gv_client::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
+use gv_client::{client::SqliteClient, query_store::QuerySubscription};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
-use crate::types::{
-    FfiAction, FfiActivity, FfiAnyQuery, FfiAnyQueryResponse, FfiError, ffi_action_to_core,
-    parse_uuid,
-};
+use crate::types::{FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiError, ffi_action_to_core, parse_uuid};
 
 // Single shared runtime for all FFI calls. Swift calls into Rust without a tokio
 // context, so we drive all async work through this runtime via block_on.
@@ -33,90 +23,11 @@ pub trait CoreListener: Send + Sync {
     fn on_data_changed(&self);
 }
 
-// WORKING HERE
-// - Fill in AnyQueryResponse (work in progress - do it one at a time for now)
-// - Consider where Result<AnyQueryResponse> should enter the picture.
-// - Goal: move logic out of ffi layer into Client.
-
-// The hash map does not enforce that entries correctly pair as (Q: Query, Q::Response), that
-// pairing must be enforced by the QueryCache and exposed via the public API, eg something like
-// `run_query<Q: Query>(query: Q) -> Result<Q::Response>`.
-struct QueryCache {
-    entries: HashMap<AnyQuery, AnyQueryResponse>,
-}
-
-impl QueryCache {
-    fn new() -> Self {
-        QueryCache {
-            entries: HashMap::new(),
-        }
-    }
-}
-
-// --- Shared async helpers ---
-
-/// Run a single query for one CacheKey against the database.
-/// TODO: this is basically just client.run_query(query: AnyQuery) -> Result<AnyQueryResponse>
-async fn run_query_for_key(
-    client: &SqliteClient,
-    key: AnyQuery,
-) -> Result<AnyQueryResponse, FfiError> {
-    match key {
-        AnyQuery::AllActivities(q) => {
-            let mut conn = client
-                .pool
-                .acquire()
-                .await
-                .map_err(|e| FfiError::Generic(e.to_string()))?;
-            let activities = SqliteQueryExecutor::new(&mut *conn)
-                .execute(q)
-                .await
-                .map_err(FfiError::from)?;
-            Ok(AnyQueryResponse::AllActivities(activities))
-        }
-        _ => Err(FfiError::Generic(format!(
-            "query not implemented: {:?}",
-            key
-        ))),
-    }
-}
-
-/// Refresh all keys currently present in the cache.
-///
-/// Uses std::sync::Mutex; the lock is dropped before each await point so this
-/// is safe to call from async contexts.
-async fn refresh_subscribed_queries(
-    client: &SqliteClient,
-    cache: &Mutex<QueryCache>,
-) -> Result<(), FfiError> {
-    let keys: Vec<AnyQuery> = cache.lock().unwrap().entries.keys().cloned().collect();
-    for key in keys {
-        let result = run_query_for_key(client, key.clone()).await?;
-        cache.lock().unwrap().entries.insert(key, result);
-    }
-    Ok(())
-}
-
-// --- QuerySubscription ---
-
-/// Opaque handle returned by `subscribe_query`. Dropping this value (when Swift
-/// releases its reference) automatically removes the query from the cache via
-/// the Drop impl — no manual unsubscribe call needed.
+/// UniFFI-compatible wrapper around `QuerySubscription`. Dropping this value
+/// (when Swift releases its reference) automatically unsubscribes the query.
+/// The inner Arc is held only for its Drop side-effect.
 #[derive(uniffi::Object)]
-pub struct QuerySubscription {
-    key: AnyQuery,
-    cache: Arc<Mutex<QueryCache>>,
-}
-
-impl Drop for QuerySubscription {
-    fn drop(&mut self) {
-        if let Ok(mut c) = self.cache.lock() {
-            c.entries.remove(&self.key);
-        }
-    }
-}
-
-// --- GainzvilleCore ---
+pub struct FfiQuerySubscription(#[allow(dead_code)] Arc<QuerySubscription>);
 
 /// The main entry point for Swift. Wraps `SqliteClient` with a static tokio
 /// runtime and synchronous UniFFI-exported methods.
@@ -124,8 +35,6 @@ impl Drop for QuerySubscription {
 pub struct GainzvilleCore {
     client: SqliteClient,
     actor_id: Uuid,
-    listener: Arc<dyn CoreListener>,
-    cache: Arc<Mutex<QueryCache>>,
 }
 
 #[uniffi::export]
@@ -145,89 +54,54 @@ impl GainzvilleCore {
         let client = RUNTIME
             .block_on(SqliteClient::init(&db_path))
             .map_err(FfiError::from)?;
-        Ok(Arc::new(GainzvilleCore {
-            client,
-            actor_id,
-            listener,
-            cache: Arc::new(Mutex::new(QueryCache::new())),
-        }))
+
+        // Wire the CoreListener: subscribe to cache-ready events and call
+        // on_data_changed() from a background task each time the cache updates.
+        let mut cache_ready_rx = client.subscribe_cache_ready();
+        RUNTIME.spawn(async move {
+            while let Ok(()) = cache_ready_rx.recv().await {
+                listener.on_data_changed();
+            }
+        });
+
+        Ok(Arc::new(GainzvilleCore { client, actor_id }))
     }
 
-    /// Execute a write action. Synchronous at the FFI boundary; async work runs
-    /// on the internal runtime. After the write commits, all subscribed queries
-    /// are refreshed in the cache, then `listener.on_data_changed()` is called once.
+    /// Execute a write action. Returns once the write has committed; the cache
+    /// refresh and `on_data_changed()` callback happen asynchronously afterward.
     pub fn run_action(&self, action: FfiAction) -> Result<(), FfiError> {
         let core_action = ffi_action_to_core(action, self.actor_id)?;
         RUNTIME
             .block_on(self.client.run_action(core_action))
-            .map_err(FfiError::from)?;
-        RUNTIME.block_on(refresh_subscribed_queries(&self.client, &self.cache))?;
-        self.listener.on_data_changed();
-        Ok(())
+            .map_err(FfiError::from)
     }
 
     /// Subscribe to a query. Runs the initial query immediately, populates the
-    /// cache, and returns a `QuerySubscription` handle. Dropping the handle
+    /// cache, and returns a `FfiQuerySubscription` handle. Dropping the handle
     /// (Swift releasing the reference) auto-removes the query from the cache.
-    pub fn subscribe_query(&self, query: FfiAnyQuery) -> Result<Arc<QuerySubscription>, FfiError> {
-        let initial = RUNTIME.block_on(run_query_for_key(&self.client, query.clone().into()))?;
-        self.cache
-            .lock()
-            .unwrap()
-            .entries
-            .insert(query.clone().into(), initial);
-        Ok(Arc::new(QuerySubscription {
-            key: query.clone().into(),
-            cache: Arc::clone(&self.cache),
-        }))
+    pub fn subscribe_query(
+        &self,
+        query: FfiAnyQuery,
+    ) -> Result<Arc<FfiQuerySubscription>, FfiError> {
+        let subscription = RUNTIME
+            .block_on(self.client.subscribe_query(query.into()))
+            .map_err(FfiError::from)?;
+        Ok(Arc::new(FfiQuerySubscription(subscription)))
     }
 
     /// Read the current cached result for a query. Returns `None` if the query
     /// is not subscribed. Swift calls this synchronously from the main thread
     /// after receiving `on_data_changed()`.
     pub fn read_query(&self, query: FfiAnyQuery) -> Option<FfiAnyQueryResponse> {
-        let key: AnyQuery = query.into();
-        self.cache
-            .lock()
-            .unwrap()
-            .entries
-            .get(&key)
-            .map(|r| match r {
-                AnyQueryResponse::AllActivities(v) => FfiAnyQueryResponse::AllActivities(
-                    v.iter().cloned().map(FfiActivity::from).collect(),
-                ),
-            })
+        self.client
+            .read_cached_query(query.into())
+            .map(FfiAnyQueryResponse::from)
     }
 
     /// Spawn a background task that creates a new activity every 10 seconds.
-    /// After each write the cache is refreshed and `on_data_changed()` is fired,
-    /// matching the same notification path as `run_action`.
+    /// Cache refresh and `on_data_changed()` fire automatically via the change
+    /// broadcast — no manual wiring needed here.
     pub fn start_background_ticker(&self) {
-        let client = self.client.clone();
-        let actor_id = self.actor_id;
-        let cache = Arc::clone(&self.cache);
-        let listener = Arc::clone(&self.listener);
-        RUNTIME.spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(10));
-            interval.tick().await; // skip the immediate first tick
-            let mut counter = 0u64;
-            loop {
-                interval.tick().await;
-                counter += 1;
-                let activity = Activity {
-                    id: Uuid::new_v4(),
-                    owner_id: actor_id,
-                    name: ActivityName::parse(format!("Auto Activity {counter}"))
-                        .unwrap_or_else(|_| ActivityName::parse("Auto".to_string()).unwrap()),
-                    description: Some(format!("Created by background ticker (tick #{counter})")),
-                    source_activity_id: None,
-                };
-                let action: Action = CreateActivity { actor_id, activity }.into();
-                if client.run_action(action).await.is_ok() {
-                    let _ = refresh_subscribed_queries(&client, &cache).await;
-                    listener.on_data_changed();
-                }
-            }
-        });
+        self.client.start_background_ticker(self.actor_id);
     }
 }
