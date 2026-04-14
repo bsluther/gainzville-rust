@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use futures_core::Stream;
+use gv_core::error::DomainError;
 use gv_core::{
     actions::{Action, CreateActivity},
     error::Result,
@@ -17,7 +18,6 @@ use gv_core::{
     },
     query_executor::QueryExecutor,
 };
-use gv_core::error::DomainError;
 use sqlx::{
     SqlitePool,
     sqlite::SqlitePoolOptions,
@@ -59,9 +59,16 @@ impl SqliteClient {
         let query_store = QueryStore::new(
             pool.clone(),
             change_transmitter.clone(),
-            Arc::new(move || { let _ = cache_ready_tx.send(()); }),
+            Arc::new(move || {
+                let _ = cache_ready_tx.send(());
+            }),
         );
-        SqliteClient { pool, change_transmitter, cache_ready_transmitter, query_store }
+        SqliteClient {
+            pool,
+            change_transmitter,
+            cache_ready_transmitter,
+            query_store,
+        }
     }
 
     /// Run migrations on the database. Safe to call multiple times - sqlx tracks which migrations
