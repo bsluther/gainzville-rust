@@ -4,7 +4,7 @@ use std::{
 };
 
 use gv_core::{
-    error::{DomainError, Result},
+    error::Result,
     queries::{AnyQuery, AnyQueryResponse, Query},
     query_executor::QueryExecutor,
 };
@@ -55,10 +55,30 @@ impl QueryStore {
     /// Type-erased version of run_query.
     pub async fn run_any_query(&self, query: AnyQuery) -> Result<AnyQueryResponse> {
         match query {
-            AnyQuery::AllActivities(q) => {
-                Ok(AnyQueryResponse::AllActivities(self.run_query(q).await?))
-            }
-            _ => Err(DomainError::Other("Unimplemented query.".into())),
+            // Auth
+            AnyQuery::IsEmailRegistered(q) => Ok(AnyQueryResponse::IsEmailRegistered(self.run_query(q).await?)),
+            AnyQuery::FindUserById(q) => Ok(AnyQueryResponse::FindUserById(self.run_query(q).await?)),
+            AnyQuery::FindUserByUsername(q) => Ok(AnyQueryResponse::FindUserByUsername(self.run_query(q).await?)),
+            AnyQuery::AllActorIds(q) => Ok(AnyQueryResponse::AllActorIds(self.run_query(q).await?)),
+            // Activity
+            AnyQuery::FindActivityById(q) => Ok(AnyQueryResponse::FindActivityById(self.run_query(q).await?)),
+            AnyQuery::AllActivities(q) => Ok(AnyQueryResponse::AllActivities(self.run_query(q).await?)),
+            // Entry
+            AnyQuery::AllEntries(q) => Ok(AnyQueryResponse::AllEntries(self.run_query(q).await?)),
+            AnyQuery::EntriesRootedInTimeInterval(q) => Ok(AnyQueryResponse::EntriesRootedInTimeInterval(self.run_query(q).await?)),
+            AnyQuery::FindAncestors(q) => Ok(AnyQueryResponse::FindAncestors(self.run_query(q).await?)),
+            AnyQuery::FindEntryById(q) => Ok(AnyQueryResponse::FindEntryById(self.run_query(q).await?)),
+            AnyQuery::FindEntryJoinById(q) => Ok(AnyQueryResponse::FindEntryJoinById(self.run_query(q).await?)),
+            AnyQuery::FindDescendants(q) => Ok(AnyQueryResponse::FindDescendants(self.run_query(q).await?)),
+            // Attribute
+            AnyQuery::FindAttributeById(q) => Ok(AnyQueryResponse::FindAttributeById(self.run_query(q).await?)),
+            AnyQuery::AllAttributes(q) => Ok(AnyQueryResponse::AllAttributes(self.run_query(q).await?)),
+            AnyQuery::FindAttributesByOwner(q) => Ok(AnyQueryResponse::FindAttributesByOwner(self.run_query(q).await?)),
+            // Value
+            AnyQuery::FindValueByKey(q) => Ok(AnyQueryResponse::FindValueByKey(self.run_query(q).await?)),
+            AnyQuery::FindValuesForEntry(q) => Ok(AnyQueryResponse::FindValuesForEntry(self.run_query(q).await?)),
+            AnyQuery::FindValuesForEntries(q) => Ok(AnyQueryResponse::FindValuesForEntries(self.run_query(q).await?)),
+            AnyQuery::FindAttributePairsForEntry(q) => Ok(AnyQueryResponse::FindAttributePairsForEntry(self.run_query(q).await?)),
         }
     }
 

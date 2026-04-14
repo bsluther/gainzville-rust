@@ -66,9 +66,32 @@ pub enum AnyQuery {
     FindAttributePairsForEntry(FindAttributePairsForEntry),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum AnyQueryResponse {
-    AllActivities(<AllActivities as Query>::Response),
+    // Auth
+    IsEmailRegistered(bool),
+    FindUserById(Option<User>),
+    FindUserByUsername(Option<User>),
+    AllActorIds(Vec<Uuid>),
+    // Activity
+    FindActivityById(Option<Activity>),
+    AllActivities(Vec<Activity>),
+    // Entry
+    AllEntries(Vec<Entry>),
+    EntriesRootedInTimeInterval(Vec<Entry>),
+    FindAncestors(Vec<Uuid>),
+    FindEntryById(Option<Entry>),
+    FindEntryJoinById(Option<EntryJoin>),
+    FindDescendants(Vec<Entry>),
+    // Attribute
+    FindAttributeById(Option<Attribute>),
+    AllAttributes(Vec<Attribute>),
+    FindAttributesByOwner(Vec<Attribute>),
+    // Value
+    FindValueByKey(Option<Value>),
+    FindValuesForEntry(Vec<Value>),
+    FindValuesForEntries(Vec<Value>),
+    FindAttributePairsForEntry(Vec<AttributePair>),
 }
 
 impl From<IsEmailRegistered> for AnyQuery {
