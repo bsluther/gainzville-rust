@@ -1,16 +1,22 @@
+use std::{sync::Arc, time::Duration};
+
 use futures_core::Stream;
 use gv_core::{
-    actions::Action,
+    actions::{Action, CreateActivity},
     error::Result,
-    models::{activity::Activity, attribute::Attribute, entry::Entry, entry_join::EntryJoin},
+    models::{
+        activity::{Activity, ActivityName},
+        attribute::Attribute,
+        entry::Entry,
+        entry_join::EntryJoin,
+    },
     mutators,
     queries::{
-        AllActivities, AllAttributes, AllEntries, EntriesRootedInTimeInterval, FindActivityById,
-        FindEntryJoinById,
+        AllActivities, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse,
+        EntriesRootedInTimeInterval, FindActivityById, FindEntryJoinById, Query,
     },
     query_executor::QueryExecutor,
 };
-
 use gv_core::error::DomainError;
 use sqlx::{
     SqlitePool,
@@ -21,12 +27,18 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use crate::{apply::SqliteApply, sqlite_executor::SqliteQueryExecutor};
+use crate::{
+    apply::SqliteApply,
+    query_store::{QueryStore, QuerySubscription},
+    sqlite_executor::SqliteQueryExecutor,
+};
 
 #[derive(Debug, Clone)]
 pub struct SqliteClient {
     pub pool: SqlitePool,
     change_transmitter: broadcast::Sender<()>,
+    cache_ready_transmitter: broadcast::Sender<()>,
+    query_store: QueryStore,
 }
 
 impl SqliteClient {
@@ -35,21 +47,21 @@ impl SqliteClient {
             .max_connections(20)
             .connect(db_path)
             .await?;
-        let (change_transmitter, _rx) = broadcast::channel::<()>(16);
-        let client = SqliteClient {
-            pool,
-            change_transmitter,
-        };
+        let client = Self::from_pool(pool);
         client.run_migrations().await?;
         Ok(client)
     }
 
     pub fn from_pool(pool: SqlitePool) -> Self {
         let (change_transmitter, _rx) = broadcast::channel::<()>(16);
-        SqliteClient {
-            pool: pool,
-            change_transmitter,
-        }
+        let (cache_ready_transmitter, _rx2) = broadcast::channel::<()>(16);
+        let cache_ready_tx = cache_ready_transmitter.clone();
+        let query_store = QueryStore::new(
+            pool.clone(),
+            change_transmitter.clone(),
+            Arc::new(move || { let _ = cache_ready_tx.send(()); }),
+        );
+        SqliteClient { pool, change_transmitter, cache_ready_transmitter, query_store }
     }
 
     /// Run migrations on the database. Safe to call multiple times - sqlx tracks which migrations
@@ -121,6 +133,56 @@ impl SqliteClient {
         // sync_service.append_applied_mutation(mx);
 
         Ok(())
+    }
+
+    pub async fn run_query<Q: Query>(&self, query: Q) -> Result<Q::Response>
+    where
+        for<'c> SqliteQueryExecutor<'c>: QueryExecutor<Q>,
+    {
+        self.query_store.run_query(query).await
+    }
+
+    pub async fn run_any_query(&self, query: AnyQuery) -> Result<AnyQueryResponse> {
+        self.query_store.run_any_query(query).await
+    }
+
+    pub async fn subscribe_query(&self, query: AnyQuery) -> Result<Arc<QuerySubscription>> {
+        self.query_store.subscribe_query(query).await
+    }
+
+    pub fn read_cached_query(&self, query: AnyQuery) -> Option<AnyQueryResponse> {
+        self.query_store.read_cached_query(query)
+    }
+
+    /// Subscribe to cache-ready notifications. Fires after each database change
+    /// has been propagated through all subscribed queries.
+    pub fn subscribe_cache_ready(&self) -> broadcast::Receiver<()> {
+        self.cache_ready_transmitter.subscribe()
+    }
+
+    /// Spawn a background task that creates a new activity every 10 seconds.
+    /// Cache refresh and notifications happen automatically via the change broadcast.
+    pub fn start_background_ticker(&self, actor_id: Uuid) {
+        let client = self.clone();
+        let _ = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
+            interval.tick().await; // skip the immediate first tick
+            let mut counter = 0u64;
+            loop {
+                interval.tick().await;
+                counter += 1;
+                let activity = Activity {
+                    id: Uuid::new_v4(),
+                    owner_id: actor_id,
+                    name: ActivityName::parse(format!("Auto Activity {counter}"))
+                        .unwrap_or_else(|_| ActivityName::parse("Auto".to_string()).unwrap()),
+                    description: Some(format!("Created by background ticker (tick #{counter})")),
+                    source_activity_id: None,
+                };
+                let action: Action = CreateActivity { actor_id, activity }.into();
+                let _ = client.run_action(action).await;
+            }
+        });
     }
 
     // TODO: move out of top-level, try generalizing to stream(query: <Fn...>) -> impl Stream<...>.
@@ -254,7 +316,7 @@ impl SqliteClient {
 
 pub mod tests {
     pub use super::*;
-    pub use gv_core::{SYSTEM_ACTOR_ID, actions::CreateActivity, models::activity::ActivityName};
+    pub use gv_core::SYSTEM_ACTOR_ID;
     pub use uuid::Uuid;
 
     #[sqlx::test(migrations = "./migrations")]
