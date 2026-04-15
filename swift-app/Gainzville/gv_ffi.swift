@@ -858,6 +858,26 @@ public func FfiConverterTypeFfiQuerySubscription_lower(_ value: FfiQuerySubscrip
 public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     
     /**
+     * Ancestors of `entry_id` from immediate parent up to the root.
+     */
+    func forestAncestors(entryId: String)  -> [FfiEntry]
+    
+    /**
+     * Direct children of `parent_id`, sorted by fractional index.
+     */
+    func forestChildren(parentId: String)  -> [FfiEntry]
+    
+    /**
+     * All root entries (no parent), sorted by canonical instant.
+     */
+    func forestRoots()  -> [FfiEntry]
+    
+    /**
+     * Root entries whose canonical instant falls within `[from, to)` (Unix ms), sorted by time.
+     */
+    func forestRootsIn(from: Int64, to: Int64)  -> [FfiEntry]
+    
+    /**
      * Read the current cached result for a query. Returns `None` if the query
      * is not subscribed or if the query parameters are invalid. Swift calls
      * this synchronously from the main thread after receiving `on_data_changed()`.
@@ -876,6 +896,13 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
      * broadcast — no manual wiring needed here.
      */
     func startBackgroundTicker() 
+    
+    /**
+     * Subscribe to the forest cache. Internally subscribes to AllEntries.
+     * Hold the returned token for the lifetime of the subscriber; dropping it
+     * unsubscribes automatically, same as `subscribe_query`.
+     */
+    func subscribeForest() throws  -> FfiQuerySubscription
     
     /**
      * Subscribe to a query. Runs the initial query immediately, populates the
@@ -960,6 +987,54 @@ public convenience init(dbPath: String, actorId: String, listener: CoreListener)
 
     
     /**
+     * Ancestors of `entry_id` from immediate parent up to the root.
+     */
+open func forestAncestors(entryId: String) -> [FfiEntry]  {
+    return try!  FfiConverterSequenceTypeFfiEntry.lift(try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_forest_ancestors(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(entryId),$0
+    )
+})
+}
+    
+    /**
+     * Direct children of `parent_id`, sorted by fractional index.
+     */
+open func forestChildren(parentId: String) -> [FfiEntry]  {
+    return try!  FfiConverterSequenceTypeFfiEntry.lift(try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_forest_children(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(parentId),$0
+    )
+})
+}
+    
+    /**
+     * All root entries (no parent), sorted by canonical instant.
+     */
+open func forestRoots() -> [FfiEntry]  {
+    return try!  FfiConverterSequenceTypeFfiEntry.lift(try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_forest_roots(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * Root entries whose canonical instant falls within `[from, to)` (Unix ms), sorted by time.
+     */
+open func forestRootsIn(from: Int64, to: Int64) -> [FfiEntry]  {
+    return try!  FfiConverterSequenceTypeFfiEntry.lift(try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_forest_roots_in(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(from),
+        FfiConverterInt64.lower(to),$0
+    )
+})
+}
+    
+    /**
      * Read the current cached result for a query. Returns `None` if the query
      * is not subscribed or if the query parameters are invalid. Swift calls
      * this synchronously from the main thread after receiving `on_data_changed()`.
@@ -995,6 +1070,19 @@ open func startBackgroundTicker()  {try! rustCall() {
             self.uniffiCloneHandle(),$0
     )
 }
+}
+    
+    /**
+     * Subscribe to the forest cache. Internally subscribes to AllEntries.
+     * Hold the returned token for the lifetime of the subscriber; dropping it
+     * unsubscribes automatically, same as `subscribe_query`.
+     */
+open func subscribeForest()throws  -> FfiQuerySubscription  {
+    return try  FfiConverterTypeFfiQuerySubscription_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+    uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_forest(
+            self.uniffiCloneHandle(),$0
+    )
+})
 }
     
     /**
@@ -3871,6 +3959,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_corelistener_on_data_changed() != 48934) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_ancestors() != 65096) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_children() != 57041) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots() != 31525) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots_in() != 32116) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_read_query() != 4312) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3878,6 +3978,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_start_background_ticker() != 12896) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_forest() != 23042) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_query() != 18119) {

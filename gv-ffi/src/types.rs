@@ -49,7 +49,7 @@ pub(crate) fn parse_activity_name(s: &str) -> Result<ActivityName, FfiError> {
         .map_err(|e| FfiError::Generic(format!("invalid activity name '{}': {}", s, e)))
 }
 
-fn parse_timestamp_ms(ms: i64) -> Result<DateTime<Utc>, FfiError> {
+pub(crate) fn parse_timestamp_ms(ms: i64) -> Result<DateTime<Utc>, FfiError> {
     DateTime::<Utc>::from_timestamp_millis(ms)
         .ok_or_else(|| FfiError::Generic(format!("invalid timestamp milliseconds: {ms}")))
 }

@@ -4,9 +4,15 @@ use gv_client::{client::SqliteClient, query_store::QuerySubscription};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
-use gv_core::queries::AnyQuery;
+use gv_core::{
+    forest::Forest,
+    queries::{AllEntries, AnyQuery, AnyQueryResponse},
+};
 
-use crate::types::{FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiError, ffi_action_to_core, parse_uuid};
+use crate::types::{
+    FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiEntry, FfiError,
+    ffi_action_to_core, parse_timestamp_ms, parse_uuid,
+};
 
 // Single shared runtime for all FFI calls. Swift calls into Rust without a tokio
 // context, so we drive all async work through this runtime via block_on.
@@ -108,5 +114,74 @@ impl GainzvilleCore {
     pub fn start_background_ticker(&self) {
         let _guard = RUNTIME.enter();
         self.client.start_background_ticker(self.actor_id);
+    }
+
+    // -------------------------------------------------------------------------
+    // Forest
+    //
+    // The forest is backed by the AllEntries query cache. Call `subscribe_forest`
+    // once to start maintaining the cache; the returned token keeps it alive.
+    // After each `on_data_changed` callback, call any of the synchronous
+    // `forest_*` methods to read the current traversal state — no async needed.
+    // Adding new traversal methods is: call `forest_snapshot()`, call the Forest
+    // method, map results.
+    // -------------------------------------------------------------------------
+
+    /// Subscribe to the forest cache. Internally subscribes to AllEntries.
+    /// Hold the returned token for the lifetime of the subscriber; dropping it
+    /// unsubscribes automatically, same as `subscribe_query`.
+    pub fn subscribe_forest(&self) -> Result<Arc<FfiQuerySubscription>, FfiError> {
+        let subscription = RUNTIME
+            .block_on(self.client.subscribe_query(AnyQuery::AllEntries(AllEntries {})))
+            .map_err(FfiError::from)?;
+        Ok(Arc::new(FfiQuerySubscription(subscription)))
+    }
+
+    /// All root entries (no parent), sorted by canonical instant.
+    pub fn forest_roots(&self) -> Vec<FfiEntry> {
+        self.forest_snapshot()
+            .map(|f| f.roots().into_iter().map(|e| FfiEntry::from(e.clone())).collect())
+            .unwrap_or_default()
+    }
+
+    /// Root entries whose canonical instant falls within `[from, to)` (Unix ms), sorted by time.
+    pub fn forest_roots_in(&self, from: i64, to: i64) -> Vec<FfiEntry> {
+        let Ok(from_dt) = parse_timestamp_ms(from) else { return vec![] };
+        let Ok(to_dt) = parse_timestamp_ms(to) else { return vec![] };
+        self.forest_snapshot()
+            .map(|f| {
+                f.roots_in(from_dt..to_dt)
+                    .into_iter()
+                    .map(|e| FfiEntry::from(e.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Direct children of `parent_id`, sorted by fractional index.
+    pub fn forest_children(&self, parent_id: String) -> Vec<FfiEntry> {
+        let Ok(id) = parse_uuid(&parent_id) else { return vec![] };
+        self.forest_snapshot()
+            .map(|f| f.children(id).into_iter().map(|e| FfiEntry::from(e.clone())).collect())
+            .unwrap_or_default()
+    }
+
+    /// Ancestors of `entry_id` from immediate parent up to the root.
+    pub fn forest_ancestors(&self, entry_id: String) -> Vec<FfiEntry> {
+        let Ok(id) = parse_uuid(&entry_id) else { return vec![] };
+        self.forest_snapshot()
+            .map(|f| f.ancestors(id).into_iter().map(|e| FfiEntry::from(e.clone())).collect())
+            .unwrap_or_default()
+    }
+}
+
+impl GainzvilleCore {
+    /// Read the AllEntries cache and wrap it in a Forest for synchronous traversal.
+    /// Returns None if the forest has not been subscribed yet.
+    fn forest_snapshot(&self) -> Option<Forest> {
+        match self.client.read_cached_query(AnyQuery::AllEntries(AllEntries {}))? {
+            AnyQueryResponse::AllEntries(entries) => Some(Forest::from(entries)),
+            _ => None,
+        }
     }
 }

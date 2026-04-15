@@ -66,4 +66,17 @@ impl Forest {
         });
         children
     }
+
+    /// Get the ancestors of an entry from immediate parent up to the root.
+    pub fn ancestors(&self, entry_id: Uuid) -> Vec<&Entry> {
+        let mut ancestors = Vec::new();
+        let Some(start) = self.entry(entry_id) else { return ancestors };
+        let mut current_parent = start.parent_id();
+        while let Some(parent_id) = current_parent {
+            let Some(parent) = self.entry(parent_id) else { break };
+            ancestors.push(parent);
+            current_parent = parent.parent_id();
+        }
+        ancestors
+    }
 }
