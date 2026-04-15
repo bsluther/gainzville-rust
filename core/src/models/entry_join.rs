@@ -11,7 +11,7 @@ use crate::models::attribute_pair::AttributePair;
 
 /// Domain model representing an Entry with all its joined relations.
 /// Currently includes the optional Activity and Attribute-Value pairs.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EntryJoin {
     pub entry: Entry,
     pub activity: Option<Activity>,

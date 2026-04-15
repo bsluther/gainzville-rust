@@ -4,6 +4,8 @@ use gv_client::{client::SqliteClient, query_store::QuerySubscription};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
+use gv_core::queries::AnyQuery;
+
 use crate::types::{FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiError, ffi_action_to_core, parse_uuid};
 
 // Single shared runtime for all FFI calls. Swift calls into Rust without a tokio
@@ -83,18 +85,20 @@ impl GainzvilleCore {
         &self,
         query: FfiAnyQuery,
     ) -> Result<Arc<FfiQuerySubscription>, FfiError> {
+        let core_query = AnyQuery::try_from(query)?;
         let subscription = RUNTIME
-            .block_on(self.client.subscribe_query(query.into()))
+            .block_on(self.client.subscribe_query(core_query))
             .map_err(FfiError::from)?;
         Ok(Arc::new(FfiQuerySubscription(subscription)))
     }
 
     /// Read the current cached result for a query. Returns `None` if the query
-    /// is not subscribed. Swift calls this synchronously from the main thread
-    /// after receiving `on_data_changed()`.
+    /// is not subscribed or if the query parameters are invalid. Swift calls
+    /// this synchronously from the main thread after receiving `on_data_changed()`.
     pub fn read_query(&self, query: FfiAnyQuery) -> Option<FfiAnyQueryResponse> {
+        let core_query = AnyQuery::try_from(query).ok()?;
         self.client
-            .read_cached_query(query.into())
+            .read_cached_query(core_query)
             .map(FfiAnyQueryResponse::from)
     }
 

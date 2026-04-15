@@ -171,7 +171,7 @@ pub enum MassUnit {
 
 ///// Values /////
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Value {
     // Identified by a composite key: (entry_id, attribute_id).
     pub entry_id: Uuid,
