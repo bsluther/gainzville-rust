@@ -6,29 +6,34 @@ struct LoginView: View {
     @AppStorage("gv.isAuthenticated") private var isAuthenticated = false
 
     var body: some View {
-        VStack(spacing: 32) {
-            Spacer()
+        ZStack {
+            Color.gvBackground.ignoresSafeArea()
 
-            VStack(spacing: 8) {
-                Text("Gainzville")
-                    .font(.largeTitle.bold())
-                Text("Track what you do.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            VStack(spacing: GvSpacing.xl) {
+                Spacer()
+
+                VStack(spacing: GvSpacing.sm) {
+                    Text("Gainzville")
+                        .font(.gvLargeTitle.bold())
+                        .foregroundStyle(Color.gvTextPrimary)
+                    Text("Track what you do.")
+                        .font(.gvCallout)
+                        .foregroundStyle(Color.gvTextSecondary)
+                }
+
+                Spacer()
+
+                Button("Sign In") {
+                    isAuthenticated = true
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Spacer()
+                    .frame(height: GvSpacing.xl)
             }
-
-            Spacer()
-
-            Button("Sign In") {
-                isAuthenticated = true
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-
-            Spacer()
-                .frame(height: 32)
+            .padding(GvSpacing.xl)
         }
-        .padding()
     }
 }
 
