@@ -5,7 +5,7 @@ use crate::{
 use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct User {
     pub actor_id: Uuid,
     pub username: Username,
