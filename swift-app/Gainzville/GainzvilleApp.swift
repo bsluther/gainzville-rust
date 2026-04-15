@@ -31,7 +31,8 @@ struct GainzvilleApp: App {
             }
         }
 
-        c.startBackgroundTicker()
+        // Debug: uncomment to auto-create an activity every 10 s for testing.
+        // c.startBackgroundTicker()
         core = c
         activitiesVM = avm
         attributesVM = atvm

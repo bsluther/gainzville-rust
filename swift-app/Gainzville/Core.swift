@@ -26,8 +26,10 @@ class AppListener: CoreListener {
 class ActivitiesViewModel: ObservableObject {
     @Published var activities: [FfiActivity] = []
     private var subscription: FfiQuerySubscription?
+    private var core: GainzvilleCore?
 
     func subscribe(to core: GainzvilleCore) {
+        self.core = core
         subscription = try? core.subscribeQuery(query: .allActivities)
         refresh(from: core)
     }
@@ -36,6 +38,17 @@ class ActivitiesViewModel: ObservableObject {
         if case .allActivities(let list) = core.readQuery(query: .allActivities) {
             activities = list
         }
+    }
+
+    func createActivity(name: String, description: String?) {
+        guard let core else { return }
+        try? core.runAction(action: .createActivity(FfiCreateActivity(
+            id: UUID().uuidString,
+            name: name,
+            description: description
+        )))
+        // No manual refresh needed — runAction refreshes the cache and fires
+        // on_data_changed, which triggers refresh via AppListener.
     }
 }
 

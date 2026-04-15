@@ -29,6 +29,7 @@ struct LibraryView: View {
                 AttributesListView(attributes: attributesVM.attributes)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("Library")
         .navigationDestination(for: LibraryDestination.self) { destination in
             switch destination {
