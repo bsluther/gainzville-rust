@@ -1,8 +1,15 @@
 import SwiftUI
 
+/// Navigation destination types within the Library section.
+enum LibraryDestination: Hashable {
+    case activity(FfiActivity)
+    case attribute(FfiAttribute)
+}
+
 /// Library root — browse Activities and Attributes.
-/// Currently shows placeholder content; Stage 4 wires in real data and detail navigation.
 struct LibraryView: View {
+    @EnvironmentObject var activitiesVM: ActivitiesViewModel
+    @EnvironmentObject var attributesVM: AttributesViewModel
     @State private var selectedTab: LibraryTab = .activities
 
     var body: some View {
@@ -15,13 +22,22 @@ struct LibraryView: View {
             .pickerStyle(.segmented)
             .padding()
 
-            ContentUnavailableView(
-                selectedTab.title,
-                systemImage: selectedTab.icon,
-                description: Text("Coming soon.")
-            )
+            switch selectedTab {
+            case .activities:
+                ActivitiesListView(activities: activitiesVM.activities)
+            case .attributes:
+                AttributesListView(attributes: attributesVM.attributes)
+            }
         }
         .navigationTitle("Library")
+        .navigationDestination(for: LibraryDestination.self) { destination in
+            switch destination {
+            case .activity(let activity):
+                ActivityDetailView(activity: activity)
+            case .attribute(let attribute):
+                AttributeDetailView(attribute: attribute)
+            }
+        }
     }
 }
 
@@ -51,5 +67,7 @@ enum LibraryTab: String, CaseIterable, Identifiable {
 #Preview {
     NavigationStack {
         LibraryView()
+            .environmentObject(ActivitiesViewModel())
+            .environmentObject(AttributesViewModel())
     }
 }

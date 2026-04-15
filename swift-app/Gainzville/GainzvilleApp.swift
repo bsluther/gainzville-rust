@@ -10,27 +10,38 @@ import SwiftUI
 @main
 struct GainzvilleApp: App {
     let core: GainzvilleCore
-    let viewModel: ActivitiesViewModel
+    let activitiesVM: ActivitiesViewModel
+    let attributesVM: AttributesViewModel
 
     init() {
         let listener = AppListener()
         let c = try! makeCore(listener: listener)
-        let vm = ActivitiesViewModel()
-        vm.subscribe(to: c)
-        // Wire the listener callback after both core and viewModel exist.
-        listener.onChanged = { [weak vm] in
-            Task { @MainActor [weak vm] in
-                vm?.refresh(from: c)
+
+        let avm = ActivitiesViewModel()
+        avm.subscribe(to: c)
+
+        let atvm = AttributesViewModel()
+        atvm.subscribe(to: c)
+
+        // Wire the listener callback after all view models exist.
+        listener.onChanged = { [weak avm, weak atvm] in
+            Task { @MainActor [weak avm, weak atvm] in
+                avm?.refresh(from: c)
+                atvm?.refresh(from: c)
             }
         }
+
         c.startBackgroundTicker()
         core = c
-        viewModel = vm
+        activitiesVM = avm
+        attributesVM = atvm
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environmentObject(activitiesVM)
+                .environmentObject(attributesVM)
         }
         #if os(macOS)
         .defaultSize(width: 1100, height: 700)

@@ -39,6 +39,23 @@ class ActivitiesViewModel: ObservableObject {
     }
 }
 
+@MainActor
+class AttributesViewModel: ObservableObject {
+    @Published var attributes: [FfiAttribute] = []
+    private var subscription: FfiQuerySubscription?
+
+    func subscribe(to core: GainzvilleCore) {
+        subscription = try? core.subscribeQuery(query: .allAttributes)
+        refresh(from: core)
+    }
+
+    func refresh(from core: GainzvilleCore) {
+        if case .allAttributes(let list) = core.readQuery(query: .allAttributes) {
+            attributes = list
+        }
+    }
+}
+
 func makeCore(listener: AppListener) throws -> GainzvilleCore {
     let dbURL = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]

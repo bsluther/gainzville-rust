@@ -63,15 +63,17 @@ struct MacNavigation: View {
             .navigationSplitViewColumnWidth(min: 160, ideal: 200)
             .navigationTitle("Gainzville")
         } detail: {
-            switch selection {
-            case .log:
-                LogView()
-            case .library:
-                LibraryView()
-            case .settings:
-                SettingsView()
-            case .none:
-                ContentUnavailableView("Select a section", systemImage: "sidebar.left")
+            NavigationStack {
+                switch selection {
+                case .log:
+                    LogView()
+                case .library:
+                    LibraryView()
+                case .settings:
+                    SettingsView()
+                case .none:
+                    ContentUnavailableView("Select a section", systemImage: "sidebar.left")
+                }
             }
         }
     }
