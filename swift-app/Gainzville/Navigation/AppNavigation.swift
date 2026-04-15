@@ -21,14 +21,19 @@ struct AppNavigation: View {
 struct IOSNavigation: View {
     var body: some View {
         TabView {
-            Tab("Log", systemImage: "list.bullet.rectangle") {
+            Tab("Log", systemImage: AppSection.log.icon) {
                 NavigationStack {
                     LogView()
                 }
             }
-            Tab("Library", systemImage: "books.vertical") {
+            Tab("Library", systemImage: AppSection.library.icon) {
                 NavigationStack {
                     LibraryView()
+                }
+            }
+            Tab("Settings", systemImage: AppSection.settings.icon) {
+                NavigationStack {
+                    SettingsView()
                 }
             }
         }
@@ -45,7 +50,12 @@ struct MacNavigation: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                ForEach(AppSection.allCases) { section in
+                ForEach(AppSection.mainSections) { section in
+                    Label(section.title, systemImage: section.icon)
+                        .tag(section)
+                }
+                Divider()
+                ForEach(AppSection.utilitySections) { section in
                     Label(section.title, systemImage: section.icon)
                         .tag(section)
                 }
@@ -58,6 +68,8 @@ struct MacNavigation: View {
                 LogView()
             case .library:
                 LibraryView()
+            case .settings:
+                SettingsView()
             case .none:
                 ContentUnavailableView("Select a section", systemImage: "sidebar.left")
             }
@@ -70,22 +82,30 @@ struct MacNavigation: View {
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case log
     case library
+    case settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .log:     return "Log"
-        case .library: return "Library"
+        case .log:      return "Log"
+        case .library:  return "Library"
+        case .settings: return "Settings"
         }
     }
 
     var icon: String {
         switch self {
-        case .log:     return "list.bullet.rectangle"
-        case .library: return "books.vertical"
+        case .log:      return "list.bullet.rectangle"
+        case .library:  return "books.vertical"
+        case .settings: return "gear"
         }
     }
+
+    /// Primary navigation sections shown above the divider in the macOS sidebar.
+    static let mainSections: [AppSection] = [.log, .library]
+    /// Utility sections shown below the divider.
+    static let utilitySections: [AppSection] = [.settings]
 }
 
 #Preview("iOS") {
