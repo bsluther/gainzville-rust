@@ -304,6 +304,16 @@ void uniffi_gv_ffi_fn_free_gainzvillecore(uint64_t handle, RustCallStatus *_Nonn
 uint64_t uniffi_gv_ffi_fn_constructor_gainzvillecore_new(RustBuffer db_path, RustBuffer actor_id, uint64_t listener, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_DEV_CREATE_ARBITRARY_ENTRIES
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_DEV_CREATE_ARBITRARY_ENTRIES
+void uniffi_gv_ffi_fn_method_gainzvillecore_dev_create_arbitrary_entries(uint64_t ptr, uint32_t count, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_DEV_SEED_STD_LIB
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_DEV_SEED_STD_LIB
+void uniffi_gv_ffi_fn_method_gainzvillecore_dev_seed_std_lib(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_ANCESTORS
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_ANCESTORS
 RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_forest_ancestors(uint64_t ptr, RustBuffer entry_id, RustCallStatus *_Nonnull out_status
@@ -612,6 +622,18 @@ void ffi_gv_ffi_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonn
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_CORELISTENER_ON_DATA_CHANGED
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_CORELISTENER_ON_DATA_CHANGED
 uint16_t uniffi_gv_ffi_checksum_method_corelistener_on_data_changed(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_DEV_CREATE_ARBITRARY_ENTRIES
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_DEV_CREATE_ARBITRARY_ENTRIES
+uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_dev_create_arbitrary_entries(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_DEV_SEED_STD_LIB
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_DEV_SEED_STD_LIB
+uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_dev_seed_std_lib(void
     
 );
 #endif

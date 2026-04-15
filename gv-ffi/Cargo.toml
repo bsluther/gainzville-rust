@@ -7,8 +7,10 @@ edition = "2024"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-gv_core   = { path = "../core" }
-gv_client = { path = "../client" }
+gv_core      = { path = "../core" }
+gv_client    = { path = "../client" }
+generation   = { path = "../generation" }
+rand         = { workspace = true }
 # "tokio" — static runtime for sync FFI wrappers.
 # "cli"   — enables uniffi_bindgen for the uniffi-bindgen binary target below.
 uniffi    = { version = "0.31", features = ["tokio", "cli"] }

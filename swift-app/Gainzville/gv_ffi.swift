@@ -858,6 +858,19 @@ public func FfiConverterTypeFfiQuerySubscription_lower(_ value: FfiQuerySubscrip
 public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     
     /**
+     * Create `count` arbitrary entries drawn from the current activities and entries in the DB.
+     * Entries are clustered around the current time. Requires at least one activity to exist;
+     * does nothing if there are none.
+     */
+    func devCreateArbitraryEntries(count: UInt32) throws 
+    
+    /**
+     * Seed the standard-library attributes (Reps, Load, Outcome, YDS Grade).
+     * Safe to call multiple times — will create duplicates, so call once per fresh DB.
+     */
+    func devSeedStdLib() throws 
+    
+    /**
      * Ancestors of `entry_id` from immediate parent up to the root.
      */
     func forestAncestors(entryId: String)  -> [FfiEntry]
@@ -985,6 +998,30 @@ public convenience init(dbPath: String, actorId: String, listener: CoreListener)
 
     
 
+    
+    /**
+     * Create `count` arbitrary entries drawn from the current activities and entries in the DB.
+     * Entries are clustered around the current time. Requires at least one activity to exist;
+     * does nothing if there are none.
+     */
+open func devCreateArbitraryEntries(count: UInt32)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+    uniffi_gv_ffi_fn_method_gainzvillecore_dev_create_arbitrary_entries(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(count),$0
+    )
+}
+}
+    
+    /**
+     * Seed the standard-library attributes (Reps, Load, Outcome, YDS Grade).
+     * Safe to call multiple times — will create duplicates, so call once per fresh DB.
+     */
+open func devSeedStdLib()throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+    uniffi_gv_ffi_fn_method_gainzvillecore_dev_seed_std_lib(
+            self.uniffiCloneHandle(),$0
+    )
+}
+}
     
     /**
      * Ancestors of `entry_id` from immediate parent up to the root.
@@ -3957,6 +3994,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.contractVersionMismatch
     }
     if (uniffi_gv_ffi_checksum_method_corelistener_on_data_changed() != 48934) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_create_arbitrary_entries() != 3929) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_seed_std_lib() != 27833) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_ancestors() != 65096) {

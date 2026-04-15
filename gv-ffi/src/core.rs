@@ -4,9 +4,13 @@ use gv_client::{client::SqliteClient, query_store::QuerySubscription};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
+use generation::{ArbitraryFrom, Opts, SimulationContext};
 use gv_core::{
+    actions::{CreateAttribute, CreateEntry},
     forest::Forest,
-    queries::{AllEntries, AnyQuery, AnyQueryResponse},
+    models::entry::Entry,
+    queries::{AllActivities, AllEntries, AnyQuery, AnyQueryResponse},
+    std_lib::StandardLibrary,
 };
 
 use crate::types::{
@@ -172,6 +176,60 @@ impl GainzvilleCore {
         self.forest_snapshot()
             .map(|f| f.ancestors(id).into_iter().map(|e| FfiEntry::from(e.clone())).collect())
             .unwrap_or_default()
+    }
+
+    // -------------------------------------------------------------------------
+    // Dev / debug utilities
+    //
+    // These methods exist for testing and data seeding from the Swift app.
+    // They are not part of the production API.
+    // -------------------------------------------------------------------------
+
+    /// Seed the standard-library attributes (Reps, Load, Outcome, YDS Grade).
+    /// Safe to call multiple times — will create duplicates, so call once per fresh DB.
+    pub fn dev_seed_std_lib(&self) -> Result<(), FfiError> {
+        for attr in StandardLibrary::attributes() {
+            let action: CreateAttribute = attr.into();
+            RUNTIME
+                .block_on(self.client.run_action(action.into()))
+                .map_err(FfiError::from)?;
+        }
+        Ok(())
+    }
+
+    /// Create `count` arbitrary entries drawn from the current activities and entries in the DB.
+    /// Entries are clustered around the current time. Requires at least one activity to exist;
+    /// does nothing if there are none.
+    pub fn dev_create_arbitrary_entries(&self, count: u32) -> Result<(), FfiError> {
+        let activities = RUNTIME
+            .block_on(self.client.run_query(AllActivities {}))
+            .map_err(FfiError::from)?;
+        if activities.is_empty() {
+            return Ok(());
+        }
+
+        let mut entries: Vec<Entry> = RUNTIME
+            .block_on(self.client.run_query(AllEntries {}))
+            .map_err(FfiError::from)?;
+
+        let actor_ids = vec![self.actor_id];
+        let context = SimulationContext::with_opts(Opts::time_now_tight_std());
+        let mut rng = rand::rng();
+
+        for _ in 0..count {
+            let entry = Entry::arbitrary_from(
+                &mut rng,
+                &context,
+                (actor_ids.as_slice(), activities.as_slice(), entries.as_slice()),
+            );
+            let action: CreateEntry = entry.clone().into();
+            RUNTIME
+                .block_on(self.client.run_action(action.into()))
+                .map_err(FfiError::from)?;
+            // Include the new entry so subsequent entries can nest inside it.
+            entries.push(entry);
+        }
+        Ok(())
     }
 }
 

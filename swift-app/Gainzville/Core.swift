@@ -52,6 +52,30 @@ class ActivitiesViewModel: ObservableObject {
     }
 }
 
+// View model for the forest. Subscribes via subscribeForest (backed by AllEntries cache).
+// Exposes root entries as a @Published property; children are read synchronously on demand.
+@MainActor
+class ForestViewModel: ObservableObject {
+    @Published var roots: [FfiEntry] = []
+    private var subscription: FfiQuerySubscription?
+    private var core: GainzvilleCore?
+
+    func subscribe(to core: GainzvilleCore) {
+        self.core = core
+        subscription = try? core.subscribeForest()
+        refresh(from: core)
+    }
+
+    func refresh(from core: GainzvilleCore) {
+        roots = core.forestRoots()
+    }
+
+    // Synchronous read from the forest cache — always fresh on each render.
+    func children(of parentId: String) -> [FfiEntry] {
+        core?.forestChildren(parentId: parentId) ?? []
+    }
+}
+
 @MainActor
 class AttributesViewModel: ObservableObject {
     @Published var attributes: [FfiAttribute] = []

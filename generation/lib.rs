@@ -66,6 +66,13 @@ impl Default for SimulationContext {
         }
     }
 }
+
+impl SimulationContext {
+    pub fn with_opts(opts: Opts) -> Self {
+        SimulationContext { opts }
+    }
+}
+
 impl GenerationContext for SimulationContext {
     fn opts(&self) -> &Opts {
         &self.opts
