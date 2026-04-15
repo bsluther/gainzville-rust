@@ -23,3 +23,6 @@
 
 # Swift build artifacts
 GvFfi.xcframework/
+
+# Generated FFI bindings (intermediate output; canonical copies live in swift-app/)
+gv-ffi/bindings/
