@@ -30,7 +30,10 @@ struct GainzvilleApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ProofOfConceptView(core: core, viewModel: viewModel)
+            RootView()
         }
+        #if os(macOS)
+        .defaultSize(width: 1100, height: 700)
+        #endif
     }
 }
