@@ -102,6 +102,7 @@ impl GainzvilleCore {
     /// Cache refresh and `on_data_changed()` fire automatically via the change
     /// broadcast — no manual wiring needed here.
     pub fn start_background_ticker(&self) {
+        let _guard = RUNTIME.enter();
         self.client.start_background_ticker(self.actor_id);
     }
 }

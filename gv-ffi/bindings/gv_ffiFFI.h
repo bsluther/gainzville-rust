@@ -279,6 +279,16 @@ void uniffi_gv_ffi_fn_init_callback_vtable_corelistener(const UniffiVTableCallba
 void uniffi_gv_ffi_fn_method_corelistener_on_data_changed(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_FFIQUERYSUBSCRIPTION
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_FFIQUERYSUBSCRIPTION
+uint64_t uniffi_gv_ffi_fn_clone_ffiquerysubscription(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FREE_FFIQUERYSUBSCRIPTION
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FREE_FFIQUERYSUBSCRIPTION
+void uniffi_gv_ffi_fn_free_ffiquerysubscription(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_GAINZVILLECORE
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_GAINZVILLECORE
 uint64_t uniffi_gv_ffi_fn_clone_gainzvillecore(uint64_t handle, RustCallStatus *_Nonnull out_status
@@ -312,16 +322,6 @@ void uniffi_gv_ffi_fn_method_gainzvillecore_start_background_ticker(uint64_t ptr
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_SUBSCRIBE_QUERY
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_SUBSCRIBE_QUERY
 uint64_t uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_query(uint64_t ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_QUERYSUBSCRIPTION
-#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_QUERYSUBSCRIPTION
-uint64_t uniffi_gv_ffi_fn_clone_querysubscription(uint64_t handle, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FREE_QUERYSUBSCRIPTION
-#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FREE_QUERYSUBSCRIPTION
-void uniffi_gv_ffi_fn_free_querysubscription(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_GV_FFI_RUSTBUFFER_ALLOC

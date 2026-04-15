@@ -25,7 +25,7 @@ class AppListener: CoreListener {
 @MainActor
 class ActivitiesViewModel: ObservableObject {
     @Published var activities: [FfiActivity] = []
-    private var subscription: QuerySubscription?
+    private var subscription: FfiQuerySubscription?
 
     func subscribe(to core: GainzvilleCore) {
         subscription = try? core.subscribeQuery(query: .allActivities)
