@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		9B434D0D2F881B6B0048C622 /* GvFfi.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B434D0C2F881B6B0048C622 /* GvFfi.xcframework */; };
+		BBA10001000000001BAD0001 /* GvFfi.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B434D0C2F881B6B0048C622 /* GvFfi.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,6 +35,7 @@
 		9B5208572F881687002F2B0F /* GainzvilleUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GainzvilleUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9B569ADB2F8821B700F3A6D0 /* gv_ffiFFI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = gv_ffiFFI.h; sourceTree = "<group>"; };
 		9B569ADC2F8821B700F3A6D0 /* gv_ffiFFI.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = gv_ffiFFI.modulemap; sourceTree = "<group>"; };
+		BBA10002000000001BAD0002 /* Gainzville macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Gainzville macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -77,6 +79,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BBA10003000000001BAD0003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BBA10001000000001BAD0001 /* GvFfi.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -105,6 +115,7 @@
 			isa = PBXGroup;
 			children = (
 				9B5208402F881686002F2B0F /* Gainzville.app */,
+				BBA10002000000001BAD0002 /* Gainzville macOS.app */,
 				9B52084D2F881687002F2B0F /* GainzvilleTests.xctest */,
 				9B5208572F881687002F2B0F /* GainzvilleUITests.xctest */,
 			);
@@ -182,6 +193,28 @@
 			productReference = 9B5208572F881687002F2B0F /* GainzvilleUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		BBA10006000000001BAD0006 /* Gainzville macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BBA10009000000001BAD0009 /* Build configuration list for PBXNativeTarget "Gainzville macOS" */;
+			buildPhases = (
+				BBA10005000000001BAD0005 /* Sources */,
+				BBA10003000000001BAD0003 /* Frameworks */,
+				BBA10004000000001BAD0004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				9B5208422F881686002F2B0F /* Gainzville */,
+			);
+			name = "Gainzville macOS";
+			packageProductDependencies = (
+			);
+			productName = "Gainzville macOS";
+			productReference = BBA10002000000001BAD0002 /* Gainzville macOS.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -203,6 +236,9 @@
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = 9B52083F2F881686002F2B0F;
 					};
+					BBA10006000000001BAD0006 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 				};
 			};
 			buildConfigurationList = 9B52083B2F881686002F2B0F /* Build configuration list for PBXProject "Gainzville" */;
@@ -220,6 +256,7 @@
 			projectRoot = "";
 			targets = (
 				9B52083F2F881686002F2B0F /* Gainzville */,
+				BBA10006000000001BAD0006 /* Gainzville macOS */,
 				9B52084C2F881687002F2B0F /* GainzvilleTests */,
 				9B5208562F881687002F2B0F /* GainzvilleUITests */,
 			);
@@ -248,6 +285,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BBA10004000000001BAD0004 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -266,6 +310,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		9B5208532F881687002F2B0F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBA10005000000001BAD0005 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -553,6 +604,84 @@
 			};
 			name = Release;
 		};
+		BBA10007000000001BAD0007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					SystemConfiguration,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.gainzville.Gainzville-macOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Frameworks";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/Gainzville/GainzvilleBridgingHeader.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		BBA10008000000001BAD0008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					SystemConfiguration,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.gainzville.Gainzville-macOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Frameworks";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/Gainzville/GainzvilleBridgingHeader.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -588,6 +717,15 @@
 			buildConfigurations = (
 				9B5208682F881687002F2B0F /* Debug */,
 				9B5208692F881687002F2B0F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BBA10009000000001BAD0009 /* Build configuration list for PBXNativeTarget "Gainzville macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBA10007000000001BAD0007 /* Debug */,
+				BBA10008000000001BAD0008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
