@@ -14,7 +14,7 @@ use gv_core::{
     mutators,
     queries::{
         AllActivities, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse,
-        EntriesRootedInTimeInterval, FindActivityById, FindEntryJoinById, Query,
+        EntriesRootedInTimeInterval, FindEntryJoinById, Query,
     },
     query_executor::QueryExecutor,
 };
@@ -323,6 +323,7 @@ impl SqliteClient {
 
 pub mod tests {
     pub use super::*;
+    pub use gv_core::queries::FindActivityById;
     pub use gv_core::SYSTEM_ACTOR_ID;
     pub use uuid::Uuid;
 

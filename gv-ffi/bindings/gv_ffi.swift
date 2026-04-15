@@ -664,6 +664,122 @@ public func FfiConverterTypeCoreListener_lower(_ value: CoreListener) -> UInt64 
 
 
 /**
+ * UniFFI-compatible wrapper around `QuerySubscription`. Dropping this value
+ * (when Swift releases its reference) automatically unsubscribes the query.
+ * The inner Arc is held only for its Drop side-effect.
+ */
+public protocol FfiQuerySubscriptionProtocol: AnyObject, Sendable {
+    
+}
+/**
+ * UniFFI-compatible wrapper around `QuerySubscription`. Dropping this value
+ * (when Swift releases its reference) automatically unsubscribes the query.
+ * The inner Arc is held only for its Drop side-effect.
+ */
+open class FfiQuerySubscription: FfiQuerySubscriptionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_gv_ffi_fn_clone_ffiquerysubscription(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_gv_ffi_fn_free_ffiquerysubscription(handle, $0) }
+    }
+
+    
+
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiQuerySubscription: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiQuerySubscription
+
+    public static func lift(_ handle: UInt64) throws -> FfiQuerySubscription {
+        return FfiQuerySubscription(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: FfiQuerySubscription) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiQuerySubscription {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: FfiQuerySubscription, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiQuerySubscription_lift(_ handle: UInt64) throws -> FfiQuerySubscription {
+    return try FfiConverterTypeFfiQuerySubscription.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiQuerySubscription_lower(_ value: FfiQuerySubscription) -> UInt64 {
+    return FfiConverterTypeFfiQuerySubscription.lower(value)
+}
+
+
+
+
+
+
+/**
  * The main entry point for Swift. Wraps `SqliteClient` with a static tokio
  * runtime and synchronous UniFFI-exported methods.
  */
@@ -677,25 +793,24 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     func readQuery(query: FfiAnyQuery)  -> FfiAnyQueryResponse?
     
     /**
-     * Execute a write action. Synchronous at the FFI boundary; async work runs
-     * on the internal runtime. After the write commits, all subscribed queries
-     * are refreshed in the cache, then `listener.on_data_changed()` is called once.
+     * Execute a write action. Returns once the write has committed; the cache
+     * refresh and `on_data_changed()` callback happen asynchronously afterward.
      */
     func runAction(action: FfiAction) throws 
     
     /**
      * Spawn a background task that creates a new activity every 10 seconds.
-     * After each write the cache is refreshed and `on_data_changed()` is fired,
-     * matching the same notification path as `run_action`.
+     * Cache refresh and `on_data_changed()` fire automatically via the change
+     * broadcast — no manual wiring needed here.
      */
     func startBackgroundTicker() 
     
     /**
      * Subscribe to a query. Runs the initial query immediately, populates the
-     * cache, and returns a `QuerySubscription` handle. Dropping the handle
+     * cache, and returns a `FfiQuerySubscription` handle. Dropping the handle
      * (Swift releasing the reference) auto-removes the query from the cache.
      */
-    func subscribeQuery(query: FfiAnyQuery) throws  -> QuerySubscription
+    func subscribeQuery(query: FfiAnyQuery) throws  -> FfiQuerySubscription
     
 }
 /**
@@ -787,9 +902,8 @@ open func readQuery(query: FfiAnyQuery) -> FfiAnyQueryResponse?  {
 }
     
     /**
-     * Execute a write action. Synchronous at the FFI boundary; async work runs
-     * on the internal runtime. After the write commits, all subscribed queries
-     * are refreshed in the cache, then `listener.on_data_changed()` is called once.
+     * Execute a write action. Returns once the write has committed; the cache
+     * refresh and `on_data_changed()` callback happen asynchronously afterward.
      */
 open func runAction(action: FfiAction)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
     uniffi_gv_ffi_fn_method_gainzvillecore_run_action(
@@ -801,8 +915,8 @@ open func runAction(action: FfiAction)throws   {try rustCallWithError(FfiConvert
     
     /**
      * Spawn a background task that creates a new activity every 10 seconds.
-     * After each write the cache is refreshed and `on_data_changed()` is fired,
-     * matching the same notification path as `run_action`.
+     * Cache refresh and `on_data_changed()` fire automatically via the change
+     * broadcast — no manual wiring needed here.
      */
 open func startBackgroundTicker()  {try! rustCall() {
     uniffi_gv_ffi_fn_method_gainzvillecore_start_background_ticker(
@@ -813,11 +927,11 @@ open func startBackgroundTicker()  {try! rustCall() {
     
     /**
      * Subscribe to a query. Runs the initial query immediately, populates the
-     * cache, and returns a `QuerySubscription` handle. Dropping the handle
+     * cache, and returns a `FfiQuerySubscription` handle. Dropping the handle
      * (Swift releasing the reference) auto-removes the query from the cache.
      */
-open func subscribeQuery(query: FfiAnyQuery)throws  -> QuerySubscription  {
-    return try  FfiConverterTypeQuerySubscription_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+open func subscribeQuery(query: FfiAnyQuery)throws  -> FfiQuerySubscription  {
+    return try  FfiConverterTypeFfiQuerySubscription_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
     uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_query(
             self.uniffiCloneHandle(),
         FfiConverterTypeFfiAnyQuery_lower(query),$0
@@ -868,122 +982,6 @@ public func FfiConverterTypeGainzvilleCore_lift(_ handle: UInt64) throws -> Gain
 #endif
 public func FfiConverterTypeGainzvilleCore_lower(_ value: GainzvilleCore) -> UInt64 {
     return FfiConverterTypeGainzvilleCore.lower(value)
-}
-
-
-
-
-
-
-/**
- * Opaque handle returned by `subscribe_query`. Dropping this value (when Swift
- * releases its reference) automatically removes the query from the cache via
- * the Drop impl — no manual unsubscribe call needed.
- */
-public protocol QuerySubscriptionProtocol: AnyObject, Sendable {
-    
-}
-/**
- * Opaque handle returned by `subscribe_query`. Dropping this value (when Swift
- * releases its reference) automatically removes the query from the cache via
- * the Drop impl — no manual unsubscribe call needed.
- */
-open class QuerySubscription: QuerySubscriptionProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_gv_ffi_fn_clone_querysubscription(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_gv_ffi_fn_free_querysubscription(handle, $0) }
-    }
-
-    
-
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeQuerySubscription: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = QuerySubscription
-
-    public static func lift(_ handle: UInt64) throws -> QuerySubscription {
-        return QuerySubscription(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: QuerySubscription) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QuerySubscription {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: QuerySubscription, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeQuerySubscription_lift(_ handle: UInt64) throws -> QuerySubscription {
-    return try FfiConverterTypeQuerySubscription.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeQuerySubscription_lower(_ value: QuerySubscription) -> UInt64 {
-    return FfiConverterTypeQuerySubscription.lower(value)
 }
 
 
@@ -1488,13 +1486,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_read_query() != 6277) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_run_action() != 33965) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_run_action() != 17775) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_start_background_ticker() != 13975) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_start_background_ticker() != 12896) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_query() != 57726) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_query() != 18119) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_constructor_gainzvillecore_new() != 15001) {
