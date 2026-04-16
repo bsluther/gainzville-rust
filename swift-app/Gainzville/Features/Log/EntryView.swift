@@ -101,16 +101,16 @@ private struct EntryBody: View {
     let children: [FfiEntry]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: GvSpacing.md) {
-            TemporalRow()
+        VStack(alignment: .leading, spacing: GvSpacing.lg) {
+            TemporalAttribute(temporal: entry.temporal)
             AttributesSection()
-            if entry.isSequence && !children.isEmpty {
+            if entry.isSequence {
                 ChildrenSection(children: children)
             }
             EntryFooter(isSequence: entry.isSequence, isComplete: entry.isComplete)
         }
         .padding(.horizontal, GvSpacing.lg)
-        .padding(.bottom, GvSpacing.lg)
+        .padding(.vertical, GvSpacing.lg)
     }
 }
 
@@ -120,11 +120,15 @@ private struct ChildrenSection: View {
     let children: [FfiEntry]
 
     var body: some View {
-        VStack(spacing: GvSpacing.sm) {
-            DropTarget()
-            ForEach(children, id: \.id) { child in
-                EntryView(entry: child)
+        if children.isEmpty {
+            EmptyView()
+        } else {
+            VStack(spacing: GvSpacing.sm) {
                 DropTarget()
+                ForEach(children, id: \.id) { child in
+                    EntryView(entry: child)
+                    DropTarget()
+                }
             }
         }
     }
@@ -149,24 +153,24 @@ private struct EntryFooter: View {
     let isComplete: Bool
 
     var body: some View {
-        HStack {
-            Spacer()
-            if !isSequence {
-                Button { /* toggle completion — placeholder */ } label: {
-                    Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isComplete ? Color.gvLoggedBlue : Color.gvTextSecondary)
+        if isSequence {
+            EmptyView()
+        } else {
+            HStack {
+                Spacer()
+                if !isSequence {
+                    Button { /* toggle completion — placeholder */ } label: {
+                        Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(isComplete ? Color.gvLoggedBlue : Color.gvTextSecondary)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
     }
 }
 
 // MARK: - Placeholder stubs
-
-private struct TemporalRow: View {
-    var body: some View { EmptyView() }
-}
 
 private struct AttributesSection: View {
     var body: some View { EmptyView() }
