@@ -82,13 +82,9 @@ private struct EntryHeader: View {
                     .padding(.horizontal, GvSpacing.lg)
                     .padding(.vertical, GvSpacing.lg)
             } else {
-                Button { /* toggle completion — placeholder */ } label: {
-                    Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isComplete ? Color.gvLoggedBlue : Color.gvTextSecondary)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, GvSpacing.lg)
-                .padding(.vertical, GvSpacing.lg)
+                FillCheckbox(checked: isComplete)
+                    .padding(.horizontal, GvSpacing.lg)
+                    .padding(.vertical, GvSpacing.lg)
             }
         }
     }
@@ -159,14 +155,33 @@ private struct EntryFooter: View {
             HStack {
                 Spacer()
                 if !isSequence {
-                    Button { /* toggle completion — placeholder */ } label: {
-                        Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(isComplete ? Color.gvLoggedBlue : Color.gvTextSecondary)
-                    }
-                    .buttonStyle(.plain)
+                    FillCheckbox(checked: isComplete)
                 }
             }
         }
+    }
+}
+
+// MARK: - Fill checkbox
+
+private struct FillCheckbox: View {
+    let checked: Bool
+    var onToggle: () -> Void = {}
+
+    var body: some View {
+        Button(action: onToggle) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.gvLoggedBlue, lineWidth: 1.5)
+                    .frame(width: 20, height: 20)
+                if checked {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.gvLoggedBlue)
+                        .frame(width: 12, height: 12)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 

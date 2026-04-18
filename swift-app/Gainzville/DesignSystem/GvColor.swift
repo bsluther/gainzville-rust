@@ -45,6 +45,14 @@ extension Color {
 //   Color.gvTextPrimary   neutral1100 (13,13,13)   → neutral50  (250,250,250)
 //   Color.gvTextSecondary neutral600  (82,82,82)   → neutral400 (163,163,163)
 
+// MARK: - Semantic aliases
+
+extension Color {
+    /// Text color for attribute field values (dates, times, durations, quantities).
+    /// Defined here rather than Assets.xcassets so it stays with its semantic peers.
+    static var gvAttributeField: Color { .gvTextSecondary }
+}
+
 // MARK: - Private initialiser
 
 private extension Color {

@@ -8,7 +8,7 @@
 | `client` | SQLite client: `SqliteQueryExecutor`, `SqliteApply`, `SqliteClient`. Offline-first target. |
 | `server` | Postgres server: `PostgresQueryExecutor`, `PgApply`, `PostgresServer`. HTTP API + sync target. |
 | `generation` | Arbitrary data generation traits for deterministic simulation and integration tests. |
-| `dx-app` | Cross-platform Dioxus app (desktop, mobile, web). |
+| `dx-app` | Cross-platform Dioxus app (desktop, mobile, web). **Deprecated** — kept as reference only. |
 | `ivm` | Experimental DBSP/incremental view maintenance for sync. |
 
 ## Docs
@@ -23,11 +23,17 @@
 | [Generation](./docs/generation.md) | How arbitrary test data generation works |
 | [Properties](./docs/properties.md) | Property-based testing strategy |
 | [Attributes/Values design](./docs/attributes-design.md) | Typed attribute system and serde gotchas (`arbitrary_precision`) |
-| [UI Architecture](./docs/ui/architecture.md) | Platform targeting, rendering approach, styling |
-| [UI Design](./docs/ui/design.md) | Navigation patterns, interaction models |
-| [Adaptive rendering decisions](./docs/ui/adaptive-rendering-decisions.md) | Historical rationale for rendering choices |
+| [UI Architecture](./docs/ui/architecture.md) | Dioxus: platform targeting (`#[cfg]`), component model, CSS/Tailwind styling |
+| [UI Design](./docs/ui/design.md) | Dioxus: navigation patterns, interaction models |
+| [Adaptive rendering decisions](./docs/ui/adaptive-rendering-decisions.md) | Dioxus: historical rationale for `#[cfg]` vs CSS vs runtime rendering |
 
 Additional Dioxus reference: `/dx-app/AGENTS.md` and `/dx-app/docs/00-OVERVIEW.md` through `10-WASM-SPLIT.md`.
+
+Swift app patterns, platform targets, design system, and open work: [`swift-app/SWIFT-APP.md`](./swift-app/SWIFT-APP.md).
+
+## Primary UI Target
+
+The **Swift app** (`swift-app/`) is the primary UI. The Dioxus app (`dx-app/`) is deprecated — do not add features to it, but it remains as a reference implementation.
 
 ## Project Goals
 

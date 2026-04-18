@@ -1,5 +1,23 @@
 import SwiftUI
 
+// MARK: - Future work
+//
+// Wiring (short-term)
+// - Dispatch UpdateEntryTemporal on field change; debounce or defer until blur
+//   to avoid a write per keystroke.
+// - Add per-field "unset" control (×-button or menu item) to clear start/end/duration.
+//   macOS inline time field: nil state currently shows an empty pill; wiring should
+//   preserve that — don't default-initialise to .now on load, only on user intent.
+//
+// Duration picker (long-term)
+// - Replace the macOS stepper popover with an inline text field (e.g. "1h 30m" or
+//   "1:30:00") backed by a custom NSFormatter. The stepper popover is good enough
+//   for now; defer until the formatter approach is designed.
+//
+// Design / consistency
+// - CalendarPickerMacOS and TimeFieldMacOS use NSViewRepresentable to clear system
+//   backgrounds. Any new AppKit-backed pickers should follow the same pattern.
+
 // MARK: - TemporalAttribute
 
 struct TemporalAttribute: View {
@@ -43,6 +61,7 @@ struct TemporalAttribute: View {
                     .font(.gvBody)
                     .foregroundStyle(Color.gvTextSecondary)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -107,9 +126,9 @@ private struct TemporalFieldRow<Content: View>: View {
             Text(label)
                 .font(.gvCallout)
                 .foregroundStyle(Color.gvTextSecondary)
-                .padding(.leading, GvSpacing.md)
+                .padding(.leading, GvSpacing.lg)
             Spacer()
-            HStack(spacing: GvSpacing.md) {
+            HStack(spacing: GvSpacing.lg) {
                 content
             }
         }
@@ -137,6 +156,32 @@ private struct DatePickerPill: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        if components == .hourAndMinute {
+            if date != nil {
+                TimeFieldMacOS(selection: pickerDate)
+                    .fixedSize()
+                    .padding(.leading, GvSpacing.sm)
+                    .padding(.trailing, GvSpacing.lg)
+                    .padding(.vertical, GvSpacing.sm)
+                    .frame(minHeight: GvSpacing.minAttributeHeight)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.gvSurface))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gvDivider, lineWidth: 1))
+            } else {
+                Button { date = Date() } label: {
+                    Text(emptyPillText).gvAttributePill()
+                }
+                .buttonStyle(.plain)
+            }
+        } else {
+            pillButton
+        }
+        #else
+        pillButton
+        #endif
+    }
+
+    private var pillButton: some View {
         Button {
             if date == nil { date = Date() }
             isPresenting = true
@@ -145,15 +190,13 @@ private struct DatePickerPill: View {
                 .gvAttributePill()
         }
         .buttonStyle(.plain)
-        #if os(iOS)
-        .sheet(isPresented: $isPresenting) {
-            DatePickerSheet(date: pickerDate, components: components)
+        .platformPopover(isPresented: $isPresenting) {
+            #if os(iOS)
+            DatePickerIOS(date: pickerDate, components: components)
+            #else
+            DatePickerMacOS(date: pickerDate, components: components)
+            #endif
         }
-        #else
-        .popover(isPresented: $isPresenting) {
-            DatePickerPopover(date: pickerDate, components: components)
-        }
-        #endif
     }
 }
 
@@ -179,25 +222,23 @@ private struct DurationPickerPill: View {
                 .gvAttributePill()
         }
         .buttonStyle(.plain)
-        #if os(iOS)
-        .sheet(isPresented: $isPresenting) {
-            DurationPickerSheet(
+        .platformPopover(isPresented: $isPresenting) {
+            #if os(iOS)
+            DurationPickerIOS(
                 hours: $editHours,
                 minutes: $editMinutes,
                 seconds: $editSeconds,
                 onDone: { commitToBinding() }
             )
-        }
-        #else
-        .popover(isPresented: $isPresenting) {
-            DurationPickerPopover(
+            #else
+            DurationPickerMacOS(
                 hours: $editHours,
                 minutes: $editMinutes,
                 seconds: $editSeconds,
                 onDone: { commitToBinding(); isPresenting = false }
             )
+            #endif
         }
-        #endif
     }
 
     private func loadFromBinding() {
@@ -213,10 +254,10 @@ private struct DurationPickerPill: View {
     }
 }
 
-// MARK: - Platform: iOS pickers (sheets)
+// MARK: - iOS pickers
 
 #if os(iOS)
-private struct DatePickerSheet: View {
+private struct DatePickerIOS: View {
     @Binding var date: Date
     let components: DatePickerComponents
     @Environment(\.dismiss) private var dismiss
@@ -247,7 +288,7 @@ private struct DatePickerSheet: View {
     }
 }
 
-private struct DurationPickerSheet: View {
+private struct DurationPickerIOS: View {
     @Binding var hours: Int
     @Binding var minutes: Int
     @Binding var seconds: Int
@@ -293,22 +334,51 @@ private func durationWheelColumn(range: Range<Int>, label: String, selection: Bi
 }
 #endif
 
-// MARK: - Platform: macOS pickers (popovers)
+// MARK: - macOS pickers
 
 #if os(macOS)
-private struct DatePickerPopover: View {
+/// macOS time field backed by NSDatePicker with transparent background,
+/// so custom pill styling can be applied without a double-box appearance.
+private struct TimeFieldMacOS: NSViewRepresentable {
+    @Binding var selection: Date
+
+    func makeNSView(context: Context) -> NSDatePicker {
+        let picker = NSDatePicker()
+        picker.datePickerStyle = .textField
+        picker.datePickerElements = .hourMinuteSecond
+        picker.isBezeled = false
+        picker.drawsBackground = false
+        picker.textColor = NSColor(Color.gvAttributeField)
+        picker.dateValue = selection
+        picker.target = context.coordinator
+        picker.action = #selector(Coordinator.dateChanged(_:))
+        return picker
+    }
+
+    func updateNSView(_ picker: NSDatePicker, context: Context) {
+        if picker.dateValue != selection { picker.dateValue = selection }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    class Coordinator: NSObject {
+        var parent: TimeFieldMacOS
+        init(_ p: TimeFieldMacOS) { parent = p }
+        @objc func dateChanged(_ sender: NSDatePicker) { parent.selection = sender.dateValue }
+    }
+}
+
+private struct DatePickerMacOS: View {
     @Binding var date: Date
     let components: DatePickerComponents
 
     var body: some View {
-        DatePicker("", selection: $date, displayedComponents: components)
-            .datePickerStyle(.graphical)
-            .labelsHidden()
+        CalendarPickerMacOS(selection: $date, components: components)
             .padding(GvSpacing.md)
     }
 }
 
-private struct DurationPickerPopover: View {
+private struct DurationPickerMacOS: View {
     @Binding var hours: Int
     @Binding var minutes: Int
     @Binding var seconds: Int
@@ -336,9 +406,10 @@ private struct DurationStepperColumn: View {
 
     var body: some View {
         VStack(spacing: GvSpacing.sm) {
-            Text("\(value)")
+            TextField("", value: $value, format: .number)
                 .font(.gvTitle)
                 .monospacedDigit()
+                .multilineTextAlignment(.center)
                 .frame(minWidth: 40)
             Stepper("", value: $value, in: range)
                 .labelsHidden()
@@ -358,9 +429,10 @@ extension View {
     func gvAttributePill() -> some View {
         self
             .font(.gvBody)
-            .foregroundStyle(Color.gvTextSecondary)
+            .foregroundStyle(Color.gvAttributeField)
             .padding(.horizontal, GvSpacing.lg)
             .padding(.vertical, GvSpacing.sm)
+            .frame(minHeight: GvSpacing.minAttributeHeight)
             .background(Color.gvSurface)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(

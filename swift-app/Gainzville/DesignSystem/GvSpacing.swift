@@ -12,4 +12,8 @@ enum GvSpacing {
     static let md: CGFloat =  8
     static let lg: CGFloat = 12
     static let xl: CGFloat = 24
+
+    /// Minimum height for attribute pill controls (date, time, duration pickers).
+    /// Taller content can overflow; all pills share this baseline.
+    static let minAttributeHeight: CGFloat = 32
 }
