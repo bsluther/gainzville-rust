@@ -1312,9 +1312,6 @@ public func FfiConverterTypeFfiAttribute_lower(_ value: FfiAttribute) -> RustBuf
 }
 
 
-/**
- * Minimal action surface — only CreateActivity for now.
- */
 public struct FfiCreateActivity: Equatable, Hashable {
     public var id: String
     public var name: String
@@ -1698,6 +1695,64 @@ public func FfiConverterTypeFfiMassMeasurement_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeFfiMassMeasurement_lower(_ value: FfiMassMeasurement) -> RustBuffer {
     return FfiConverterTypeFfiMassMeasurement.lower(value)
+}
+
+
+public struct FfiMoveEntry: Equatable, Hashable {
+    public var entryId: String
+    public var position: FfiPosition?
+    public var temporal: FfiTemporal
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: String, position: FfiPosition?, temporal: FfiTemporal) {
+        self.entryId = entryId
+        self.position = position
+        self.temporal = temporal
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiMoveEntry: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiMoveEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiMoveEntry {
+        return
+            try FfiMoveEntry(
+                entryId: FfiConverterString.read(from: &buf), 
+                position: FfiConverterOptionTypeFfiPosition.read(from: &buf), 
+                temporal: FfiConverterTypeFfiTemporal.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiMoveEntry, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.entryId, into: &buf)
+        FfiConverterOptionTypeFfiPosition.write(value.position, into: &buf)
+        FfiConverterTypeFfiTemporal.write(value.temporal, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiMoveEntry_lift(_ buf: RustBuffer) throws -> FfiMoveEntry {
+    return try FfiConverterTypeFfiMoveEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiMoveEntry_lower(_ value: FfiMoveEntry) -> RustBuffer {
+    return FfiConverterTypeFfiMoveEntry.lower(value)
 }
 
 
@@ -2165,6 +2220,8 @@ public enum FfiAction: Equatable, Hashable {
     
     case createActivity(FfiCreateActivity
     )
+    case moveEntry(FfiMoveEntry
+    )
 
 
 
@@ -2189,6 +2246,9 @@ public struct FfiConverterTypeFfiAction: FfiConverterRustBuffer {
         case 1: return .createActivity(try FfiConverterTypeFfiCreateActivity.read(from: &buf)
         )
         
+        case 2: return .moveEntry(try FfiConverterTypeFfiMoveEntry.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -2200,6 +2260,11 @@ public struct FfiConverterTypeFfiAction: FfiConverterRustBuffer {
         case let .createActivity(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeFfiCreateActivity.write(v1, into: &buf)
+            
+        
+        case let .moveEntry(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeFfiMoveEntry.write(v1, into: &buf)
             
         }
     }

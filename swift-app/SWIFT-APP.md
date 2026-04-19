@@ -19,9 +19,33 @@
 - `platformPopover` (`GvPresentation.swift`) handles sheet-vs-popover automatically. Use it for all picker-style overlays. If a use case doesn't fit (e.g. toolbar anchoring), drop down to direct `.sheet`/`.popover` — don't contort the abstraction.
 - AppKit-backed pickers (`CalendarPickerMacOS`, `TimeFieldMacOS`) use `NSViewRepresentable` with cleared backgrounds to avoid double-box rendering. Follow this pattern for any new AppKit picker.
 
+## Building & Updating the FFI Library
+
+When Rust code changes, agents and developers need to rebuild the Swift-facing artifacts. Two scripts in `scripts/` handle this — always run from the **workspace root**.
+
+| Situation | Script |
+|-----------|--------|
+| FFI surface changed (`types.rs`, exported types, new `FfiAction` variants, etc.) | `scripts/regen-bindings.sh` |
+| Implementation-only Rust change (no `#[uniffi::export]` signature changes) | `scripts/rebuild-xcframework.sh` |
+
+`regen-bindings.sh` regenerates `gv_ffi.swift` + headers, then rebuilds the xcframework. `rebuild-xcframework.sh` skips binding regeneration. **When in doubt, use `regen-bindings.sh`** — a mismatch between the Swift bindings and the compiled library causes a fatal crash at launch.
+
+## Verifying the Swift Build
+
+Run from `swift-app/` — use `-target`, not `-scheme` (scheme + destination hits a platform-resolution bug):
+
+```bash
+# iOS
+xcodebuild -project Gainzville.xcodeproj -target Gainzville build CONFIGURATION=Debug 2>&1 | grep -E '(error:|BUILD SUCCEEDED|BUILD FAILED)'
+
+# macOS
+xcodebuild -project Gainzville.xcodeproj -target 'Gainzville macOS' build CONFIGURATION=Debug 2>&1 | grep -E '(error:|BUILD SUCCEEDED|BUILD FAILED)'
+```
+
+SourceKit LSP will show false "Cannot find type" errors for FFI types (`FfiEntry`, `FfiTemporal`, etc.) and design tokens (`GvSpacing`, `Color.gvSurface`). These are noise — trust `xcodebuild` output for real errors.
+
 ## Future / Open Questions
 
-- **Action dispatch**: temporal and other attribute fields need to dispatch `UpdateEntry*` actions on change, with debounce or blur-deferral to avoid per-keystroke writes.
 - **Unset controls**: no UI yet to clear individual temporal values (start, end, duration).
 - **Inline duration field (macOS)**: current stepper popover is a placeholder; long-term goal is an inline `hh:mm:ss` text field with a custom formatter.
 - **Sync / offline**: the Swift app is read/write via FFI today; full offline-first sync behaviour is driven by the Rust `client` crate.

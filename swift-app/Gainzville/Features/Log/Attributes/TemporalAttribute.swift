@@ -2,9 +2,6 @@ import SwiftUI
 
 // MARK: - Future work
 //
-// Wiring (short-term)
-// - Dispatch UpdateEntryTemporal on field change; debounce or defer until blur
-//   to avoid a write per keystroke.
 // - Add per-field "unset" control (×-button or menu item) to clear start/end/duration.
 //   macOS inline time field: nil state currently shows an empty pill; wiring should
 //   preserve that — don't default-initialise to .now on load, only on user intent.
@@ -17,18 +14,34 @@ import SwiftUI
 // Design / consistency
 // - CalendarPickerMacOS and TimeFieldMacOS use NSViewRepresentable to clear system
 //   backgrounds. Any new AppKit-backed pickers should follow the same pattern.
+//
+// Conflict resolution (nice-to-have)
+// - After the user picks "Remove X" from the conflict alert, auto-open the picker
+//   for the pending field instead of requiring a second tap.
+//
+// Root-entry / duration-only
+// - Root entries (no parent) require at least a start or end time (Rust constraint).
+//   Setting duration-only on a root entry will silently fail; deferred until there
+//   is a clear UX for handling this (e.g. disable the duration pill, or automatically
+//   pair it with a start time).
 
 // MARK: - TemporalAttribute
 
-struct TemporalAttribute: View {
-    let temporal: FfiTemporal
+private enum TemporalField { case start, end, duration }
 
+struct TemporalAttribute: View {
+    let entry: FfiEntry
+
+    @EnvironmentObject private var forestVM: ForestViewModel
     @State private var isExpanded = false
-    // Local edit state — sourced from `temporal` on appear/change.
-    // Stage 2: wire these bindings to a dispatch of UpdateEntryTemporal.
     @State private var editStart: Date?
     @State private var editEnd: Date?
     @State private var editDurationMs: UInt32?
+    @State private var debounceTask: Task<Void, Never>?
+    @State private var showConflictAlert = false
+    @State private var pendingField: TemporalField?
+
+    private var temporal: FfiTemporal { entry.temporal }
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
@@ -37,12 +50,33 @@ struct TemporalAttribute: View {
                 TemporalExpandedRows(
                     editStart: $editStart,
                     editEnd: $editEnd,
-                    editDurationMs: $editDurationMs
+                    editDurationMs: $editDurationMs,
+                    onBeforeEditStart: { gateEdit(for: .start) },
+                    onBeforeEditEnd: { gateEdit(for: .end) },
+                    onBeforeEditDuration: { gateEdit(for: .duration) }
                 )
             }
         }
         .onAppear { syncEditState() }
         .onChange(of: temporal) { _, _ in syncEditState() }
+        .onChange(of: editStart)      { _, _ in scheduleDebounce() }
+        .onChange(of: editEnd)        { _, _ in scheduleDebounce() }
+        .onChange(of: editDurationMs) { _, _ in scheduleDebounce() }
+        .onChange(of: isExpanded)     { _, newValue in if !newValue { flushNow() } }
+        .alert("Too many values set", isPresented: $showConflictAlert) {
+            if editStart != nil && pendingField != .start {
+                Button("Remove Start") { editStart = nil; pendingField = nil }
+            }
+            if editEnd != nil && pendingField != .end {
+                Button("Remove End") { editEnd = nil; pendingField = nil }
+            }
+            if editDurationMs != nil && pendingField != .duration {
+                Button("Remove Duration") { editDurationMs = nil; pendingField = nil }
+            }
+            Button("Cancel", role: .cancel) { pendingField = nil }
+        } message: {
+            Text("Only 2 of 3 time values can be set. Which would you like to remove?")
+        }
     }
 
     private var temporalHeader: some View {
@@ -66,6 +100,30 @@ struct TemporalAttribute: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Conflict gate
+
+    /// Called before a pill opens its editor. Returns true if the edit is allowed,
+    /// false if a conflict alert has been raised instead.
+    private func gateEdit(for field: TemporalField) -> Bool {
+        // Editing an already-set field is always allowed.
+        switch field {
+        case .start: if editStart != nil { return true }
+        case .end:   if editEnd   != nil { return true }
+        case .duration: if editDurationMs != nil { return true }
+        }
+        // Setting a new field when 2 are already set would over-specify the temporal.
+        let setCount = [editStart != nil, editEnd != nil, editDurationMs != nil]
+            .filter { $0 }.count
+        if setCount >= 2 {
+            pendingField = field
+            showConflictAlert = true
+            return false
+        }
+        return true
+    }
+
+    // MARK: - Sync / persist
+
     private func syncEditState() {
         switch temporal {
         case .none:
@@ -84,6 +142,41 @@ struct TemporalAttribute: View {
             editStart = nil; editEnd = msToDate(e); editDurationMs = d
         }
     }
+
+    private func buildFfiTemporal() -> FfiTemporal {
+        switch (editStart, editEnd, editDurationMs) {
+        case (nil, nil, nil):                       return .none
+        case (.some(let s), nil, nil):              return .start(start: dateToMs(s))
+        case (nil, .some(let e), nil):              return .end(end: dateToMs(e))
+        case (nil, nil, .some(let d)):              return .duration(duration: d)
+        case (.some(let s), .some(let e), nil):     return .startAndEnd(start: dateToMs(s), end: dateToMs(e))
+        case (.some(let s), nil, .some(let d)):     return .startAndDuration(start: dateToMs(s), durationMs: d)
+        case (nil, .some(let e), .some(let d)):     return .durationAndEnd(durationMs: d, end: dateToMs(e))
+        case (.some(let s), .some(let e), .some):   return .startAndEnd(start: dateToMs(s), end: dateToMs(e))
+        }
+    }
+
+    private func scheduleDebounce() {
+        debounceTask?.cancel()
+        debounceTask = nil
+        // Skip write if the edit state matches what's already stored.
+        guard buildFfiTemporal() != entry.temporal else { return }
+        debounceTask = Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                forestVM.updateEntryTemporal(entry: entry, temporal: buildFfiTemporal())
+            }
+        }
+    }
+
+    private func flushNow() {
+        debounceTask?.cancel()
+        debounceTask = nil
+        let newTemporal = buildFfiTemporal()
+        guard newTemporal != entry.temporal else { return }
+        forestVM.updateEntryTemporal(entry: entry, temporal: newTemporal)
+    }
 }
 
 // MARK: - Expanded rows
@@ -92,19 +185,22 @@ private struct TemporalExpandedRows: View {
     @Binding var editStart: Date?
     @Binding var editEnd: Date?
     @Binding var editDurationMs: UInt32?
+    var onBeforeEditStart: () -> Bool = { true }
+    var onBeforeEditEnd: () -> Bool = { true }
+    var onBeforeEditDuration: () -> Bool = { true }
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
             TemporalFieldRow(label: "Start") {
-                DatePickerPill(date: $editStart, components: .date)
-                DatePickerPill(date: $editStart, components: .hourAndMinute)
+                DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart)
+                DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart)
             }
             TemporalFieldRow(label: "End") {
-                DatePickerPill(date: $editEnd, components: .date)
-                DatePickerPill(date: $editEnd, components: .hourAndMinute)
+                DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd)
+                DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd)
             }
             TemporalFieldRow(label: "Duration") {
-                DurationPickerPill(durationMs: $editDurationMs)
+                DurationPickerPill(durationMs: $editDurationMs, onBeforeEdit: onBeforeEditDuration)
             }
         }
     }
@@ -140,6 +236,7 @@ private struct TemporalFieldRow<Content: View>: View {
 private struct DatePickerPill: View {
     @Binding var date: Date?
     let components: DatePickerComponents
+    var onBeforeEdit: () -> Bool = { true }
     @State private var isPresenting = false
 
     private var displayText: String {
@@ -168,7 +265,10 @@ private struct DatePickerPill: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.gvSurface))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gvDivider, lineWidth: 1))
             } else {
-                Button { date = Date() } label: {
+                Button {
+                    guard onBeforeEdit() else { return }
+                    date = Date()
+                } label: {
                     Text(emptyPillText).gvAttributePill()
                 }
                 .buttonStyle(.plain)
@@ -183,6 +283,7 @@ private struct DatePickerPill: View {
 
     private var pillButton: some View {
         Button {
+            guard onBeforeEdit() else { return }
             if date == nil { date = Date() }
             isPresenting = true
         } label: {
@@ -204,6 +305,7 @@ private struct DatePickerPill: View {
 
 private struct DurationPickerPill: View {
     @Binding var durationMs: UInt32?
+    var onBeforeEdit: () -> Bool = { true }
     @State private var isPresenting = false
     @State private var editHours = 0
     @State private var editMinutes = 0
@@ -215,6 +317,7 @@ private struct DurationPickerPill: View {
 
     var body: some View {
         Button {
+            guard onBeforeEdit() else { return }
             loadFromBinding()
             isPresenting = true
         } label: {
@@ -446,6 +549,10 @@ extension View {
 private let emptyPillText = "\u{00a0}\u{00a0}\u{00a0}\u{00a0}\u{00a0}"
 
 // MARK: - Formatting helpers
+
+private func dateToMs(_ date: Date) -> Int64 {
+    Int64(date.timeIntervalSince1970 * 1000)
+}
 
 private func msToDate(_ ms: Int64) -> Date {
     Date(timeIntervalSince1970: Double(ms) / 1000)

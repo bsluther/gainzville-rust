@@ -74,6 +74,15 @@ class ForestViewModel: ObservableObject {
     func children(of parentId: String) -> [FfiEntry] {
         core?.forestChildren(parentId: parentId) ?? []
     }
+
+    func updateEntryTemporal(entry: FfiEntry, temporal: FfiTemporal) {
+        guard let core else { return }
+        try? core.runAction(action: .moveEntry(FfiMoveEntry(
+            entryId: entry.id,
+            position: entry.position,
+            temporal: temporal
+        )))
+    }
 }
 
 @MainActor

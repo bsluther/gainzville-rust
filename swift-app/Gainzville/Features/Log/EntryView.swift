@@ -98,7 +98,7 @@ private struct EntryBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
-            TemporalAttribute(temporal: entry.temporal)
+            TemporalAttribute(entry: entry)
             AttributesSection()
             if entry.isSequence {
                 ChildrenSection(children: children)

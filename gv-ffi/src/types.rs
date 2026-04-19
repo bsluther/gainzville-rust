@@ -71,6 +71,12 @@ pub(crate) fn ffi_action_to_core(
             };
             Ok(gv_core::actions::CreateActivity { actor_id, activity }.into())
         }
+        FfiAction::MoveEntry(a) => {
+            let entry_id = parse_uuid(&a.entry_id)?;
+            let position = a.position.map(ffi_position_to_core).transpose()?;
+            let temporal = ffi_temporal_to_core(a.temporal)?;
+            Ok(gv_core::actions::MoveEntry { actor_id, entry_id, position, temporal }.into())
+        }
     }
 }
 
@@ -726,7 +732,34 @@ impl From<AnyQueryResponse> for FfiAnyQueryResponse {
 
 // --- Actions ---
 
-/// Minimal action surface — only CreateActivity for now.
+pub(crate) fn ffi_temporal_to_core(t: FfiTemporal) -> Result<Temporal, FfiError> {
+    Ok(match t {
+        FfiTemporal::None => Temporal::None,
+        FfiTemporal::Start { start } => Temporal::Start { start: parse_timestamp_ms(start)? },
+        FfiTemporal::End { end } => Temporal::End { end: parse_timestamp_ms(end)? },
+        FfiTemporal::Duration { duration } => Temporal::Duration { duration },
+        FfiTemporal::StartAndEnd { start, end } => Temporal::StartAndEnd {
+            start: parse_timestamp_ms(start)?,
+            end: parse_timestamp_ms(end)?,
+        },
+        FfiTemporal::StartAndDuration { start, duration_ms } => Temporal::StartAndDuration {
+            start: parse_timestamp_ms(start)?,
+            duration_ms,
+        },
+        FfiTemporal::DurationAndEnd { duration_ms, end } => Temporal::DurationAndEnd {
+            duration_ms,
+            end: parse_timestamp_ms(end)?,
+        },
+    })
+}
+
+pub(crate) fn ffi_position_to_core(p: FfiPosition) -> Result<Position, FfiError> {
+    let parent_id = parse_uuid(&p.parent_id)?;
+    Position::parse(Some(parent_id), Some(p.frac_index))
+        .map_err(FfiError::from)?
+        .ok_or_else(|| FfiError::Generic("position unexpectedly None after parse".to_string()))
+}
+
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiCreateActivity {
     pub id: String,
@@ -734,7 +767,15 @@ pub struct FfiCreateActivity {
     pub description: Option<String>,
 }
 
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct FfiMoveEntry {
+    pub entry_id: String,
+    pub position: Option<FfiPosition>,
+    pub temporal: FfiTemporal,
+}
+
 #[derive(uniffi::Enum, Debug, Clone)]
 pub enum FfiAction {
     CreateActivity(FfiCreateActivity),
+    MoveEntry(FfiMoveEntry),
 }

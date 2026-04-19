@@ -186,10 +186,9 @@ pub async fn move_entry(
             ));
         }
 
-        // TOOD: this is a bug, should look up the parent_id in position.
         let parent = executor
             .execute(FindEntryById {
-                entry_id: action.entry_id,
+                entry_id: position.parent_id,
             })
             .await?
             .expect("parent should exist after earlier condition");

@@ -47,6 +47,7 @@ The **Swift app** (`swift-app/`) is the primary UI. The Dioxus app (`dx-app/`) i
 
 - **postgres docker required at compile time**: `cargo build` for `gv_server` connects to the live DB for sqlx compile-time verification. Start postgres before building.
 - **Test from workspace root**: `cargo test` (not `--package`) to catch feature-unification issues. The `ivm` crate enables `serde_json/arbitrary_precision` workspace-wide, which breaks internally-tagged enums with numeric fields.
+- **Swift app — building and verifying**: see [`swift-app/SWIFT-APP.md`](./swift-app/SWIFT-APP.md) for how to rebuild Rust binaries, regenerate Swift bindings after FFI changes, and verify the Swift app compiles after any change.
 - **Previous versions (reference only, do not modify)**:
   - `/Users/brianluther/dev/swift/gv-2025-05-19/Gainzville` — Swift app (May 2025)
   - `/Users/brianluther/dev/gv/gv-2025-01-15` — React Native app (Jan 2025)
