@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS entries (
     id TEXT PRIMARY KEY,
     activity_id TEXT REFERENCES activities(id),
     owner_id TEXT NOT NULL REFERENCES actors(id),
+    name TEXT,
     parent_id TEXT REFERENCES entries(id),
     frac_index TEXT,
     is_template INTEGER,  -- SQLite uses INTEGER for BOOLEAN (0 = false, 1 = true)

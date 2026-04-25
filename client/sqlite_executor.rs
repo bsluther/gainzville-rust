@@ -215,7 +215,7 @@ impl QueryExecutor<FindEntryById> for SqliteQueryExecutor<'_> {
     ) -> Result<<FindEntryById as Query>::Response> {
         sqlx::query_as::<_, EntryRow>(
             r#"
-            SELECT id, owner_id, activity_id, parent_id, frac_index, is_template, display_as_sets, is_sequence, is_complete, start_time, end_time, duration_ms
+            SELECT id, owner_id, activity_id, name, parent_id, frac_index, is_template, display_as_sets, is_sequence, is_complete, start_time, end_time, duration_ms
             FROM entries
             WHERE id = ?
             "#,

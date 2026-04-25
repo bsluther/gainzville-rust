@@ -49,6 +49,7 @@ async fn test_create_user_activity_entry(pool: PgPool) {
             id: Uuid::new_v4(),
             activity_id: Some(activity_id),
             owner_id: user_id,
+            name: None,
             position: None,
             is_template: false,
             display_as_sets: false,

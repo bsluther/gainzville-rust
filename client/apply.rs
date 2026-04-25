@@ -136,6 +136,7 @@ impl SqliteApply for Delta<Entry> {
                     INSERT INTO entries (
                         id, activity_id,
                         owner_id,
+                        name,
                         parent_id,
                         frac_index,
                         is_template,
@@ -146,12 +147,13 @@ impl SqliteApply for Delta<Entry> {
                         end_time,
                         duration_ms
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     "#,
                 )
                 .bind(new.id)
                 .bind(new.activity_id)
                 .bind(new.owner_id)
+                .bind(new.name.as_deref())
                 .bind(new.parent_id())
                 .bind(new.frac_index().map(|f| f.to_string()))
                 .bind(new.is_template)
@@ -170,6 +172,7 @@ impl SqliteApply for Delta<Entry> {
                     r#"
                     UPDATE entries SET
                         activity_id = ?,
+                        name = ?,
                         parent_id = ?,
                         frac_index = ?,
                         display_as_sets = ?,
@@ -182,6 +185,7 @@ impl SqliteApply for Delta<Entry> {
                     "#,
                 )
                 .bind(new.activity_id)
+                .bind(new.name.as_deref())
                 .bind(new.parent_id())
                 .bind(new.frac_index().map(|f| f.to_string()))
                 .bind(new.display_as_sets)

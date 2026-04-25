@@ -212,7 +212,7 @@ impl QueryExecutor<FindEntryById> for PostgresQueryExecutor<'_> {
     ) -> Result<<FindEntryById as Query>::Response> {
         sqlx::query_as::<_, EntryRow>(
             r#"
-            SELECT id, owner_id, activity_id, parent_id, frac_index, is_template, display_as_sets, is_sequence, is_complete, start_time, end_time, duration_ms
+            SELECT id, owner_id, activity_id, name, parent_id, frac_index, is_template, display_as_sets, is_sequence, is_complete, start_time, end_time, duration_ms
             FROM entries
             WHERE id = $1
             "#,
@@ -233,7 +233,7 @@ impl QueryExecutor<FindEntryJoinById> for PostgresQueryExecutor<'_> {
         let row = sqlx::query_as::<_, EntryJoinRow>(
             r#"
             SELECT
-                e.id, e.activity_id, e.owner_id, e.parent_id, e.frac_index,
+                e.id, e.activity_id, e.owner_id, e.name, e.parent_id, e.frac_index,
                 e.is_template, e.display_as_sets, e.is_sequence, e.is_complete,
                 e.start_time, e.end_time, e.duration_ms,
                 a.id as act_id, a.owner_id as act_owner_id,

@@ -185,6 +185,7 @@ impl PgApply for Delta<Entry> {
                         id,
                         activity_id,
                         owner_id,
+                        name,
                         parent_id,
                         frac_index,
                         is_template,
@@ -195,11 +196,12 @@ impl PgApply for Delta<Entry> {
                         end_time,
                         duration_ms
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                     "#,
                     new.id,
                     new.activity_id,
                     new.owner_id,
+                    new.name.as_deref(),
                     new.parent_id(),
                     new.frac_index().map(|f| f.to_string()),
                     new.is_template,
@@ -220,17 +222,19 @@ impl PgApply for Delta<Entry> {
                     UPDATE entries
                     SET
                         activity_id = $1,
-                        parent_id = $2,
-                        frac_index = $3,
-                        display_as_sets = $4,
-                        is_sequence = $5,
-                        is_complete = $6,
-                        start_time = $7,
-                        end_time = $8,
-                        duration_ms = $9
-                    WHERE id = $10
+                        name = $2,
+                        parent_id = $3,
+                        frac_index = $4,
+                        display_as_sets = $5,
+                        is_sequence = $6,
+                        is_complete = $7,
+                        start_time = $8,
+                        end_time = $9,
+                        duration_ms = $10
+                    WHERE id = $11
                     "#,
                     new.activity_id,
+                    new.name.as_deref(),
                     new.parent_id(),
                     new.frac_index().map(|f| f.to_string()),
                     new.display_as_sets,

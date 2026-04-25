@@ -64,6 +64,7 @@ impl Arbitrary for Entry {
             owner_id: Uuid::arbitrary(rng, context),
             id: Uuid::arbitrary(rng, context),
             activity_id: Some(Uuid::arbitrary(rng, context)),
+            name: None,
             display_as_sets: rng.random_bool(0.5),
             is_sequence: rng.random_bool(0.5),
             is_complete: rng.random_bool(0.5),
@@ -170,6 +171,11 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry])> for Entry {
             owner_id: owner_id,
             activity_id: activity_choice.map(|a| a.id),
             id: Uuid::arbitrary(rng, context),
+            name: if choose_anonymous {
+                Some(format!("Entry {}", rng.random::<u32>() % 1000))
+            } else {
+                None
+            },
             display_as_sets: rng.random_bool(0.5),
             is_sequence: rng.random_bool(0.5),
             is_complete: rng.random_bool(0.5),
