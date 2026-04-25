@@ -228,6 +228,7 @@ impl Temporal {
     /// Returns the inferred start time, computing it from end and duration if not explicitly set.
     pub fn infer_start(&self) -> Option<DateTime<Utc>> {
         match self {
+            Temporal::End { end } => Some(*end), // Instanstaneous, end is start.
             Temporal::Start { start }
             | Temporal::StartAndEnd { start, .. }
             | Temporal::StartAndDuration { start, .. } => Some(*start),
@@ -241,6 +242,7 @@ impl Temporal {
     /// Returns the inferred end time, computing it from start and duration if not explicitly set.
     pub fn infer_end(&self) -> Option<DateTime<Utc>> {
         match self {
+            Temporal::Start { start } => Some(*start), // Instantaneous, start is end.
             Temporal::End { end }
             | Temporal::StartAndEnd { end, .. }
             | Temporal::DurationAndEnd { end, .. } => Some(*end),

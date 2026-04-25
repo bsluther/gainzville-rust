@@ -1,5 +1,5 @@
 use crate::models::entry::Entry;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 use uuid::Uuid;
 
@@ -70,13 +70,54 @@ impl Forest {
     /// Get the ancestors of an entry from immediate parent up to the root.
     pub fn ancestors(&self, entry_id: Uuid) -> Vec<&Entry> {
         let mut ancestors = Vec::new();
-        let Some(start) = self.entry(entry_id) else { return ancestors };
+        let Some(start) = self.entry(entry_id) else {
+            return ancestors;
+        };
         let mut current_parent = start.parent_id();
         while let Some(parent_id) = current_parent {
-            let Some(parent) = self.entry(parent_id) else { break };
+            let Some(parent) = self.entry(parent_id) else {
+                break;
+            };
             ancestors.push(parent);
             current_parent = parent.parent_id();
         }
         ancestors
+    }
+
+    /// Get a suggested start time for a newly created root-level entry.
+    pub fn suggested_root_day_insertion_time(&self, day_start: DateTime<Utc>) -> DateTime<Utc> {
+        let day_end = day_start + Duration::days(1);
+        let interval = day_start..day_end;
+        let now = Utc::now();
+        if interval.contains(&now) {
+            return now;
+        }
+        let noon = day_start + Duration::hours(12);
+
+        let last_entry = self.roots_in(interval).last().copied();
+        if let Some(entry) = last_entry {
+            let inferred_end = entry.temporal.infer_end();
+            assert!(
+                inferred_end.is_some(),
+                "root entries must have a canonical instant"
+            );
+
+            // Pick a time in the interval:
+            // - If inferred_end is in the interval, use that.
+            // - If canononical_instant + 1 min is the interval, use that.
+            // - Otherwise, pick the latest value in the interval.
+            // - Repeating this process should result in new entries all being created at the last
+            // millisecond of the day.
+            // TODO: use a property-based test for the above property.
+            let base = inferred_end
+                .filter(|&end| end < day_end)
+                .or_else(|| entry.temporal.canonical_instant())
+                .unwrap();
+            return (base + Duration::minutes(1))
+                .clamp(day_start, day_end - Duration::milliseconds(1));
+        }
+
+        // If inserting into a day that is not today with no entries, default to noon.
+        noon
     }
 }
