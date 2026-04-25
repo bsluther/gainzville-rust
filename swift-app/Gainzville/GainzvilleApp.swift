@@ -13,6 +13,7 @@ struct GainzvilleApp: App {
     let activitiesVM: ActivitiesViewModel
     let attributesVM: AttributesViewModel
     let forestVM: ForestViewModel
+    let logDayStore: LogDayStore
 
     init() {
         let listener = AppListener()
@@ -45,6 +46,7 @@ struct GainzvilleApp: App {
         activitiesVM = avm
         attributesVM = atvm
         forestVM = fvm
+        logDayStore = LogDayStore()
     }
 
     var body: some Scene {
@@ -53,6 +55,7 @@ struct GainzvilleApp: App {
                 .environmentObject(activitiesVM)
                 .environmentObject(attributesVM)
                 .environmentObject(forestVM)
+                .environmentObject(logDayStore)
         }
         #if os(macOS)
         .defaultSize(width: 1100, height: 700)

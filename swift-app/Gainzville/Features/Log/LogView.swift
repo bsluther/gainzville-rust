@@ -2,12 +2,12 @@ import SwiftUI
 
 struct LogView: View {
     @EnvironmentObject var forestVM: ForestViewModel
-
-    @State private var selectedDate: Date = .now
+    @EnvironmentObject var logDayStore: LogDayStore
 
     var body: some View {
+        let dayRoots = forestVM.rootsIn(logDay: logDayStore.logDay)
         Group {
-            if forestVM.roots.isEmpty {
+            if dayRoots.isEmpty {
                 ContentUnavailableView(
                     "No Entries",
                     systemImage: "list.bullet.rectangle",
@@ -16,7 +16,7 @@ struct LogView: View {
             } else {
                 ScrollView {
                     VStack(spacing: GvSpacing.lg) {
-                        ForEach(forestVM.roots, id: \.id) { entry in
+                        ForEach(dayRoots, id: \.id) { entry in
                             EntryView(entry: entry)
                         }
                     }
@@ -29,7 +29,7 @@ struct LogView: View {
         .background(Color.gvBackground)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                LogDateHeader(date: $selectedDate)
+                LogDateHeader(logDay: $logDayStore.logDay)
             }
         }
     }
@@ -38,13 +38,20 @@ struct LogView: View {
 // MARK: - Date header
 
 private struct LogDateHeader: View {
-    @Binding var date: Date
+    @Binding var logDay: LogDay
     @State private var isCalendarPresented = false
+
+    private var dateBinding: Binding<Date> {
+        Binding(
+            get: { logDay.start },
+            set: { logDay = .forLocalDate($0) }
+        )
+    }
 
     var body: some View {
         HStack(spacing: GvSpacing.xl) {
             Button {
-                date = Calendar.current.date(byAdding: .day, value: -1, to: date) ?? date
+                logDay = logDay.previous()
             } label: {
                 Image(systemName: "chevron.left")
                     .foregroundStyle(Color.gvTextSecondary)
@@ -55,21 +62,21 @@ private struct LogDateHeader: View {
 
             Button { isCalendarPresented = true } label: {
                 VStack(spacing: 1) {
-                    Text(date.formatted(.dateTime.year()))
+                    Text(logDay.start.formatted(.dateTime.year()))
                         .font(.gvCaption)
                         .foregroundStyle(Color.gvTextSecondary)
-                    Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                    Text(logDay.start.formatted(.dateTime.month(.abbreviated).day()))
                         .font(.gvBody)
                         .foregroundStyle(Color.gvTextPrimary)
                 }
             }
             .buttonStyle(.plain)
             .platformPopover(isPresented: $isCalendarPresented) {
-                LogCalendarPickerContent(date: $date)
+                LogCalendarPickerContent(date: dateBinding)
             }
 
             Button {
-                date = Calendar.current.date(byAdding: .day, value: 1, to: date) ?? date
+                logDay = logDay.next()
             } label: {
                 Image(systemName: "chevron.right")
                     .foregroundStyle(Color.gvTextSecondary)
@@ -114,5 +121,6 @@ private struct LogCalendarPickerContent: View {
     NavigationStack {
         LogView()
             .environmentObject(ForestViewModel())
+            .environmentObject(LogDayStore())
     }
 }

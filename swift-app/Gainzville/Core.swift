@@ -70,7 +70,13 @@ class ForestViewModel: ObservableObject {
         roots = core.forestRoots()
     }
 
-    // Synchronous read from the forest cache — always fresh on each render.
+    // Synchronous reads from the forest cache — always fresh on each render.
+
+    func rootsIn(logDay: LogDay) -> [FfiEntry] {
+        _ = roots  // establish SwiftUI dependency so callers re-render when data changes
+        return core?.forestRootsIn(from: logDay.fromMs, to: logDay.toMs) ?? []
+    }
+
     func children(of parentId: String) -> [FfiEntry] {
         core?.forestChildren(parentId: parentId) ?? []
     }
