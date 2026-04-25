@@ -77,6 +77,25 @@ pub(crate) fn ffi_action_to_core(
             let temporal = ffi_temporal_to_core(a.temporal)?;
             Ok(gv_core::actions::MoveEntry { actor_id, entry_id, position, temporal }.into())
         }
+        FfiAction::CreateEntry(a) => {
+            let id = parse_uuid(&a.id)?;
+            let activity_id = a.activity_id.as_deref().map(parse_uuid).transpose()?;
+            let position = a.position.map(ffi_position_to_core).transpose()?;
+            let temporal = ffi_temporal_to_core(a.temporal)?;
+            let entry = gv_core::models::entry::Entry {
+                id,
+                activity_id,
+                owner_id: actor_id,
+                name: a.name,
+                position,
+                is_template: a.is_template,
+                display_as_sets: a.display_as_sets,
+                is_sequence: a.is_sequence,
+                is_complete: a.is_complete,
+                temporal,
+            };
+            Ok(gv_core::actions::CreateEntry { actor_id, entry }.into())
+        }
     }
 }
 
@@ -776,8 +795,22 @@ pub struct FfiMoveEntry {
     pub temporal: FfiTemporal,
 }
 
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct FfiCreateEntry {
+    pub id: String,
+    pub activity_id: Option<String>,
+    pub name: Option<String>,
+    pub position: Option<FfiPosition>,
+    pub is_template: bool,
+    pub display_as_sets: bool,
+    pub is_sequence: bool,
+    pub is_complete: bool,
+    pub temporal: FfiTemporal,
+}
+
 #[derive(uniffi::Enum, Debug, Clone)]
 pub enum FfiAction {
     CreateActivity(FfiCreateActivity),
     MoveEntry(FfiMoveEntry),
+    CreateEntry(FfiCreateEntry),
 }

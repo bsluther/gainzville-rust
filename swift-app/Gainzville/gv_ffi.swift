@@ -891,6 +891,13 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     func forestRootsIn(from: Int64, to: Int64)  -> [FfiEntry]
     
     /**
+     * Suggested start time (Unix ms) for a new root-level entry on the given day.
+     * `day_start` is the start of the day in Unix ms. Returns now if today,
+     * one minute after the last existing root entry otherwise, or noon as a fallback.
+     */
+    func forestSuggestedRootDayInsertionTime(dayStart: Int64)  -> Int64
+    
+    /**
      * Read the current cached result for a query. Returns `None` if the query
      * is not subscribed or if the query parameters are invalid. Swift calls
      * this synchronously from the main thread after receiving `on_data_changed()`.
@@ -1067,6 +1074,20 @@ open func forestRootsIn(from: Int64, to: Int64) -> [FfiEntry]  {
             self.uniffiCloneHandle(),
         FfiConverterInt64.lower(from),
         FfiConverterInt64.lower(to),$0
+    )
+})
+}
+    
+    /**
+     * Suggested start time (Unix ms) for a new root-level entry on the given day.
+     * `day_start` is the start of the day in Unix ms. Returns now if today,
+     * one minute after the last existing root entry otherwise, or noon as a fallback.
+     */
+open func forestSuggestedRootDayInsertionTime(dayStart: Int64) -> Int64  {
+    return try!  FfiConverterInt64.lift(try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_forest_suggested_root_day_insertion_time(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(dayStart),$0
     )
 })
 }
@@ -1370,10 +1391,10 @@ public func FfiConverterTypeFfiCreateActivity_lower(_ value: FfiCreateActivity) 
 }
 
 
-public struct FfiEntry: Equatable, Hashable {
+public struct FfiCreateEntry: Equatable, Hashable {
     public var id: String
     public var activityId: String?
-    public var ownerId: String
+    public var name: String?
     public var position: FfiPosition?
     public var isTemplate: Bool
     public var displayAsSets: Bool
@@ -1383,10 +1404,94 @@ public struct FfiEntry: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, activityId: String?, ownerId: String, position: FfiPosition?, isTemplate: Bool, displayAsSets: Bool, isSequence: Bool, isComplete: Bool, temporal: FfiTemporal) {
+    public init(id: String, activityId: String?, name: String?, position: FfiPosition?, isTemplate: Bool, displayAsSets: Bool, isSequence: Bool, isComplete: Bool, temporal: FfiTemporal) {
+        self.id = id
+        self.activityId = activityId
+        self.name = name
+        self.position = position
+        self.isTemplate = isTemplate
+        self.displayAsSets = displayAsSets
+        self.isSequence = isSequence
+        self.isComplete = isComplete
+        self.temporal = temporal
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiCreateEntry: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiCreateEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiCreateEntry {
+        return
+            try FfiCreateEntry(
+                id: FfiConverterString.read(from: &buf), 
+                activityId: FfiConverterOptionString.read(from: &buf), 
+                name: FfiConverterOptionString.read(from: &buf), 
+                position: FfiConverterOptionTypeFfiPosition.read(from: &buf), 
+                isTemplate: FfiConverterBool.read(from: &buf), 
+                displayAsSets: FfiConverterBool.read(from: &buf), 
+                isSequence: FfiConverterBool.read(from: &buf), 
+                isComplete: FfiConverterBool.read(from: &buf), 
+                temporal: FfiConverterTypeFfiTemporal.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiCreateEntry, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterOptionString.write(value.activityId, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionTypeFfiPosition.write(value.position, into: &buf)
+        FfiConverterBool.write(value.isTemplate, into: &buf)
+        FfiConverterBool.write(value.displayAsSets, into: &buf)
+        FfiConverterBool.write(value.isSequence, into: &buf)
+        FfiConverterBool.write(value.isComplete, into: &buf)
+        FfiConverterTypeFfiTemporal.write(value.temporal, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiCreateEntry_lift(_ buf: RustBuffer) throws -> FfiCreateEntry {
+    return try FfiConverterTypeFfiCreateEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiCreateEntry_lower(_ value: FfiCreateEntry) -> RustBuffer {
+    return FfiConverterTypeFfiCreateEntry.lower(value)
+}
+
+
+public struct FfiEntry: Equatable, Hashable {
+    public var id: String
+    public var activityId: String?
+    public var ownerId: String
+    public var name: String?
+    public var position: FfiPosition?
+    public var isTemplate: Bool
+    public var displayAsSets: Bool
+    public var isSequence: Bool
+    public var isComplete: Bool
+    public var temporal: FfiTemporal
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, activityId: String?, ownerId: String, name: String?, position: FfiPosition?, isTemplate: Bool, displayAsSets: Bool, isSequence: Bool, isComplete: Bool, temporal: FfiTemporal) {
         self.id = id
         self.activityId = activityId
         self.ownerId = ownerId
+        self.name = name
         self.position = position
         self.isTemplate = isTemplate
         self.displayAsSets = displayAsSets
@@ -1414,6 +1519,7 @@ public struct FfiConverterTypeFfiEntry: FfiConverterRustBuffer {
                 id: FfiConverterString.read(from: &buf), 
                 activityId: FfiConverterOptionString.read(from: &buf), 
                 ownerId: FfiConverterString.read(from: &buf), 
+                name: FfiConverterOptionString.read(from: &buf), 
                 position: FfiConverterOptionTypeFfiPosition.read(from: &buf), 
                 isTemplate: FfiConverterBool.read(from: &buf), 
                 displayAsSets: FfiConverterBool.read(from: &buf), 
@@ -1427,6 +1533,7 @@ public struct FfiConverterTypeFfiEntry: FfiConverterRustBuffer {
         FfiConverterString.write(value.id, into: &buf)
         FfiConverterOptionString.write(value.activityId, into: &buf)
         FfiConverterString.write(value.ownerId, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
         FfiConverterOptionTypeFfiPosition.write(value.position, into: &buf)
         FfiConverterBool.write(value.isTemplate, into: &buf)
         FfiConverterBool.write(value.displayAsSets, into: &buf)
@@ -2222,6 +2329,8 @@ public enum FfiAction: Equatable, Hashable {
     )
     case moveEntry(FfiMoveEntry
     )
+    case createEntry(FfiCreateEntry
+    )
 
 
 
@@ -2249,6 +2358,9 @@ public struct FfiConverterTypeFfiAction: FfiConverterRustBuffer {
         case 2: return .moveEntry(try FfiConverterTypeFfiMoveEntry.read(from: &buf)
         )
         
+        case 3: return .createEntry(try FfiConverterTypeFfiCreateEntry.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -2265,6 +2377,11 @@ public struct FfiConverterTypeFfiAction: FfiConverterRustBuffer {
         case let .moveEntry(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeFfiMoveEntry.write(v1, into: &buf)
+            
+        
+        case let .createEntry(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeFfiCreateEntry.write(v1, into: &buf)
             
         }
     }
@@ -4077,6 +4194,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots_in() != 32116) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_suggested_root_day_insertion_time() != 13315) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_read_query() != 4312) {

@@ -178,6 +178,15 @@ impl GainzvilleCore {
             .unwrap_or_default()
     }
 
+    /// Suggested start time (Unix ms) for a new root-level entry on the given day.
+    /// `day_start` is the start of the day in Unix ms. Returns now if today,
+    /// one minute after the last existing root entry otherwise, or noon as a fallback.
+    pub fn forest_suggested_root_day_insertion_time(&self, day_start: i64) -> i64 {
+        let Ok(day_start_dt) = parse_timestamp_ms(day_start) else { return day_start };
+        let forest = self.forest_snapshot().unwrap_or_else(|| Forest::from(vec![]));
+        forest.suggested_root_day_insertion_time(day_start_dt).timestamp_millis()
+    }
+
     // -------------------------------------------------------------------------
     // Dev / debug utilities
     //
