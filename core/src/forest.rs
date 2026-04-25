@@ -104,7 +104,7 @@ impl Forest {
 
             // Pick a time in the interval:
             // - If inferred_end is in the interval, use that.
-            // - If canononical_instant + 1 min is the interval, use that.
+            // - If canonical_instant + 1 min is the interval, use that.
             // - Otherwise, pick the latest value in the interval.
             // - Repeating this process should result in new entries all being created at the last
             // millisecond of the day.
