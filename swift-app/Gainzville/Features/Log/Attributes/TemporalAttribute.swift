@@ -83,19 +83,20 @@ struct TemporalAttribute: View {
         Button { isExpanded.toggle() } label: {
             HStack(spacing: 0) {
                 Text("Time")
-                    .font(.gvBody)
+                    .font(.attrLabel)
                     .foregroundStyle(Color.gvTextSecondary)
                 Image(systemName: "chevron.down")
                     .font(.caption)
                     .foregroundStyle(Color.gvTextSecondary)
                     .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                    .padding(.leading, GvSpacing.sm)
+                    .padding(.leading, GvSpacing.entrySpacing)
                 Spacer()
                 Text(temporalSummary(temporal))
-                    .font(.gvBody)
+                    .font(.attrLabel.italic())
                     .foregroundStyle(Color.gvTextSecondary)
             }
             .contentShape(Rectangle())
+            .frame(minHeight: GvSpacing.minAttributeHeight)
         }
         .buttonStyle(.plain)
     }
@@ -221,13 +222,14 @@ private struct TemporalFieldRow<Content: View>: View {
         HStack(alignment: .center) {
             Text(label)
                 .font(.attrLabel)
-                .foregroundStyle(Color.attrLabel)
+                .foregroundStyle(Color.entryTextSecondary)
                 .padding(.leading, GvSpacing.lg)
             Spacer()
             HStack(spacing: GvSpacing.lg) {
                 content
             }
         }
+        .frame(minHeight: GvSpacing.minAttributeHeight)
     }
 }
 
@@ -529,18 +531,18 @@ private struct DurationStepperColumn: View {
 /// Shared pill style for attribute value display across all attribute types.
 /// Apply with `.gvAttributePill()`.
 extension View {
-    func gvAttributePill() -> some View {
+    func gvAttributePill(borderColor: Color = .entryTextSecondary) -> some View {
         self
             .font(.attrField)
-            .foregroundStyle(Color.gvAttributeField)
+            .foregroundStyle(Color.entryTextPrimary)
             .padding(.horizontal, GvSpacing.lg)
             .padding(.vertical, GvSpacing.sm)
             .frame(minHeight: GvSpacing.minAttributeHeight)
-            .background(Color.gvSurface)
+            .background(.clear)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.gvDivider, lineWidth: 1)
+                    .stroke(borderColor, lineWidth: 1)
             )
     }
 }

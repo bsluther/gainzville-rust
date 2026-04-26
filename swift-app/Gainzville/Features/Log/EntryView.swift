@@ -38,13 +38,13 @@ struct EntryView: View {
 
 private extension View {
     func entryContainerStyle(isSequence: Bool) -> some View {
-        let radius = isSequence ? GvSpacing.entrySequenceCornerRadius : GvSpacing.entryScalarCornerRadius
+        let borderWidth = isSequence ? GvSpacing.entrySequenceBorderWidth : GvSpacing.entryScalarBorderWidth
         return self
             .background(isSequence ? Color.entrySequenceBackground : Color.entryScalarBackground)
-            .clipShape(RoundedRectangle(cornerRadius: radius))
+            .clipShape(RoundedRectangle(cornerRadius: GvSpacing.entryCornerRadius))
             .overlay(
-                RoundedRectangle(cornerRadius: radius)
-                    .stroke(isSequence ? Color.entrySequenceBorder : Color.entryScalarBorder, lineWidth: GvSpacing.entryBorderWidth)
+                RoundedRectangle(cornerRadius: GvSpacing.entryCornerRadius)
+                    .stroke(isSequence ? Color.entrySequenceBorder : Color.entryScalarBorder, lineWidth: borderWidth)
             )
     }
 }
@@ -65,7 +65,7 @@ private struct EntryHeader: View {
             Button(action: onToggle) {
                 Text(displayName)
                     .font(.gvBody)
-                    .foregroundStyle(Color.entryTitle)
+                    .foregroundStyle(Color.entryTextPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, GvSpacing.entrySpacing)
                     .padding(.leading, GvSpacing.entrySpacing)

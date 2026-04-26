@@ -10,27 +10,24 @@ import SwiftUI
 //
 // Available: Color.gvNeutral50 … gvNeutral1200, Color.gvLoggedBlue
 
-// MARK: - Semantic adaptive tokens
-//
-// Adaptive semantic colors are defined in Assets.xcassets and auto-generated.
-// Available: Color.gvBackground, .gvSurface, .gvDivider, .gvTextPrimary, .gvTextSecondary
-
 // MARK: - Semantic aliases
 
 extension Color {
-    /// Text color for attribute field values (dates, times, durations, quantities).
-    /// Defined here rather than Assets.xcassets so it stays with its semantic peers.
-    static var gvAttributeField: Color { .gvTextSecondary }
+    static var gvBackground: Color    { .gvNeutral1100 }
+    static var gvSurface: Color       { .gvNeutral1000 }
+    static var gvDivider: Color       { .gvNeutral200 }
+    static var gvTextPrimary: Color   { .gvNeutral400 }
+    static var gvTextSecondary: Color { .gvNeutral500 }
 }
 
 // MARK: - Entry tokens
 
 extension Color {
-    static var entryScalarBackground: Color   { .gvSurface }
+    static var entryScalarBackground: Color   { .gvNeutral1000 }
     static var entrySequenceBackground: Color { .clear }
-    static var entryScalarBorder: Color       { .clear }
-    static var entrySequenceBorder: Color     { .gvDivider }
-    static var entryTitle: Color              { .gvTextPrimary }
-    static var attrLabel: Color               { .gvTextSecondary }
+    static var entryScalarBorder: Color       { .gvNeutral900 }
+    static var entrySequenceBorder: Color     { .gvNeutral800 }
+    static var entryTextPrimary: Color            { .gvNeutral400 }
+    static var entryTextSecondary: Color          { .gvNeutral500 }
 }
 
