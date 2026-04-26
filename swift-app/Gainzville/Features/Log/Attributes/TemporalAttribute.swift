@@ -453,7 +453,7 @@ private struct TimeFieldMacOS: NSViewRepresentable {
         picker.datePickerElements = .hourMinuteSecond
         picker.isBezeled = false
         picker.drawsBackground = false
-        picker.textColor = NSColor(Color.gvAttributeField)
+        picker.textColor = NSColor(Color.gvTextPrimary)
         picker.dateValue = selection
         picker.target = context.coordinator
         picker.action = #selector(Coordinator.dateChanged(_:))

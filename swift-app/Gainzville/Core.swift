@@ -89,6 +89,22 @@ class ForestViewModel: ObservableObject {
             temporal: temporal
         )))
     }
+
+    func createRootEntry(activityId: String?, name: String?, isSequence: Bool, for logDay: LogDay) {
+        guard let core else { return }
+        let suggestedMs = core.forestSuggestedRootDayInsertionTime(dayStart: logDay.fromMs)
+        try? core.runAction(action: .createEntry(FfiCreateEntry(
+            id: UUID().uuidString,
+            activityId: activityId,
+            name: name,
+            position: nil,
+            isTemplate: false,
+            displayAsSets: false,
+            isSequence: isSequence,
+            isComplete: false,
+            temporal: .start(start: suggestedMs)
+        )))
+    }
 }
 
 @MainActor

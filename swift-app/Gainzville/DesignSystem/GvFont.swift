@@ -17,6 +17,6 @@ extension Font {
 // MARK: - Entry / attribute tokens
 
 extension Font {
-    static let attrLabel = Font(UIFontMetrics(forTextStyle: .callout).scaledFont(for: .systemFont(ofSize: 14)))
+    static let attrLabel = Font.system(size: 14)
     static let attrField = Font.system(.body)
 }

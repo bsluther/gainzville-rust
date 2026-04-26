@@ -20,6 +20,12 @@ extension Color {
     static var gvTextSecondary: Color { .gvNeutral500 }
 }
 
+// MARK: - Action tokens
+
+extension Color {
+    static var gvPrimaryAction: Color { .gvLoggedBlue }
+}
+
 // MARK: - Entry tokens
 
 extension Color {

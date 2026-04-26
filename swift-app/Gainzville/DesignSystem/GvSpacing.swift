@@ -16,4 +16,8 @@ enum GvSpacing {
     
     // MARK: - Attribute tokens
     static let minAttributeHeight: CGFloat = 32
+
+    // MARK: - FAB tokens
+    static let fabSize: CGFloat    = 56
+    static let fabPadding: CGFloat = xl
 }

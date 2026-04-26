@@ -7,6 +7,9 @@ struct EntryView: View {
     @State private var isExpanded = false
 
     private var displayName: String {
+        if let name = entry.name, !name.isEmpty {
+            return name
+        }
         if let activityId = entry.activityId,
            let act = activitiesVM.activities.first(where: { $0.id == activityId }) {
             return act.name

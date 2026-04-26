@@ -3,6 +3,7 @@ import SwiftUI
 struct LogView: View {
     @EnvironmentObject var forestVM: ForestViewModel
     @EnvironmentObject var logDayStore: LogDayStore
+    @State private var isCreatePresented = false
 
     var body: some View {
         let dayRoots = forestVM.rootsIn(logDay: logDayStore.logDay)
@@ -30,6 +31,24 @@ struct LogView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 LogDateHeader(logDay: $logDayStore.logDay)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    isCreatePresented = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $isCreatePresented) {
+            CreateEntrySheet(isPresented: $isCreatePresented) { activityId, name, isSequence in
+                forestVM.createRootEntry(
+                    activityId: activityId,
+                    name: name,
+                    isSequence: isSequence,
+                    for: logDayStore.logDay
+                )
+                isCreatePresented = false
             }
         }
     }
