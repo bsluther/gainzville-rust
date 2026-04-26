@@ -220,8 +220,8 @@ private struct TemporalFieldRow<Content: View>: View {
     var body: some View {
         HStack(alignment: .center) {
             Text(label)
-                .font(.gvCallout)
-                .foregroundStyle(Color.gvTextSecondary)
+                .font(.attrLabel)
+                .foregroundStyle(Color.attrLabel)
                 .padding(.leading, GvSpacing.lg)
             Spacer()
             HStack(spacing: GvSpacing.lg) {
@@ -531,7 +531,7 @@ private struct DurationStepperColumn: View {
 extension View {
     func gvAttributePill() -> some View {
         self
-            .font(.gvBody)
+            .font(.attrField)
             .foregroundStyle(Color.gvAttributeField)
             .padding(.horizontal, GvSpacing.lg)
             .padding(.vertical, GvSpacing.sm)

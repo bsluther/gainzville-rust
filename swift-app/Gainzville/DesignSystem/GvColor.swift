@@ -53,6 +53,17 @@ extension Color {
     static var gvAttributeField: Color { .gvTextSecondary }
 }
 
+// MARK: - Entry tokens
+
+extension Color {
+    static var entryScalarBackground: Color   { .gvSurface }
+    static var entrySequenceBackground: Color { .clear }
+    static var entryScalarBorder: Color       { .clear }
+    static var entrySequenceBorder: Color     { .gvDivider }
+    static var entryTitle: Color              { .gvTextPrimary }
+    static var attrLabel: Color               { .gvTextSecondary }
+}
+
 // MARK: - Private initialiser
 
 private extension Color {

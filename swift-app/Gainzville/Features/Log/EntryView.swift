@@ -38,13 +38,13 @@ struct EntryView: View {
 
 private extension View {
     func entryContainerStyle(isSequence: Bool) -> some View {
-        let radius: CGFloat = isSequence ? 12 : 8
+        let radius = isSequence ? GvSpacing.entrySequenceCornerRadius : GvSpacing.entryScalarCornerRadius
         return self
-            .background(isSequence ? Color.clear : Color.gvSurface)
+            .background(isSequence ? Color.entrySequenceBackground : Color.entryScalarBackground)
             .clipShape(RoundedRectangle(cornerRadius: radius))
             .overlay(
                 RoundedRectangle(cornerRadius: radius)
-                    .stroke(isSequence ? Color.gvDivider : Color.clear, lineWidth: 1)
+                    .stroke(isSequence ? Color.entrySequenceBorder : Color.entryScalarBorder, lineWidth: GvSpacing.entryBorderWidth)
             )
     }
 }
@@ -65,10 +65,10 @@ private struct EntryHeader: View {
             Button(action: onToggle) {
                 Text(displayName)
                     .font(.gvBody)
-                    .foregroundStyle(Color.gvTextPrimary)
+                    .foregroundStyle(Color.entryTitle)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, GvSpacing.lg)
-                    .padding(.leading, GvSpacing.lg)
+                    .padding(.vertical, GvSpacing.entrySpacing)
+                    .padding(.leading, GvSpacing.entrySpacing)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -79,12 +79,12 @@ private struct EntryHeader: View {
                 Image(systemName: "ellipsis")
                     .rotationEffect(.degrees(90))
                     .foregroundStyle(Color.gvTextSecondary)
-                    .padding(.horizontal, GvSpacing.lg)
-                    .padding(.vertical, GvSpacing.lg)
+                    .padding(.horizontal, GvSpacing.entrySpacing)
+                    .padding(.vertical, GvSpacing.entrySpacing)
             } else {
                 FillCheckbox(checked: isComplete)
-                    .padding(.horizontal, GvSpacing.lg)
-                    .padding(.vertical, GvSpacing.lg)
+                    .padding(.horizontal, GvSpacing.entrySpacing)
+                    .padding(.vertical, GvSpacing.entrySpacing)
             }
         }
     }
@@ -97,7 +97,7 @@ private struct EntryBody: View {
     let children: [FfiEntry]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: GvSpacing.lg) {
+        VStack(alignment: .leading, spacing: GvSpacing.entrySpacing) {
             TemporalAttribute(entry: entry)
             AttributesSection()
             if entry.isSequence {
@@ -105,8 +105,8 @@ private struct EntryBody: View {
             }
             EntryFooter(isSequence: entry.isSequence, isComplete: entry.isComplete)
         }
-        .padding(.horizontal, GvSpacing.lg)
-        .padding(.vertical, GvSpacing.lg)
+        .padding(.horizontal, GvSpacing.entrySpacing)
+        .padding(.vertical, GvSpacing.entrySpacing)
     }
 }
 

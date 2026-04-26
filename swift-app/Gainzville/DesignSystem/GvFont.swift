@@ -13,3 +13,10 @@ extension Font {
     static let gvCaption    = Font.system(.caption)
     static let gvFootnote   = Font.system(.footnote)
 }
+
+// MARK: - Entry / attribute tokens
+
+extension Font {
+    static let attrLabel = Font.system(.callout)
+    static let attrField = Font.system(.body)
+}
