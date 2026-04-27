@@ -881,6 +881,13 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     func forestChildren(parentId: String)  -> [FfiEntry]
     
     /**
+     * Position immediately after the last child of `parent_id`.
+     * Returns `None` if the parent is not found in the current snapshot.
+     * Caller must ensure `parent_id` refers to a sequence entry.
+     */
+    func forestPositionAfterChildren(parentId: String)  -> FfiPosition?
+    
+    /**
      * All root entries (no parent), sorted by canonical instant.
      */
     func forestRoots()  -> [FfiEntry]
@@ -1048,6 +1055,20 @@ open func forestAncestors(entryId: String) -> [FfiEntry]  {
 open func forestChildren(parentId: String) -> [FfiEntry]  {
     return try!  FfiConverterSequenceTypeFfiEntry.lift(try! rustCall() {
     uniffi_gv_ffi_fn_method_gainzvillecore_forest_children(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(parentId),$0
+    )
+})
+}
+    
+    /**
+     * Position immediately after the last child of `parent_id`.
+     * Returns `None` if the parent is not found in the current snapshot.
+     * Caller must ensure `parent_id` refers to a sequence entry.
+     */
+open func forestPositionAfterChildren(parentId: String) -> FfiPosition?  {
+    return try!  FfiConverterOptionTypeFfiPosition.lift(try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_forest_position_after_children(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(parentId),$0
     )
@@ -4312,6 +4333,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_children() != 57041) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_after_children() != 31762) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots() != 31525) {

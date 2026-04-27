@@ -152,14 +152,28 @@ private struct DropTarget: View {
 // MARK: - Footer
 
 /// For scalars: checkbox on the right (replaces the header checkbox when expanded).
-/// For sequences: placeholder row for future action buttons (add entry, etc.).
+/// For sequences: "+ Entry" button to add a child entry.
 private struct EntryFooter: View {
     let entry: FfiEntry
     @EnvironmentObject private var forestVM: ForestViewModel
+    @State private var isCreatePresented = false
 
     var body: some View {
         if entry.isSequence {
-            EmptyView()
+            HStack {
+                Button("+ Entry") { isCreatePresented = true }
+                    .font(.gvBody)
+                    .foregroundStyle(Color.gvTextSecondary)
+                    .buttonStyle(.plain)
+                    .padding(.vertical, GvSpacing.entrySpacing)
+                Spacer()
+            }
+            .sheet(isPresented: $isCreatePresented) {
+                CreateEntrySheet(isPresented: $isCreatePresented) { activityId, name, isSeq in
+                    forestVM.createChildEntry(in: entry, activityId: activityId, name: name, isSequence: isSeq)
+                    isCreatePresented = false
+                }
+            }
         } else {
             HStack {
                 Spacer()

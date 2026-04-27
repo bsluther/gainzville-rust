@@ -106,6 +106,22 @@ class ForestViewModel: ObservableObject {
         )))
     }
 
+    func createChildEntry(in parent: FfiEntry, activityId: String?, name: String?, isSequence: Bool) {
+        guard let core else { return }
+        guard let position = core.forestPositionAfterChildren(parentId: parent.id) else { return }
+        try? core.runAction(action: .createEntry(FfiCreateEntry(
+            id: UUID().uuidString,
+            activityId: activityId,
+            name: name,
+            position: position,
+            isTemplate: false,
+            displayAsSets: false,
+            isSequence: isSequence,
+            isComplete: false,
+            temporal: .none
+        )))
+    }
+
     func updateEntryCompletion(entry: FfiEntry, isComplete: Bool) {
         guard let core else { return }
         try? core.runAction(action: .updateEntryCompletion(FfiUpdateEntryCompletion(

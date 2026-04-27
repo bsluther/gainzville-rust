@@ -1,6 +1,7 @@
-use crate::models::entry::Entry;
+use crate::models::entry::{Entry, Position};
 use chrono::{DateTime, Duration, Utc};
-use std::ops::Range;
+use fractional_index::FractionalIndex;
+use std::{collections::HashSet, ops::Range};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +83,105 @@ impl Forest {
             current_parent = parent.parent_id();
         }
         ancestors
+    }
+
+    fn descendants_recursive<'a>(&'a self, entry_id: Uuid, acc: &mut Vec<&'a Entry>) {
+        for child in self.children(entry_id) {
+            acc.push(child);
+            self.descendants_recursive(child.id, acc);
+        }
+    }
+
+    /// Get all descendants of an entry, including the entry itself.
+    pub fn descendants(&self, entry_id: Uuid) -> Vec<&Entry> {
+        let mut result: Vec<&Entry> = self.entry(entry_id).into_iter().collect();
+        if !result.is_empty() {
+            self.descendants_recursive(entry_id, &mut result);
+        }
+        let set: HashSet<_> = result.iter().map(|e| e.id).collect();
+        assert_eq!(
+            result.len(),
+            set.len(),
+            "entry descendants should not contain duplicates"
+        );
+        result
+    }
+
+    /// Check if target is a descendant of entry.
+    pub fn is_descendant_of(&self, target_id: Uuid, entry_id: Uuid) -> bool {
+        self.ancestors(target_id)
+            .into_iter()
+            .any(|a| a.id == entry_id)
+    }
+
+    /// Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
+    pub fn would_create_cycle(&self, entry_id: Uuid, proposed_parent_id: Uuid) -> bool {
+        entry_id == proposed_parent_id || self.is_descendant_of(proposed_parent_id, entry_id)
+    }
+
+    /// Get the position between two entries in a sequence.
+    pub fn position_between(
+        &self,
+        parent_id: Uuid,
+        pred_id: Option<Uuid>,
+        succ_id: Option<Uuid>,
+    ) -> Position {
+        assert!(
+            self.entry(parent_id).is_some_and(|p| p.is_sequence),
+            "parent_id must correspond to a sequence"
+        );
+
+        // TODO: assert that pred/succ are adjacent.
+        let pred_fi = pred_id.map(|id| {
+            self.entry(id)
+                .and_then(|e| e.frac_index())
+                .expect("pred_id must correspond to an entry with a defined fractional index")
+        });
+        let succ_fi = succ_id.map(|id| {
+            self.entry(id)
+                .and_then(|e| e.frac_index())
+                .expect("succ_id must correspond to an entry with a defined fractional index")
+        });
+
+        let frac_index = match (pred_fi, succ_fi) {
+            (None, None) => FractionalIndex::default(),
+            (Some(pred), None) => FractionalIndex::new_after(pred),
+            (None, Some(succ)) => FractionalIndex::new_before(succ),
+            (Some(pred), Some(succ)) => {
+                FractionalIndex::new_between(pred, succ).expect("pred must precede succ")
+            }
+        };
+
+        Position {
+            parent_id,
+            frac_index,
+        }
+    }
+
+    /// Get the position immediately succeeding the last child of a sequence.
+    pub fn position_after_children(&self, parent_id: Uuid) -> Option<Position> {
+        if let Some(parent) = self.entry(parent_id) {
+            assert!(
+                parent.is_sequence,
+                "provided parent_id must correspond to a sequence, found a scalar entry"
+            );
+            let children = self.children(parent_id);
+            return children
+                .last()
+                .map(|c| {
+                    c.frac_index()
+                        .expect("child entries must have a fractional index")
+                        .clone()
+                })
+                .map(|fi| FractionalIndex::new_after(&fi))
+                .or_else(|| Some(FractionalIndex::default()))
+                .map(|fi| Position {
+                    parent_id,
+                    frac_index: fi,
+                });
+        };
+
+        return None;
     }
 
     /// Get a suggested start time for a newly created root-level entry.

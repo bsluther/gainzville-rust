@@ -14,7 +14,7 @@ use gv_core::{
 };
 
 use crate::types::{
-    FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiEntry, FfiError,
+    FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiEntry, FfiError, FfiPosition,
     ffi_action_to_core, parse_timestamp_ms, parse_uuid,
 };
 
@@ -176,6 +176,16 @@ impl GainzvilleCore {
         self.forest_snapshot()
             .map(|f| f.ancestors(id).into_iter().map(|e| FfiEntry::from(e.clone())).collect())
             .unwrap_or_default()
+    }
+
+    /// Position immediately after the last child of `parent_id`.
+    /// Returns `None` if the parent is not found in the current snapshot.
+    /// Caller must ensure `parent_id` refers to a sequence entry.
+    pub fn forest_position_after_children(&self, parent_id: String) -> Option<FfiPosition> {
+        let Ok(id) = parse_uuid(&parent_id) else { return None };
+        self.forest_snapshot()
+            .and_then(|f| f.position_after_children(id))
+            .map(FfiPosition::from)
     }
 
     /// Suggested start time (Unix ms) for a new root-level entry on the given day.
