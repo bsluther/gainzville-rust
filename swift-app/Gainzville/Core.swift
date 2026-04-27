@@ -105,6 +105,21 @@ class ForestViewModel: ObservableObject {
             temporal: .start(start: suggestedMs)
         )))
     }
+
+    func updateEntryCompletion(entry: FfiEntry, isComplete: Bool) {
+        guard let core else { return }
+        try? core.runAction(action: .updateEntryCompletion(FfiUpdateEntryCompletion(
+            entryId: entry.id,
+            isComplete: isComplete
+        )))
+    }
+
+    func deleteEntry(entry: FfiEntry) {
+        guard let core else { return }
+        try? core.runAction(action: .deleteEntryRecursive(FfiDeleteEntryRecursive(
+            entryId: entry.id
+        )))
+    }
 }
 
 @MainActor

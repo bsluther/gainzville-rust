@@ -59,6 +59,7 @@ private struct EntryHeader: View {
     let isExpanded: Bool
     let onToggle: () -> Void
     @State private var isMenuPresented = false
+    @EnvironmentObject private var forestVM: ForestViewModel
 
     var body: some View {
         HStack(spacing: 0) {
@@ -90,9 +91,9 @@ private struct EntryHeader: View {
                     EntryMenuContent(entry: entry)
                 }
             } else {
-                FillCheckbox(checked: entry.isComplete)
-                    .padding(.horizontal, GvSpacing.entrySpacing)
-                    .padding(.vertical, GvSpacing.entrySpacing)
+                FillCheckbox(checked: entry.isComplete, onToggle: {
+                    forestVM.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
+                })
             }
         }
     }
@@ -111,7 +112,7 @@ private struct EntryBody: View {
             if entry.isSequence {
                 ChildrenSection(children: children)
             }
-            EntryFooter(isSequence: entry.isSequence, isComplete: entry.isComplete)
+            EntryFooter(entry: entry)
         }
         .padding(.horizontal, GvSpacing.entrySpacing)
         .padding(.vertical, GvSpacing.entrySpacing)
@@ -153,18 +154,18 @@ private struct DropTarget: View {
 /// For scalars: checkbox on the right (replaces the header checkbox when expanded).
 /// For sequences: placeholder row for future action buttons (add entry, etc.).
 private struct EntryFooter: View {
-    let isSequence: Bool
-    let isComplete: Bool
+    let entry: FfiEntry
+    @EnvironmentObject private var forestVM: ForestViewModel
 
     var body: some View {
-        if isSequence {
+        if entry.isSequence {
             EmptyView()
         } else {
             HStack {
                 Spacer()
-                if !isSequence {
-                    FillCheckbox(checked: isComplete)
-                }
+                FillCheckbox(checked: entry.isComplete, onToggle: {
+                    forestVM.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
+                })
             }
         }
     }
@@ -188,6 +189,8 @@ private struct FillCheckbox: View {
                         .frame(width: 12, height: 12)
                 }
             }
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -197,6 +200,7 @@ private struct FillCheckbox: View {
 
 private struct EntryMenuContent: View {
     let entry: FfiEntry
+    @EnvironmentObject private var forestVM: ForestViewModel
 
     var body: some View {
         let isRoot = entry.position == nil
@@ -230,10 +234,14 @@ private struct EntryMenuContent: View {
 
                 // Group 4 — destructive
                 if entry.isSequence {
-                    EntryMenuRow("Delete recursive", icon: "trash.fill", isDestructive: true)
+                    EntryMenuRow("Delete recursive", icon: "trash.fill", isDestructive: true) {
+                        forestVM.deleteEntry(entry: entry)
+                    }
                     EntryMenuRow("Delete unbox", icon: "arrow.up.backward.and.arrow.down.forward", isDestructive: true)
                 } else {
-                    EntryMenuRow("Delete", icon: "trash", isDestructive: true)
+                    EntryMenuRow("Delete", icon: "trash", isDestructive: true) {
+                        forestVM.deleteEntry(entry: entry)
+                    }
                 }
             }
             .padding(GvSpacing.md)

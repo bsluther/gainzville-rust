@@ -74,6 +74,7 @@ struct CreateEntrySheet: View {
                             }
                             .padding(.horizontal, GvSpacing.lg)
                             .padding(.vertical, GvSpacing.lg)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
 

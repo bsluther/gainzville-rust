@@ -1473,6 +1473,56 @@ public func FfiConverterTypeFfiCreateEntry_lower(_ value: FfiCreateEntry) -> Rus
 }
 
 
+public struct FfiDeleteEntryRecursive: Equatable, Hashable {
+    public var entryId: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: String) {
+        self.entryId = entryId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiDeleteEntryRecursive: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiDeleteEntryRecursive: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiDeleteEntryRecursive {
+        return
+            try FfiDeleteEntryRecursive(
+                entryId: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiDeleteEntryRecursive, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.entryId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiDeleteEntryRecursive_lift(_ buf: RustBuffer) throws -> FfiDeleteEntryRecursive {
+    return try FfiConverterTypeFfiDeleteEntryRecursive.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiDeleteEntryRecursive_lower(_ value: FfiDeleteEntryRecursive) -> RustBuffer {
+    return FfiConverterTypeFfiDeleteEntryRecursive.lower(value)
+}
+
+
 public struct FfiEntry: Equatable, Hashable {
     public var id: String
     public var activityId: String?
@@ -2193,6 +2243,60 @@ public func FfiConverterTypeFfiSelectConfig_lower(_ value: FfiSelectConfig) -> R
 }
 
 
+public struct FfiUpdateEntryCompletion: Equatable, Hashable {
+    public var entryId: String
+    public var isComplete: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: String, isComplete: Bool) {
+        self.entryId = entryId
+        self.isComplete = isComplete
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiUpdateEntryCompletion: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiUpdateEntryCompletion: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiUpdateEntryCompletion {
+        return
+            try FfiUpdateEntryCompletion(
+                entryId: FfiConverterString.read(from: &buf), 
+                isComplete: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiUpdateEntryCompletion, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.entryId, into: &buf)
+        FfiConverterBool.write(value.isComplete, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiUpdateEntryCompletion_lift(_ buf: RustBuffer) throws -> FfiUpdateEntryCompletion {
+    return try FfiConverterTypeFfiUpdateEntryCompletion.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiUpdateEntryCompletion_lower(_ value: FfiUpdateEntryCompletion) -> RustBuffer {
+    return FfiConverterTypeFfiUpdateEntryCompletion.lower(value)
+}
+
+
 public struct FfiUser: Equatable, Hashable {
     public var actorId: String
     public var username: String
@@ -2331,6 +2435,10 @@ public enum FfiAction: Equatable, Hashable {
     )
     case createEntry(FfiCreateEntry
     )
+    case updateEntryCompletion(FfiUpdateEntryCompletion
+    )
+    case deleteEntryRecursive(FfiDeleteEntryRecursive
+    )
 
 
 
@@ -2361,6 +2469,12 @@ public struct FfiConverterTypeFfiAction: FfiConverterRustBuffer {
         case 3: return .createEntry(try FfiConverterTypeFfiCreateEntry.read(from: &buf)
         )
         
+        case 4: return .updateEntryCompletion(try FfiConverterTypeFfiUpdateEntryCompletion.read(from: &buf)
+        )
+        
+        case 5: return .deleteEntryRecursive(try FfiConverterTypeFfiDeleteEntryRecursive.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -2382,6 +2496,16 @@ public struct FfiConverterTypeFfiAction: FfiConverterRustBuffer {
         case let .createEntry(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeFfiCreateEntry.write(v1, into: &buf)
+            
+        
+        case let .updateEntryCompletion(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeFfiUpdateEntryCompletion.write(v1, into: &buf)
+            
+        
+        case let .deleteEntryRecursive(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeFfiDeleteEntryRecursive.write(v1, into: &buf)
             
         }
     }

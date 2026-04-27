@@ -96,6 +96,14 @@ pub(crate) fn ffi_action_to_core(
             };
             Ok(gv_core::actions::CreateEntry { actor_id, entry }.into())
         }
+        FfiAction::UpdateEntryCompletion(a) => {
+            let entry_id = parse_uuid(&a.entry_id)?;
+            Ok(gv_core::actions::UpdateEntryCompletion { actor_id, entry_id, is_complete: a.is_complete }.into())
+        }
+        FfiAction::DeleteEntryRecursive(a) => {
+            let entry_id = parse_uuid(&a.entry_id)?;
+            Ok(gv_core::actions::DeleteEntryRecursive { actor_id, entry_id }.into())
+        }
     }
 }
 
@@ -808,9 +816,22 @@ pub struct FfiCreateEntry {
     pub temporal: FfiTemporal,
 }
 
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct FfiUpdateEntryCompletion {
+    pub entry_id: String,
+    pub is_complete: bool,
+}
+
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct FfiDeleteEntryRecursive {
+    pub entry_id: String,
+}
+
 #[derive(uniffi::Enum, Debug, Clone)]
 pub enum FfiAction {
     CreateActivity(FfiCreateActivity),
     MoveEntry(FfiMoveEntry),
     CreateEntry(FfiCreateEntry),
+    UpdateEntryCompletion(FfiUpdateEntryCompletion),
+    DeleteEntryRecursive(FfiDeleteEntryRecursive),
 }
