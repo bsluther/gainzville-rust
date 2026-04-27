@@ -29,7 +29,7 @@ extension Color {
 // MARK: - Entry tokens
 
 extension Color {
-    static var entryScalarBackground: Color   { .gvNeutral1000 }
+    static var entryScalarBackground: Color   { .gvNeutral950 }
     static var entrySequenceBackground: Color { .clear }
     static var entryScalarBorder: Color       { .gvNeutral900 }
     static var entrySequenceBorder: Color     { .gvNeutral800 }

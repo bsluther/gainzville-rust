@@ -20,9 +20,8 @@ struct EntryView: View {
     var body: some View {
         VStack(spacing: 0) {
             EntryHeader(
+                entry: entry,
                 displayName: displayName,
-                isSequence: entry.isSequence,
-                isComplete: entry.isComplete,
                 isExpanded: isExpanded,
                 onToggle: { isExpanded.toggle() }
             )
@@ -55,11 +54,11 @@ private extension View {
 // MARK: - Header
 
 private struct EntryHeader: View {
+    let entry: FfiEntry
     let displayName: String
-    let isSequence: Bool
-    let isComplete: Bool
     let isExpanded: Bool
     let onToggle: () -> Void
+    @State private var isMenuPresented = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -78,14 +77,20 @@ private struct EntryHeader: View {
 
             // Right: sequences always show menu. Scalars show checkbox when collapsed,
             // menu when expanded (checkbox moves to footer when open).
-            if isSequence || isExpanded {
-                Image(systemName: "ellipsis")
-                    .rotationEffect(.degrees(90))
-                    .foregroundStyle(Color.gvTextSecondary)
-                    .padding(.horizontal, GvSpacing.entrySpacing)
-                    .padding(.vertical, GvSpacing.entrySpacing)
+            if entry.isSequence || isExpanded {
+                Button { isMenuPresented = true } label: {
+                    Image(systemName: "ellipsis")
+                        .rotationEffect(.degrees(90))
+                        .foregroundStyle(Color.gvTextSecondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .platformPopover(isPresented: $isMenuPresented) {
+                    EntryMenuContent(entry: entry)
+                }
             } else {
-                FillCheckbox(checked: isComplete)
+                FillCheckbox(checked: entry.isComplete)
                     .padding(.horizontal, GvSpacing.entrySpacing)
                     .padding(.vertical, GvSpacing.entrySpacing)
             }
@@ -185,6 +190,102 @@ private struct FillCheckbox: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Context menu
+
+private struct EntryMenuContent: View {
+    let entry: FfiEntry
+
+    var body: some View {
+        let isRoot = entry.position == nil
+        ScrollView {
+            VStack(spacing: GvSpacing.md) {
+                // Group 1 — workflow
+                EntryMenuRow("Duplicate", icon: "doc.on.doc")
+                EntryMenuRow("Add set", icon: "rectangle.stack.badge.plus")
+                if entry.isSequence {
+                    EntryMenuRow("Add entry", icon: "plus.circle")
+                }
+
+                EntryMenuDivider()
+
+                // Group 2 — attributes
+                EntryMenuRow("Add attribute", icon: "tag")
+                EntryMenuRow("Edit attributes", icon: "slider.horizontal.3")
+
+                // Group 3 — conditional navigation
+                if entry.activityId != nil || !isRoot {
+                    EntryMenuDivider()
+                    if entry.activityId != nil {
+                        EntryMenuRow("View activity", icon: "figure.run")
+                    }
+                    if !isRoot {
+                        EntryMenuRow("Move to time", icon: "clock")
+                    }
+                }
+
+                EntryMenuDivider()
+
+                // Group 4 — destructive
+                if entry.isSequence {
+                    EntryMenuRow("Delete recursive", icon: "trash.fill", isDestructive: true)
+                    EntryMenuRow("Delete unbox", icon: "arrow.up.backward.and.arrow.down.forward", isDestructive: true)
+                } else {
+                    EntryMenuRow("Delete", icon: "trash", isDestructive: true)
+                }
+            }
+            .padding(GvSpacing.md)
+        }
+        #if os(iOS)
+        .presentationDetents([.medium])
+        #endif
+    }
+}
+
+private struct EntryMenuRow: View {
+    let label: String
+    var icon: String? = nil
+    var isDestructive: Bool = false
+    var action: () -> Void = {}
+    @Environment(\.dismiss) private var dismiss
+
+    init(_ label: String, icon: String? = nil, isDestructive: Bool = false, action: @escaping () -> Void = {}) {
+        self.label = label
+        self.icon = icon
+        self.isDestructive = isDestructive
+        self.action = action
+    }
+
+    var body: some View {
+        Button {
+            dismiss()
+            action()
+        } label: {
+            HStack(spacing: GvSpacing.lg) {
+                if let icon {
+                    Image(systemName: icon)
+                        .frame(width: 20)
+                }
+                Text(label)
+                    .font(.gvBody)
+                Spacer()
+            }
+            .foregroundStyle(isDestructive ? Color.red : Color.gvTextPrimary)
+            .padding(.horizontal, GvSpacing.lg)
+            .padding(.vertical, GvSpacing.lg)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct EntryMenuDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.gvNeutral800)
+            .frame(height: 0.5)
     }
 }
 
