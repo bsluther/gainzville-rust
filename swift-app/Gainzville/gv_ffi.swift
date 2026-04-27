@@ -888,6 +888,14 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     func forestPositionAfterChildren(parentId: String)  -> FfiPosition?
     
     /**
+     * Position between two adjacent children of a sequence.
+     * `pred_id` and `succ_id` are the IDs of the predecessor and successor entries;
+     * pass `None` for the start or end of the child list.
+     * Caller must ensure `parent_id` refers to a sequence entry.
+     */
+    func forestPositionBetween(parentId: String, predId: String?, succId: String?)  -> FfiPosition?
+    
+    /**
      * All root entries (no parent), sorted by canonical instant.
      */
     func forestRoots()  -> [FfiEntry]
@@ -903,6 +911,11 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
      * one minute after the last existing root entry otherwise, or noon as a fallback.
      */
     func forestSuggestedRootDayInsertionTime(dayStart: Int64)  -> Int64
+    
+    /**
+     * Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
+     */
+    func forestWouldCreateCycle(entryId: String, proposedParentId: String)  -> Bool
     
     /**
      * Read the current cached result for a query. Returns `None` if the query
@@ -1076,6 +1089,23 @@ open func forestPositionAfterChildren(parentId: String) -> FfiPosition?  {
 }
     
     /**
+     * Position between two adjacent children of a sequence.
+     * `pred_id` and `succ_id` are the IDs of the predecessor and successor entries;
+     * pass `None` for the start or end of the child list.
+     * Caller must ensure `parent_id` refers to a sequence entry.
+     */
+open func forestPositionBetween(parentId: String, predId: String?, succId: String?) -> FfiPosition?  {
+    return try!  FfiConverterOptionTypeFfiPosition.lift(try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_forest_position_between(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(parentId),
+        FfiConverterOptionString.lower(predId),
+        FfiConverterOptionString.lower(succId),$0
+    )
+})
+}
+    
+    /**
      * All root entries (no parent), sorted by canonical instant.
      */
 open func forestRoots() -> [FfiEntry]  {
@@ -1109,6 +1139,19 @@ open func forestSuggestedRootDayInsertionTime(dayStart: Int64) -> Int64  {
     uniffi_gv_ffi_fn_method_gainzvillecore_forest_suggested_root_day_insertion_time(
             self.uniffiCloneHandle(),
         FfiConverterInt64.lower(dayStart),$0
+    )
+})
+}
+    
+    /**
+     * Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
+     */
+open func forestWouldCreateCycle(entryId: String, proposedParentId: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_forest_would_create_cycle(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(entryId),
+        FfiConverterString.lower(proposedParentId),$0
     )
 })
 }
@@ -4338,6 +4381,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_after_children() != 31762) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_between() != 365) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots() != 31525) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4345,6 +4391,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_suggested_root_day_insertion_time() != 13315) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_would_create_cycle() != 34234) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_read_query() != 4312) {

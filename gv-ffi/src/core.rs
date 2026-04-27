@@ -188,6 +188,44 @@ impl GainzvilleCore {
             .map(FfiPosition::from)
     }
 
+    /// Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
+    pub fn forest_would_create_cycle(&self, entry_id: String, proposed_parent_id: String) -> bool {
+        let (Ok(entry_id), Ok(proposed_parent_id)) =
+            (parse_uuid(&entry_id), parse_uuid(&proposed_parent_id))
+        else {
+            return false;
+        };
+        self.forest_snapshot()
+            .map(|f| f.would_create_cycle(entry_id, proposed_parent_id))
+            .unwrap_or(false)
+    }
+
+    /// Position between two adjacent children of a sequence.
+    /// `pred_id` and `succ_id` are the IDs of the predecessor and successor entries;
+    /// pass `None` for the start or end of the child list.
+    /// Caller must ensure `parent_id` refers to a sequence entry.
+    pub fn forest_position_between(
+        &self,
+        parent_id: String,
+        pred_id: Option<String>,
+        succ_id: Option<String>,
+    ) -> Option<FfiPosition> {
+        let Ok(parent_id) = parse_uuid(&parent_id) else { return None };
+        let pred_id = match pred_id.as_deref().map(parse_uuid) {
+            Some(Ok(id)) => Some(id),
+            Some(Err(_)) => return None,
+            None => None,
+        };
+        let succ_id = match succ_id.as_deref().map(parse_uuid) {
+            Some(Ok(id)) => Some(id),
+            Some(Err(_)) => return None,
+            None => None,
+        };
+        self.forest_snapshot()
+            .map(|f| f.position_between(parent_id, pred_id, succ_id))
+            .map(FfiPosition::from)
+    }
+
     /// Suggested start time (Unix ms) for a new root-level entry on the given day.
     /// `day_start` is the start of the day in Unix ms. Returns now if today,
     /// one minute after the last existing root entry otherwise, or noon as a fallback.

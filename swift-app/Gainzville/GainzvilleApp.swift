@@ -14,6 +14,7 @@ struct GainzvilleApp: App {
     let attributesVM: AttributesViewModel
     let forestVM: ForestViewModel
     let logDayStore: LogDayStore
+    let dragState: DragState
 
     init() {
         let listener = AppListener()
@@ -47,6 +48,7 @@ struct GainzvilleApp: App {
         attributesVM = atvm
         forestVM = fvm
         logDayStore = LogDayStore()
+        dragState = DragState()
     }
 
     var body: some Scene {
@@ -56,6 +58,7 @@ struct GainzvilleApp: App {
                 .environmentObject(attributesVM)
                 .environmentObject(forestVM)
                 .environmentObject(logDayStore)
+                .environmentObject(dragState)
         }
         #if os(macOS)
         .defaultSize(width: 1100, height: 700)

@@ -6,7 +6,7 @@ struct EntryView: View {
     @EnvironmentObject var activitiesVM: ActivitiesViewModel
     @State private var isExpanded = false
 
-    private var displayName: String {
+    var displayName: String {
         if let name = entry.name, !name.isEmpty {
             return name
         }
@@ -26,10 +26,7 @@ struct EntryView: View {
                 onToggle: { isExpanded.toggle() }
             )
             if isExpanded {
-                EntryBody(
-                    entry: entry,
-                    children: forestVM.children(of: entry.id)
-                )
+                EntryBody(entry: entry)
             }
         }
         .entryContainerStyle(isSequence: entry.isSequence)
@@ -38,7 +35,7 @@ struct EntryView: View {
 
 // MARK: - Container styling
 
-private extension View {
+extension View {
     func entryContainerStyle(isSequence: Bool) -> some View {
         let borderWidth = isSequence ? GvSpacing.entrySequenceBorderWidth : GvSpacing.entryScalarBorderWidth
         return self
@@ -60,11 +57,10 @@ private struct EntryHeader: View {
     let onToggle: () -> Void
     @State private var isMenuPresented = false
     @EnvironmentObject private var forestVM: ForestViewModel
+    @EnvironmentObject private var dragState: DragState
 
     var body: some View {
         HStack(spacing: 0) {
-            // Left: tappable expand/collapse zone. Placed first so the right-side
-            // control is a sibling button — tapping it won't fire this toggle.
             Button(action: onToggle) {
                 Text(displayName)
                     .font(.gvBody)
@@ -76,8 +72,6 @@ private struct EntryHeader: View {
             }
             .buttonStyle(.plain)
 
-            // Right: sequences always show menu. Scalars show checkbox when collapsed,
-            // menu when expanded (checkbox moves to footer when open).
             if entry.isSequence || isExpanded {
                 Button { isMenuPresented = true } label: {
                     Image(systemName: "ellipsis")
@@ -96,6 +90,12 @@ private struct EntryHeader: View {
                 })
             }
         }
+        .onDrag {
+            dragState.draggedEntry = entry
+            return NSItemProvider(object: entry.id as NSString)
+        } preview: {
+            EntryDragPreview(displayName: displayName)
+        }
     }
 }
 
@@ -103,14 +103,13 @@ private struct EntryHeader: View {
 
 private struct EntryBody: View {
     let entry: FfiEntry
-    let children: [FfiEntry]
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.entrySpacing) {
             TemporalAttribute(entry: entry)
             AttributesSection()
             if entry.isSequence {
-                ChildrenSection(children: children)
+                ChildrenSection(parent: entry)
             }
             EntryFooter(entry: entry)
         }
@@ -122,37 +121,64 @@ private struct EntryBody: View {
 // MARK: - Children
 
 private struct ChildrenSection: View {
-    let children: [FfiEntry]
+    let parent: FfiEntry
+    @EnvironmentObject private var forestVM: ForestViewModel
 
     var body: some View {
-        if children.isEmpty {
-            EmptyView()
-        } else {
-            VStack(spacing: GvSpacing.sm) {
-                DropTarget()
-                ForEach(children, id: \.id) { child in
-                    EntryView(entry: child)
-                    DropTarget()
+        let children = forestVM.children(of: parent.id)
+        let slots = buildSlots(parentId: parent.id, children: children)
+        if !slots.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(slots) { slot in
+                    if let position = slot.position {
+                        DropTarget(position: position, predId: slot.predId, succId: slot.succId)
+                    }
+                    if let child = slot.child {
+                        EntryView(entry: child)
+                    }
                 }
             }
         }
     }
-}
 
-// MARK: - Drop target (DnD placeholder)
+    // Identity is pred/succ-based for drop targets, entry-id-based for children.
+    // This prevents SwiftUI from transferring isTargeted @State across slots that
+    // shift positions after a drop + forest refresh.
+    private struct Slot: Identifiable {
+        let id: String
+        let position: FfiPosition?
+        let predId: String?
+        let succId: String?
+        let child: FfiEntry?
 
-/// Zero-height structural hook. Will become a visible drop indicator when
-/// drag-and-drop is implemented.
-private struct DropTarget: View {
-    var body: some View {
-        Color.clear.frame(height: 4)
+        static func dropTarget(position: FfiPosition, predId: String?, succId: String?) -> Slot {
+            Slot(id: "drop-\(predId ?? "start")-\(succId ?? "end")", position: position, predId: predId, succId: succId, child: nil)
+        }
+
+        static func childSlot(_ entry: FfiEntry) -> Slot {
+            Slot(id: "child-\(entry.id)", position: nil, predId: nil, succId: nil, child: entry)
+        }
+    }
+
+    private func buildSlots(parentId: String, children: [FfiEntry]) -> [Slot] {
+        var slots: [Slot] = []
+        let count = children.count
+        for i in 0...count {
+            let predId = i > 0 ? children[i - 1].id : nil
+            let succId = i < count ? children[i].id : nil
+            if let position = forestVM.positionBetween(parentId: parentId, predId: predId, succId: succId) {
+                slots.append(.dropTarget(position: position, predId: predId, succId: succId))
+            }
+            if i < count {
+                slots.append(.childSlot(children[i]))
+            }
+        }
+        return slots
     }
 }
 
 // MARK: - Footer
 
-/// For scalars: checkbox on the right (replaces the header checkbox when expanded).
-/// For sequences: "+ Entry" button to add a child entry.
 private struct EntryFooter: View {
     let entry: FfiEntry
     @EnvironmentObject private var forestVM: ForestViewModel

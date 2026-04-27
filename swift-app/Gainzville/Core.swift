@@ -81,6 +81,25 @@ class ForestViewModel: ObservableObject {
         core?.forestChildren(parentId: parentId) ?? []
     }
 
+    func wouldCreateCycle(entryId: String, proposedParentId: String) -> Bool {
+        _ = roots
+        return core?.forestWouldCreateCycle(entryId: entryId, proposedParentId: proposedParentId) ?? false
+    }
+
+    func positionBetween(parentId: String, predId: String?, succId: String?) -> FfiPosition? {
+        _ = roots
+        return core?.forestPositionBetween(parentId: parentId, predId: predId, succId: succId)
+    }
+
+    func moveEntry(_ entry: FfiEntry, to position: FfiPosition) {
+        guard let core else { return }
+        try? core.runAction(action: .moveEntry(FfiMoveEntry(
+            entryId: entry.id,
+            position: position,
+            temporal: entry.temporal
+        )))
+    }
+
     func updateEntryTemporal(entry: FfiEntry, temporal: FfiTemporal) {
         guard let core else { return }
         try? core.runAction(action: .moveEntry(FfiMoveEntry(
