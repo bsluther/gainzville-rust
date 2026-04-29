@@ -236,7 +236,7 @@ impl QueryExecutor<FindEntryJoinById> for SqliteQueryExecutor<'_> {
         let row = sqlx::query_as::<_, EntryJoinRow>(
             r#"
             SELECT
-                e.id, e.activity_id, e.owner_id, e.parent_id, e.frac_index,
+                e.id, e.activity_id, e.owner_id, e.name, e.parent_id, e.frac_index,
                 e.is_template, e.display_as_sets, e.is_sequence, e.is_complete,
                 e.start_time, e.end_time, e.duration_ms,
                 a.id as act_id, a.owner_id as act_owner_id,

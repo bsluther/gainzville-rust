@@ -16,15 +16,12 @@ struct EntryView: View {
     @StateObject private var vm = EntryViewModel()
     @State private var isExpanded = false
 
+    // Single source of truth lives in core (`EntryJoin::display_name`),
+    // surfaced via `FfiEntryJoin.displayName`. Empty string covers the
+    // single render frame between view appear and the subscription
+    // populating the cache; SwiftUI swaps in the real value immediately.
     var displayName: String {
-        let name = vm.entryJoin?.entry.name ?? entry.name
-        if let name, !name.isEmpty {
-            return name
-        }
-        if let activityName = vm.entryJoin?.activity?.name {
-            return activityName
-        }
-        return "Entry"
+        vm.entryJoin?.displayName ?? ""
     }
 
     var body: some View {

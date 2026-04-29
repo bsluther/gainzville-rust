@@ -24,9 +24,15 @@ impl EntryJoin {
     }
 
     pub fn display_name(&self) -> String {
-        self.activity
-            .as_ref()
-            .map_or("Unnamed".to_string(), |a| a.name.to_string())
+        if let Some(name) = self.entry.name.as_deref() {
+            if !name.is_empty() {
+                return name.to_string();
+            }
+        }
+        if let Some(activity) = self.activity.as_ref() {
+            return activity.name.to_string();
+        }
+        "Unnamed".to_string()
     }
 
     pub fn attribute(&self, attr_id: Uuid) -> Option<&AttributePair> {

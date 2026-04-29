@@ -1680,16 +1680,26 @@ public struct FfiEntryJoin: Equatable, Hashable {
      * Flattened from HashMap<Uuid, AttributePair> via `.attributes()` iterator.
      */
     public var attributes: [FfiAttributePair]
+    /**
+     * Resolved at the FFI boundary so Swift doesn't re-implement the
+     * fallback rule. Source of truth: `EntryJoin::display_name`.
+     */
+    public var displayName: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(entry: FfiEntry, activity: FfiActivity?, 
         /**
          * Flattened from HashMap<Uuid, AttributePair> via `.attributes()` iterator.
-         */attributes: [FfiAttributePair]) {
+         */attributes: [FfiAttributePair], 
+        /**
+         * Resolved at the FFI boundary so Swift doesn't re-implement the
+         * fallback rule. Source of truth: `EntryJoin::display_name`.
+         */displayName: String) {
         self.entry = entry
         self.activity = activity
         self.attributes = attributes
+        self.displayName = displayName
     }
 
     
@@ -1710,7 +1720,8 @@ public struct FfiConverterTypeFfiEntryJoin: FfiConverterRustBuffer {
             try FfiEntryJoin(
                 entry: FfiConverterTypeFfiEntry.read(from: &buf), 
                 activity: FfiConverterOptionTypeFfiActivity.read(from: &buf), 
-                attributes: FfiConverterSequenceTypeFfiAttributePair.read(from: &buf)
+                attributes: FfiConverterSequenceTypeFfiAttributePair.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -1718,6 +1729,7 @@ public struct FfiConverterTypeFfiEntryJoin: FfiConverterRustBuffer {
         FfiConverterTypeFfiEntry.write(value.entry, into: &buf)
         FfiConverterOptionTypeFfiActivity.write(value.activity, into: &buf)
         FfiConverterSequenceTypeFfiAttributePair.write(value.attributes, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
     }
 }
 
