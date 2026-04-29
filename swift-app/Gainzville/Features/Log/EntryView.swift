@@ -1,18 +1,28 @@
 import SwiftUI
 
+// We take the full FfiEntry rather than just an id even though `vm.entryJoin`
+// will provide its own copy of the entry. The forest gives us the entry as
+// the unit of iteration, and rendering needs structural/temporal fields
+// (position, temporal, isSequence, etc.) immediately on first render —
+// before the per-entry subscription has populated the cache. Passing the
+// full struct avoids a flash of empty layout while the EntryJoin loads,
+// and EntryJoin then supplies the joined data (activity, attributes) that
+// the forest doesn't carry.
 struct EntryView: View {
     let entry: FfiEntry
     @EnvironmentObject var forestVM: ForestViewModel
-    @EnvironmentObject var activitiesVM: ActivitiesViewModel
+    @EnvironmentObject var coreEnv: CoreEnv
+    @EnvironmentObject var dataChange: DataChange
+    @StateObject private var vm = EntryViewModel()
     @State private var isExpanded = false
 
     var displayName: String {
-        if let name = entry.name, !name.isEmpty {
+        let name = vm.entryJoin?.entry.name ?? entry.name
+        if let name, !name.isEmpty {
             return name
         }
-        if let activityId = entry.activityId,
-           let act = activitiesVM.activities.first(where: { $0.id == activityId }) {
-            return act.name
+        if let activityName = vm.entryJoin?.activity?.name {
+            return activityName
         }
         return "Entry"
     }
@@ -30,6 +40,9 @@ struct EntryView: View {
             }
         }
         .entryContainerStyle(isSequence: entry.isSequence)
+        .onAppear {
+            vm.start(core: coreEnv.core, dataChange: dataChange, entryId: entry.id)
+        }
     }
 }
 

@@ -20,6 +20,26 @@ class AppListener: CoreListener {
     }
 }
 
+// Holds the GainzvilleCore for env-based access in views that need to
+// create their own subscriptions (e.g. per-entry EntryViewModel). Not
+// observable — exposes `core` as a constant; never publishes changes.
+@MainActor
+final class CoreEnv: ObservableObject {
+    let core: GainzvilleCore
+    init(core: GainzvilleCore) { self.core = core }
+}
+
+// Fan-out for the on_data_changed callback from Rust. Per-view view
+// models subscribe via Combine and re-read their cached query on each
+// tick. See `client/client.rs::subscribe_cache_ready` for the
+// boundary contract: Rust writes the latest values into the cache,
+// then notifies; Swift reads from cache at its leisure.
+@MainActor
+final class DataChange: ObservableObject {
+    let didChange = PassthroughSubject<Void, Never>()
+    func bump() { didChange.send(()) }
+}
+
 // View model for the activity list. Subscribes once via subscribe_query;
 // stays live for the app's lifetime. Dropping `subscription` auto-unsubscribes.
 @MainActor
@@ -154,6 +174,38 @@ class ForestViewModel: ObservableObject {
         try? core.runAction(action: .deleteEntryRecursive(FfiDeleteEntryRecursive(
             entryId: entry.id
         )))
+    }
+}
+
+// Per-entry view model: subscribes once to `findEntryJoinById` for its
+// entry id, re-reads from the cache on every DataChange tick, and
+// publishes the latest FfiEntryJoin. Dropping this VM (when the
+// EntryView leaves the hierarchy) drops the FfiQuerySubscription,
+// which auto-removes the query from the Rust cache.
+@MainActor
+class EntryViewModel: ObservableObject {
+    @Published var entryJoin: FfiEntryJoin?
+    private var subscription: FfiQuerySubscription?
+    private var cancellable: AnyCancellable?
+    private var entryId: String?
+    private var core: GainzvilleCore?
+
+    func start(core: GainzvilleCore, dataChange: DataChange, entryId: String) {
+        guard self.entryId == nil else { return }
+        self.core = core
+        self.entryId = entryId
+        subscription = try? core.subscribeQuery(query: .findEntryJoinById(entryId: entryId))
+        refresh()
+        cancellable = dataChange.didChange.sink { [weak self] in
+            self?.refresh()
+        }
+    }
+
+    private func refresh() {
+        guard let core, let entryId else { return }
+        if case .findEntryJoinById(let join) = core.readQuery(query: .findEntryJoinById(entryId: entryId)) {
+            entryJoin = join
+        }
     }
 }
 

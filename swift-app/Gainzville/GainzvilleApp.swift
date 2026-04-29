@@ -10,6 +10,8 @@ import SwiftUI
 @main
 struct GainzvilleApp: App {
     let core: GainzvilleCore
+    let coreEnv: CoreEnv
+    let dataChange: DataChange
     let activitiesVM: ActivitiesViewModel
     let attributesVM: AttributesViewModel
     let forestVM: ForestViewModel
@@ -29,12 +31,17 @@ struct GainzvilleApp: App {
         let fvm = ForestViewModel()
         fvm.subscribe(to: c)
 
+        let dc = DataChange()
+
         // Wire the listener callback after all view models exist.
-        listener.onChanged = { [weak avm, weak atvm, weak fvm] in
-            Task { @MainActor [weak avm, weak atvm, weak fvm] in
+        // Singleton VMs refresh first, then dataChange fans out to per-view
+        // VMs (e.g. EntryViewModel) so they re-read the cache too.
+        listener.onChanged = { [weak avm, weak atvm, weak fvm, weak dc] in
+            Task { @MainActor [weak avm, weak atvm, weak fvm, weak dc] in
                 avm?.refresh(from: c)
                 atvm?.refresh(from: c)
                 fvm?.refresh(from: c)
+                dc?.bump()
             }
         }
 
@@ -44,6 +51,8 @@ struct GainzvilleApp: App {
         // Debug: uncomment to auto-create an activity every 10 s for testing.
         // c.startBackgroundTicker()
         core = c
+        coreEnv = CoreEnv(core: c)
+        dataChange = dc
         activitiesVM = avm
         attributesVM = atvm
         forestVM = fvm
@@ -54,6 +63,8 @@ struct GainzvilleApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environmentObject(coreEnv)
+                .environmentObject(dataChange)
                 .environmentObject(activitiesVM)
                 .environmentObject(attributesVM)
                 .environmentObject(forestVM)

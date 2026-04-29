@@ -163,6 +163,13 @@ impl SqliteClient {
 
     /// Subscribe to cache-ready notifications. Fires after each database change
     /// has been propagated through all subscribed queries.
+    ///
+    /// FFI boundary contract: write-then-notify. On every change the client
+    /// refreshes every subscribed query in the cache, *then* fires this signal.
+    /// Consumers (Swift, etc.) should treat the notification as "the latest
+    /// values are already in the cache — read at your leisure". Don't pass
+    /// payloads on this channel; readers fan out to whichever cached queries
+    /// they care about.
     pub fn subscribe_cache_ready(&self) -> broadcast::Receiver<()> {
         self.cache_ready_transmitter.subscribe()
     }
