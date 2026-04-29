@@ -5,7 +5,7 @@ use sqlx::prelude::FromRow;
 use uuid::Uuid;
 
 use super::activity::{Activity, ActivityName};
-use super::entry::{Entry, Position, Temporal};
+use super::entry::{self, Entry, Position, Temporal};
 use crate::error::Result;
 use crate::models::attribute_pair::AttributePair;
 
@@ -24,9 +24,8 @@ impl EntryJoin {
     }
 
     pub fn display_name(&self) -> String {
-        self.activity
-            .as_ref()
-            .map_or("Unnamed".to_string(), |a| a.name.to_string())
+        let activity_name = self.activity.as_ref().map(|a| a.name.to_string());
+        entry::display_name(self.entry.name.as_deref(), activity_name.as_deref())
     }
 
     pub fn attribute(&self, attr_id: Uuid) -> Option<&AttributePair> {

@@ -39,6 +39,22 @@ impl Entry {
     }
 }
 
+/// Canonical display name for an entry. Prefers `entry_name` when set and non-empty,
+/// then falls back to `activity_name`. The "Untitled" fallback only fires for legacy
+/// rows where both are absent — `mutators::create_entry` rejects new entries in that
+/// state.
+pub fn display_name(entry_name: Option<&str>, activity_name: Option<&str>) -> String {
+    if let Some(name) = entry_name {
+        if !name.is_empty() {
+            return name.to_string();
+        }
+    }
+    if let Some(name) = activity_name {
+        return name.to_string();
+    }
+    "Untitled".to_string()
+}
+
 #[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct EntryRow {
     pub id: Uuid,
@@ -322,5 +338,35 @@ impl EntryUpdater {
 
     pub fn to_entry(self) -> Entry {
         self.new
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_name_prefers_entry_name() {
+        assert_eq!(display_name(Some("Custom"), Some("Bench Press")), "Custom");
+    }
+
+    #[test]
+    fn display_name_falls_back_to_activity_when_entry_name_missing() {
+        assert_eq!(display_name(None, Some("Bench Press")), "Bench Press");
+    }
+
+    #[test]
+    fn display_name_falls_back_to_activity_when_entry_name_empty() {
+        assert_eq!(display_name(Some(""), Some("Bench Press")), "Bench Press");
+    }
+
+    #[test]
+    fn display_name_uses_entry_name_for_anonymous_entry() {
+        assert_eq!(display_name(Some("Standalone note"), None), "Standalone note");
+    }
+
+    #[test]
+    fn display_name_falls_back_to_untitled_when_both_absent() {
+        assert_eq!(display_name(None, None), "Untitled");
     }
 }

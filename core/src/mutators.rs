@@ -128,6 +128,20 @@ pub async fn create_entry(
         )));
     }
 
+    // Anonymous entries (no activity) must carry their own non-empty name so
+    // there's always something to display.
+    if action.entry.activity_id.is_none()
+        && action
+            .entry
+            .name
+            .as_deref()
+            .is_none_or(|s| s.is_empty())
+    {
+        return Err(DomainError::Consistency(
+            "anonymous entry (no activity_id) must have a non-empty name".to_string(),
+        ));
+    }
+
     // Check if referenced activity exists.
     if let Some(activity_id) = action.entry.activity_id {
         if executor

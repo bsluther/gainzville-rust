@@ -26,7 +26,7 @@ async fn test_find_descendants(pool: SqlitePool) {
         is_sequence: false,
         is_complete: false,
         is_template: false,
-        name: None,
+        name: Some("a".to_string()),
         owner_id: SYSTEM_ACTOR_ID,
         position: None,
         temporal: Temporal::None,
@@ -39,7 +39,7 @@ async fn test_find_descendants(pool: SqlitePool) {
         is_sequence: false,
         is_complete: false,
         is_template: false,
-        name: None,
+        name: Some("b".to_string()),
         owner_id: SYSTEM_ACTOR_ID,
         position: Some(Position {
             parent_id: a.id.clone(),
@@ -116,7 +116,7 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
     let entry = Entry {
         id: Uuid::new_v4(),
         activity_id: None,
-        name: None,
+        name: Some("entry-with-weight".to_string()),
         owner_id: SYSTEM_ACTOR_ID,
         position: None,
         display_as_sets: false,
@@ -169,4 +169,68 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
         AttributeValue::Numeric(NumericValue::Exact(v)) => assert_eq!(v, 140.0),
         other => panic!("expected Numeric Exact actual, got {:?}", other),
     }
+}
+
+#[sqlx::test(migrations = "../client/migrations")]
+async fn test_create_entry_rejects_anonymous_without_name(pool: SqlitePool) {
+    let sqlite_client = SqliteClient::from_pool(pool);
+
+    // Both activity_id None and name None must be rejected.
+    let entry = Entry {
+        id: Uuid::new_v4(),
+        activity_id: None,
+        name: None,
+        owner_id: SYSTEM_ACTOR_ID,
+        position: None,
+        display_as_sets: false,
+        is_sequence: false,
+        is_complete: false,
+        is_template: false,
+        temporal: Temporal::None,
+    };
+    let err = sqlite_client
+        .run_action(CreateEntry::from(entry).into())
+        .await
+        .expect_err("anonymous entry without a name should be rejected");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("anonymous entry"),
+        "unexpected error message: {msg}"
+    );
+
+    // Empty name is also rejected.
+    let entry = Entry {
+        id: Uuid::new_v4(),
+        activity_id: None,
+        name: Some("".to_string()),
+        owner_id: SYSTEM_ACTOR_ID,
+        position: None,
+        display_as_sets: false,
+        is_sequence: false,
+        is_complete: false,
+        is_template: false,
+        temporal: Temporal::None,
+    };
+    sqlite_client
+        .run_action(CreateEntry::from(entry).into())
+        .await
+        .expect_err("anonymous entry with empty name should be rejected");
+
+    // A non-empty name is accepted.
+    let entry = Entry {
+        id: Uuid::new_v4(),
+        activity_id: None,
+        name: Some("Standalone".to_string()),
+        owner_id: SYSTEM_ACTOR_ID,
+        position: None,
+        display_as_sets: false,
+        is_sequence: false,
+        is_complete: false,
+        is_template: false,
+        temporal: Temporal::None,
+    };
+    sqlite_client
+        .run_action(CreateEntry::from(entry).into())
+        .await
+        .expect("anonymous entry with a name should be accepted");
 }

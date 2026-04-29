@@ -38,6 +38,7 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
     entry_a.is_sequence = true;
     entry_a.is_template = true;
     entry_a.activity_id = None;
+    entry_a.name = Some("a".to_string());
     entry_a.position = None;
 
     let mut entry_b = Entry::arbitrary(&mut rng, &context);
@@ -45,6 +46,7 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
     entry_b.is_sequence = true;
     entry_b.is_template = true;
     entry_b.activity_id = None;
+    entry_b.name = Some("b".to_string());
     entry_b.position = Some(Position {
         parent_id: entry_a.id,
         frac_index: FractionalIndex::default(),
