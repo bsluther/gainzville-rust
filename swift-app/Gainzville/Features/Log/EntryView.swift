@@ -7,14 +7,10 @@ struct EntryView: View {
     @State private var isExpanded = false
 
     var displayName: String {
-        if let name = entry.name, !name.isEmpty {
-            return name
+        let activity = entry.activityId.flatMap { id in
+            activitiesVM.activities.first(where: { $0.id == id })
         }
-        if let activityId = entry.activityId,
-           let act = activitiesVM.activities.first(where: { $0.id == activityId }) {
-            return act.name
-        }
-        return "Entry"
+        return entryDisplayName(entry: entry, activity: activity)
     }
 
     var body: some View {
