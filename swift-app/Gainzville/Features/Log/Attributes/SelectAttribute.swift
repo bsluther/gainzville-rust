@@ -9,10 +9,19 @@ struct SelectAttribute: View {
     let pair: FfiSelectAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
     @State private var isPresenting = false
+    @EnvironmentObject private var focusModel: AttributeFocusModel
+
+    private var focusId: AttributeFocusID {
+        AttributeFocusID(entryId: entry.id, attributeId: pair.attrId)
+    }
+
+    private var isRowFocused: Bool {
+        focusModel.focusedId == focusId
+    }
 
     var body: some View {
-        AttributeRow(label: pair.name) {
-            Button { isPresenting = true } label: {
+        AttributeRow(label: pair.name, isFocused: isRowFocused, onFocus: { focusModel.focusedId = focusId }) {
+            Button { focusModel.focusedId = focusId; isPresenting = true } label: {
                 Text(displayText.isEmpty ? gvEmptyPillText : displayText)
                     .frame(minWidth: GvSpacing.minAttributeInputWidth)
                     .gvAttributePill()

@@ -17,6 +17,7 @@ struct GainzvilleApp: App {
     let forestVM: ForestViewModel
     let logDayStore: LogDayStore
     let dragState: DragState
+    let attributeFocus: AttributeFocusModel
 
     init() {
         let listener = AppListener()
@@ -59,6 +60,7 @@ struct GainzvilleApp: App {
         forestVM = fvm
         logDayStore = LogDayStore()
         dragState = DragState()
+        attributeFocus = AttributeFocusModel()
     }
 
     var body: some Scene {
@@ -71,6 +73,10 @@ struct GainzvilleApp: App {
                 .environmentObject(forestVM)
                 .environmentObject(logDayStore)
                 .environmentObject(dragState)
+                .environmentObject(attributeFocus)
+                .onTapGesture {
+                    attributeFocus.focusedId = nil
+                }
         }
         #if os(macOS)
         .defaultSize(width: 1100, height: 700)

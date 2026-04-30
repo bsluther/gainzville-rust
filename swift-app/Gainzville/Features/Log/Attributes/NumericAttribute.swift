@@ -11,18 +11,28 @@ struct NumericAttribute: View {
 
     @State private var editValue: String = ""
     @State private var debounceTask: Task<Void, Never>?
-    @FocusState private var isFocused: Bool
+    @FocusState private var isKeyboardFocused: Bool
+    @EnvironmentObject private var focusModel: AttributeFocusModel
+
+    private var focusId: AttributeFocusID {
+        AttributeFocusID(entryId: entry.id, attributeId: pair.attrId)
+    }
+
+    private var isRowFocused: Bool {
+        focusModel.focusedId == focusId
+    }
 
     var body: some View {
-        AttributeRow(label: pair.name) { field }
+        AttributeRow(label: pair.name, isFocused: isRowFocused, onFocus: { focusModel.focusedId = focusId }) { field }
             .onAppear { syncEditState() }
             .onChange(of: pair.actual) { _, _ in
                 // Skip while the user is editing — otherwise an upstream cache
                 // refresh (post-commit) clobbers in-flight keystrokes.
-                if !isFocused { syncEditState() }
+                if !isKeyboardFocused { syncEditState() }
             }
             .onChange(of: editValue) { _, _ in scheduleDebounce() }
-            .onChange(of: isFocused) { _, focused in
+            .onChange(of: isKeyboardFocused) { _, focused in
+                if focused { focusModel.focusedId = focusId }
                 if !focused { flushNow() }
             }
     }
@@ -36,12 +46,12 @@ struct NumericAttribute: View {
             .keyboardType(pair.config.integer ? .numberPad : .decimalPad)
             #endif
             .multilineTextAlignment(.center)
-            .focused($isFocused)
+            .focused($isKeyboardFocused)
             .frame(minWidth: GvSpacing.minAttributeInputWidth)
             .gvAttributePill()
             .fixedSize(horizontal: true, vertical: false)
-            .gvSelectAllOnFocus(isFocused: isFocused)
-            .onTapGesture { isFocused = true }
+            .gvSelectAllOnFocus(isFocused: isKeyboardFocused)
+            .onTapGesture { isKeyboardFocused = true; focusModel.focusedId = focusId }
             .onSubmit { flushNow() }
     }
 

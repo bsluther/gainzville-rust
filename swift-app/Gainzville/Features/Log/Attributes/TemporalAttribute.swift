@@ -40,6 +40,7 @@ struct TemporalAttribute: View {
     @State private var debounceTask: Task<Void, Never>?
     @State private var showConflictAlert = false
     @State private var pendingField: TemporalField?
+    @EnvironmentObject private var focusModel: AttributeFocusModel
 
     private var temporal: FfiTemporal { entry.temporal }
 
@@ -48,6 +49,7 @@ struct TemporalAttribute: View {
             temporalHeader
             if isExpanded {
                 TemporalExpandedRows(
+                    entryId: entry.id,
                     editStart: $editStart,
                     editEnd: $editEnd,
                     editDurationMs: $editDurationMs,
@@ -106,6 +108,14 @@ struct TemporalAttribute: View {
     /// Called before a pill opens its editor. Returns true if the edit is allowed,
     /// false if a conflict alert has been raised instead.
     private func gateEdit(for field: TemporalField) -> Bool {
+        let subField: String
+        switch field {
+        case .start: subField = "start"
+        case .end: subField = "end"
+        case .duration: subField = "duration"
+        }
+        focusModel.focusedId = AttributeFocusID(entryId: entry.id, attributeId: "Temporal", subField: subField)
+
         // Editing an already-set field is always allowed.
         switch field {
         case .start: if editStart != nil { return true }
@@ -183,24 +193,34 @@ struct TemporalAttribute: View {
 // MARK: - Expanded rows
 
 private struct TemporalExpandedRows: View {
+    let entryId: String
     @Binding var editStart: Date?
     @Binding var editEnd: Date?
     @Binding var editDurationMs: UInt32?
     var onBeforeEditStart: () -> Bool = { true }
     var onBeforeEditEnd: () -> Bool = { true }
     var onBeforeEditDuration: () -> Bool = { true }
+    
+    @EnvironmentObject private var focusModel: AttributeFocusModel
+
+    private func focusId(for subField: String) -> AttributeFocusID {
+        AttributeFocusID(entryId: entryId, attributeId: "Temporal", subField: subField)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
-            AttributeRow(label: "Start", indent: GvSpacing.lg) {
+            let startId = focusId(for: "start")
+            AttributeRow(label: "Start", indent: GvSpacing.lg, isFocused: focusModel.focusedId == startId, onFocus: { focusModel.focusedId = startId }) {
                 DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart)
                 DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart)
             }
-            AttributeRow(label: "End", indent: GvSpacing.lg) {
+            let endId = focusId(for: "end")
+            AttributeRow(label: "End", indent: GvSpacing.lg, isFocused: focusModel.focusedId == endId, onFocus: { focusModel.focusedId = endId }) {
                 DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd)
                 DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd)
             }
-            AttributeRow(label: "Duration", indent: GvSpacing.lg) {
+            let durationId = focusId(for: "duration")
+            AttributeRow(label: "Duration", indent: GvSpacing.lg, isFocused: focusModel.focusedId == durationId, onFocus: { focusModel.focusedId = durationId }) {
                 DurationPickerPill(durationMs: $editDurationMs, onBeforeEdit: onBeforeEditDuration)
             }
         }

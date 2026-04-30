@@ -5,11 +5,15 @@ import SwiftUI
 struct AttributeRow<Content: View>: View {
     let label: String
     let indent: CGFloat
+    let isFocused: Bool
+    let onFocus: (() -> Void)?
     private let content: Content
 
-    init(label: String, indent: CGFloat = 0, @ViewBuilder content: () -> Content) {
+    init(label: String, indent: CGFloat = 0, isFocused: Bool = false, onFocus: (() -> Void)? = nil, @ViewBuilder content: () -> Content) {
         self.label = label
         self.indent = indent
+        self.isFocused = isFocused
+        self.onFocus = onFocus
         self.content = content()
     }
 
@@ -19,12 +23,32 @@ struct AttributeRow<Content: View>: View {
                 .font(.attrLabel)
                 .foregroundStyle(Color.entryTextSecondary)
                 .padding(.leading, indent)
+            
+            Group {
+                if isFocused {
+                    Button(action: {}) {
+                        Image(systemName: "gearshape")
+                            .foregroundStyle(Color.gvTextSecondary)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Image(systemName: "gearshape")
+                        .opacity(0)
+                }
+            }
+            .frame(width: 20, height: 20)
+            .padding(.leading, GvSpacing.sm)
+
             Spacer()
             HStack(spacing: GvSpacing.lg) {
                 content
             }
         }
         .frame(minHeight: GvSpacing.minAttributeHeight)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onFocus?()
+        }
     }
 }
 

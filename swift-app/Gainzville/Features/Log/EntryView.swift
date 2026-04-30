@@ -13,6 +13,7 @@ struct EntryView: View {
     @EnvironmentObject var forestVM: ForestViewModel
     @EnvironmentObject var coreEnv: CoreEnv
     @EnvironmentObject var dataChange: DataChange
+    @EnvironmentObject var attributeFocus: AttributeFocusModel
     @StateObject private var vm = EntryViewModel()
     @State private var isExpanded = false
 
@@ -31,6 +32,7 @@ struct EntryView: View {
                 displayName: displayName,
                 isExpanded: isExpanded,
                 onToggle: {
+                    attributeFocus.focusedId = nil
                     isExpanded.toggle()
                 }
             )
