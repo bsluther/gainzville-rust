@@ -21,6 +21,9 @@
 *.swo
 *~
 
+# Claude Code local state
+.claude/
+
 # Swift build artifacts
 GvFfi.xcframework/
 
