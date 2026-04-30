@@ -6,10 +6,10 @@ use uuid::Uuid;
 
 use generation::{ArbitraryFrom, Opts, SimulationContext};
 use gv_core::{
-    actions::{CreateAttribute, CreateEntry},
+    actions::{CreateAttribute, CreateEntry, CreateValue},
     forest::Forest,
     models::entry::Entry,
-    queries::{AllActivities, AllEntries, AnyQuery, AnyQueryResponse},
+    queries::{AllActivities, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse},
     std_lib::StandardLibrary,
 };
 
@@ -250,6 +250,48 @@ impl GainzvilleCore {
             RUNTIME
                 .block_on(self.client.run_action(action.into()))
                 .map_err(FfiError::from)?;
+        }
+        Ok(())
+    }
+
+    /// Create up to `count` arbitrary attribute values, each pairing an existing
+    /// entry with an existing attribute (matched by owner). Requires at least one
+    /// entry and one attribute; does nothing otherwise. Pairs are deduplicated so
+    /// repeat calls converge instead of erroring on PK conflicts.
+    pub fn dev_create_arbitrary_values(&self, count: u32) -> Result<(), FfiError> {
+        let attributes = RUNTIME
+            .block_on(self.client.run_query(AllAttributes {}))
+            .map_err(FfiError::from)?;
+        let entries: Vec<Entry> = RUNTIME
+            .block_on(self.client.run_query(AllEntries {}))
+            .map_err(FfiError::from)?;
+        if attributes.is_empty() || entries.is_empty() {
+            return Ok(());
+        }
+
+        let context = SimulationContext::with_opts(Opts::time_now_tight_std());
+        let mut rng = rand::rng();
+        let mut seen: std::collections::HashSet<(uuid::Uuid, uuid::Uuid)> =
+            std::collections::HashSet::new();
+
+        let max_attempts = count.saturating_mul(5).max(count);
+        let mut attempts = 0u32;
+        let mut created = 0u32;
+        while created < count && attempts < max_attempts {
+            attempts += 1;
+            let action = CreateValue::arbitrary_from(
+                &mut rng,
+                &context,
+                (entries.as_slice(), attributes.as_slice()),
+            );
+            if !seen.insert((action.value.entry_id, action.value.attribute_id)) {
+                continue;
+            }
+            // Best-effort: a duplicate row from a prior call (or any other
+            // mutator rejection) is silently skipped so seeding stays idempotent.
+            if RUNTIME.block_on(self.client.run_action(action.into())).is_ok() {
+                created += 1;
+            }
         }
         Ok(())
     }

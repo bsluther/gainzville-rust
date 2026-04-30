@@ -90,3 +90,35 @@ State 2 is needed because users can add/remove attributes per entry independentl
 - `data_type TEXT` column populated at write time from the variant, for SQL-level filtering without parsing JSON.
 - `#[serde(default)]` on new fields handles backward compatibility with existing JSON rows if variants evolve.
 - See `sqlite/migrations/` and `postgres/migrations/` for table definitions.
+
+## Deferred attribute UX considerations
+
+A handful of UX questions were raised while building the first round of attribute views in the Swift app (`Features/Log/Attributes/`). They are recorded here so the rationale isn't lost.
+
+### Range editing
+`Numeric`, `Select`, and `Mass` values each support both `Exact` and `Range` variants in core, but the current editors only commit `Exact`. Existing `Range` values display read-only as `"min – max"`; first interaction throws away the range and starts the editor empty, so a save commits `Exact`. Range *editing* needs a deliberate UX decision (dual-input, ordered-grade-only, slider, etc.) before being built. The likely surface for switching a single attribute between range and exact mode is the per-attribute focus menu (below).
+
+### Clear-value semantics
+There is no UI affordance for "this attribute has no value." For numeric and mass, an emptied input commits `0` rather than nothing — a stop-gap that loses the distinction between "intentionally zero" and "cleared." A proper clear path needs either a dedicated clear control (cluttering each row), an `UpdateAttributeValue` variant that writes `None`, or a dedicated `ClearAttributeValue` action. Likely belongs in the per-attribute focus menu.
+
+### Adding/removing attributes per entry
+`FindAttributePairsForEntry` only returns rows whose Value already exists (states 2 and 3 above), so the Swift app currently can't reach state 2 ("entry has this attribute, no values yet") on its own. Adding an attribute to an entry requires a `CreateValue` action (already in core, not yet in FFI) plus UI for picking which attribute to add. The "Add attribute" menu items in `EntryView`'s context menu are stubs.
+
+### Per-entry attribute order
+`EntryJoin.attributes` is a `HashMap<Uuid, AttributePair>` (unordered). The Swift `AttributesSection` sorts by `attribute.name` ASCII as a placeholder. A real solution likely stores a per-entry-attribute order — either a `display_order` column on `values`, an array on the entry, or a separate ordering table. The figma shows deliberate orderings (Sets/Reps/Load) that name-sort doesn't preserve.
+
+### Plan vs Actual toggle
+`Value` carries both `plan` and `actual`. The figma shows a Plan/Log toggle on the entry; the data model is ready, but the toggle UI isn't built. `FfiUpdateAttributeValue.field` is plumbed through; the Swift editors hardcode `field: .actual` and would change to read a binding when the toggle exists.
+
+### Per-attribute focus state
+We expect to host per-attribute configuration via a focused-attribute menu rather than cluttering every row with a permanent menu button. At most one attribute is focused at a time; the focused attribute reveals options like *clear value*, *pick units* (for measures), *toggle range vs. exact*, and other type-specific affordances. This is the natural home for several deferred items above.
+
+### Unit selection / conversion for measures
+`MassConfig.default_units` exists, but the Swift UI today derives "units to show" from the union of plan/actual measurements (falling back to defaults, then `[Pound]`). The user can't add or remove a unit, and there's no conversion logic between units. When unit selection lands, conversion (e.g. user replaces `lb` with `kg` while a value exists) becomes a domain-logic question — a natural place for a pure helper in core (e.g. `MassValue::with_units(...)`), independent of the editor's UI state.
+
+### Stateful "EditingAttribute" abstraction in core
+Considered: a stateful editor type in core, reachable from any client, that holds intermediate edit state, runs validation, and handles unit redistribution for measures. Deferred in favor of a simpler arrangement:
+- The Swift editors hold their own shadow state and commit through the existing `Action` API (`UpdateAttributeValue`).
+- Domain rules that *would* benefit from cross-platform sharing — clamping, integer rounding, unit conversion — can be exposed as pure helpers when needed, without dragging stateful editor objects across the FFI boundary.
+
+The trigger to revisit: when a third client appears (web, Android, etc.) or when unit-conversion logic exceeds what's reasonable to duplicate per-platform.

@@ -39,6 +39,7 @@ struct LibraryView: View {
                 AttributeDetailView(attribute: attribute)
             }
         }
+        .gvKeyboardDoneButton()
     }
 }
 

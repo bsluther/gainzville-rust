@@ -865,6 +865,14 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     func devCreateArbitraryEntries(count: UInt32) throws 
     
     /**
+     * Create up to `count` arbitrary attribute values, each pairing an existing
+     * entry with an existing attribute (matched by owner). Requires at least one
+     * entry and one attribute; does nothing otherwise. Pairs are deduplicated so
+     * repeat calls converge instead of erroring on PK conflicts.
+     */
+    func devCreateArbitraryValues(count: UInt32) throws 
+    
+    /**
      * Seed the standard-library attributes (Reps, Load, Outcome, YDS Grade).
      * Safe to call multiple times — will create duplicates, so call once per fresh DB.
      */
@@ -1033,6 +1041,20 @@ public convenience init(dbPath: String, actorId: String, listener: CoreListener)
      */
 open func devCreateArbitraryEntries(count: UInt32)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
     uniffi_gv_ffi_fn_method_gainzvillecore_dev_create_arbitrary_entries(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(count),$0
+    )
+}
+}
+    
+    /**
+     * Create up to `count` arbitrary attribute values, each pairing an existing
+     * entry with an existing attribute (matched by owner). Requires at least one
+     * entry and one attribute; does nothing otherwise. Pairs are deduplicated so
+     * repeat calls converge instead of erroring on PK conflicts.
+     */
+open func devCreateArbitraryValues(count: UInt32)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+    uniffi_gv_ffi_fn_method_gainzvillecore_dev_create_arbitrary_values(
             self.uniffiCloneHandle(),
         FfiConverterUInt32.lower(count),$0
     )
@@ -2319,6 +2341,75 @@ public func FfiConverterTypeFfiSelectConfig_lower(_ value: FfiSelectConfig) -> R
 }
 
 
+/**
+ * Update an existing entry-attribute Value. The Value row must already exist;
+ * today the Swift app only edits attribute pairs returned by
+ * `FindAttributePairsForEntry` (which all have a Value row, per
+ * attributes-design.md states 2 and 3). Add a `FfiCreateValue` action when
+ * the entry-attribute add UI lands.
+ */
+public struct FfiUpdateAttributeValue: Equatable, Hashable {
+    public var entryId: String
+    public var attributeId: String
+    public var field: FfiValueField
+    public var value: FfiAttributeValue
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: String, attributeId: String, field: FfiValueField, value: FfiAttributeValue) {
+        self.entryId = entryId
+        self.attributeId = attributeId
+        self.field = field
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiUpdateAttributeValue: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiUpdateAttributeValue: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiUpdateAttributeValue {
+        return
+            try FfiUpdateAttributeValue(
+                entryId: FfiConverterString.read(from: &buf), 
+                attributeId: FfiConverterString.read(from: &buf), 
+                field: FfiConverterTypeFfiValueField.read(from: &buf), 
+                value: FfiConverterTypeFfiAttributeValue.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiUpdateAttributeValue, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.entryId, into: &buf)
+        FfiConverterString.write(value.attributeId, into: &buf)
+        FfiConverterTypeFfiValueField.write(value.field, into: &buf)
+        FfiConverterTypeFfiAttributeValue.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiUpdateAttributeValue_lift(_ buf: RustBuffer) throws -> FfiUpdateAttributeValue {
+    return try FfiConverterTypeFfiUpdateAttributeValue.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiUpdateAttributeValue_lower(_ value: FfiUpdateAttributeValue) -> RustBuffer {
+    return FfiConverterTypeFfiUpdateAttributeValue.lower(value)
+}
+
+
 public struct FfiUpdateEntryCompletion: Equatable, Hashable {
     public var entryId: String
     public var isComplete: Bool
@@ -2515,6 +2606,8 @@ public enum FfiAction: Equatable, Hashable {
     )
     case deleteEntryRecursive(FfiDeleteEntryRecursive
     )
+    case updateAttributeValue(FfiUpdateAttributeValue
+    )
 
 
 
@@ -2551,6 +2644,9 @@ public struct FfiConverterTypeFfiAction: FfiConverterRustBuffer {
         case 5: return .deleteEntryRecursive(try FfiConverterTypeFfiDeleteEntryRecursive.read(from: &buf)
         )
         
+        case 6: return .updateAttributeValue(try FfiConverterTypeFfiUpdateAttributeValue.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -2582,6 +2678,11 @@ public struct FfiConverterTypeFfiAction: FfiConverterRustBuffer {
         case let .deleteEntryRecursive(v1):
             writeInt(&buf, Int32(5))
             FfiConverterTypeFfiDeleteEntryRecursive.write(v1, into: &buf)
+            
+        
+        case let .updateAttributeValue(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeFfiUpdateAttributeValue.write(v1, into: &buf)
             
         }
     }
@@ -3824,6 +3925,77 @@ public func FfiConverterTypeFfiTemporal_lower(_ value: FfiTemporal) -> RustBuffe
 }
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Identifies which side of a Value (plan or actual) is being written.
+ * Mirrors `gv_core::actions::ValueField`.
+ */
+
+public enum FfiValueField: Equatable, Hashable {
+    
+    case plan
+    case actual
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiValueField: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiValueField: FfiConverterRustBuffer {
+    typealias SwiftType = FfiValueField
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiValueField {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .plan
+        
+        case 2: return .actual
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FfiValueField, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .plan:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .actual:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiValueField_lift(_ buf: RustBuffer) throws -> FfiValueField {
+    return try FfiConverterTypeFfiValueField.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiValueField_lower(_ value: FfiValueField) -> RustBuffer {
+    return FfiConverterTypeFfiValueField.lower(value)
+}
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4379,6 +4551,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_create_arbitrary_entries() != 3929) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_create_arbitrary_values() != 24982) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_seed_std_lib() != 27833) {

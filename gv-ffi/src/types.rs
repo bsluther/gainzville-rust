@@ -104,6 +104,18 @@ pub(crate) fn ffi_action_to_core(
             let entry_id = parse_uuid(&a.entry_id)?;
             Ok(gv_core::actions::DeleteEntryRecursive { actor_id, entry_id }.into())
         }
+        FfiAction::UpdateAttributeValue(a) => {
+            let entry_id = parse_uuid(&a.entry_id)?;
+            let attribute_id = parse_uuid(&a.attribute_id)?;
+            Ok(gv_core::actions::UpdateAttributeValue {
+                actor_id,
+                entry_id,
+                attribute_id,
+                field: a.field.into(),
+                value: a.value.into(),
+            }
+            .into())
+        }
     }
 }
 
@@ -278,6 +290,16 @@ impl From<MassUnit> for FfiMassUnit {
     }
 }
 
+impl From<FfiMassUnit> for MassUnit {
+    fn from(u: FfiMassUnit) -> Self {
+        match u {
+            FfiMassUnit::Gram => MassUnit::Gram,
+            FfiMassUnit::Kilogram => MassUnit::Kilogram,
+            FfiMassUnit::Pound => MassUnit::Pound,
+        }
+    }
+}
+
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiMassConfig {
     pub default_units: Vec<FfiMassUnit>,
@@ -344,6 +366,15 @@ impl From<NumericValue> for FfiNumericValue {
     }
 }
 
+impl From<FfiNumericValue> for NumericValue {
+    fn from(v: FfiNumericValue) -> Self {
+        match v {
+            FfiNumericValue::Exact { value } => NumericValue::Exact(value),
+            FfiNumericValue::Range { min, max } => NumericValue::Range { min, max },
+        }
+    }
+}
+
 #[derive(uniffi::Enum, Debug, Clone)]
 pub enum FfiSelectValue {
     Exact { value: String },
@@ -359,6 +390,15 @@ impl From<SelectValue> for FfiSelectValue {
     }
 }
 
+impl From<FfiSelectValue> for SelectValue {
+    fn from(v: FfiSelectValue) -> Self {
+        match v {
+            FfiSelectValue::Exact { value } => SelectValue::Exact(value),
+            FfiSelectValue::Range { min, max } => SelectValue::Range { min, max },
+        }
+    }
+}
+
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiMassMeasurement {
     pub unit: FfiMassUnit,
@@ -368,6 +408,12 @@ pub struct FfiMassMeasurement {
 impl From<MassMeasurement> for FfiMassMeasurement {
     fn from(m: MassMeasurement) -> Self {
         FfiMassMeasurement { unit: FfiMassUnit::from(m.unit), value: m.value }
+    }
+}
+
+impl From<FfiMassMeasurement> for MassMeasurement {
+    fn from(m: FfiMassMeasurement) -> Self {
+        MassMeasurement { unit: MassUnit::from(m.unit), value: m.value }
     }
 }
 
@@ -391,6 +437,20 @@ impl From<MassValue> for FfiMassValue {
     }
 }
 
+impl From<FfiMassValue> for MassValue {
+    fn from(v: FfiMassValue) -> Self {
+        match v {
+            FfiMassValue::Exact { measurements } => MassValue::Exact(
+                measurements.into_iter().map(MassMeasurement::from).collect(),
+            ),
+            FfiMassValue::Range { min, max } => MassValue::Range {
+                min: min.into_iter().map(MassMeasurement::from).collect(),
+                max: max.into_iter().map(MassMeasurement::from).collect(),
+            },
+        }
+    }
+}
+
 #[derive(uniffi::Enum, Debug, Clone)]
 pub enum FfiAttributeValue {
     Numeric(FfiNumericValue),
@@ -404,6 +464,16 @@ impl From<AttributeValue> for FfiAttributeValue {
             AttributeValue::Numeric(v) => FfiAttributeValue::Numeric(v.into()),
             AttributeValue::Select(v) => FfiAttributeValue::Select(v.into()),
             AttributeValue::Mass(v) => FfiAttributeValue::Mass(v.into()),
+        }
+    }
+}
+
+impl From<FfiAttributeValue> for AttributeValue {
+    fn from(v: FfiAttributeValue) -> Self {
+        match v {
+            FfiAttributeValue::Numeric(v) => AttributeValue::Numeric(v.into()),
+            FfiAttributeValue::Select(v) => AttributeValue::Select(v.into()),
+            FfiAttributeValue::Mass(v) => AttributeValue::Mass(v.into()),
         }
     }
 }
@@ -832,6 +902,36 @@ pub struct FfiDeleteEntryRecursive {
     pub entry_id: String,
 }
 
+/// Identifies which side of a Value (plan or actual) is being written.
+/// Mirrors `gv_core::actions::ValueField`.
+#[derive(uniffi::Enum, Debug, Clone)]
+pub enum FfiValueField {
+    Plan,
+    Actual,
+}
+
+impl From<FfiValueField> for gv_core::actions::ValueField {
+    fn from(f: FfiValueField) -> Self {
+        match f {
+            FfiValueField::Plan => gv_core::actions::ValueField::Plan,
+            FfiValueField::Actual => gv_core::actions::ValueField::Actual,
+        }
+    }
+}
+
+/// Update an existing entry-attribute Value. The Value row must already exist;
+/// today the Swift app only edits attribute pairs returned by
+/// `FindAttributePairsForEntry` (which all have a Value row, per
+/// attributes-design.md states 2 and 3). Add a `FfiCreateValue` action when
+/// the entry-attribute add UI lands.
+#[derive(uniffi::Record, Debug, Clone)]
+pub struct FfiUpdateAttributeValue {
+    pub entry_id: String,
+    pub attribute_id: String,
+    pub field: FfiValueField,
+    pub value: FfiAttributeValue,
+}
+
 #[derive(uniffi::Enum, Debug, Clone)]
 pub enum FfiAction {
     CreateActivity(FfiCreateActivity),
@@ -839,4 +939,5 @@ pub enum FfiAction {
     CreateEntry(FfiCreateEntry),
     UpdateEntryCompletion(FfiUpdateEntryCompletion),
     DeleteEntryRecursive(FfiDeleteEntryRecursive),
+    UpdateAttributeValue(FfiUpdateAttributeValue),
 }

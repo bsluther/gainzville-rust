@@ -192,44 +192,18 @@ private struct TemporalExpandedRows: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
-            TemporalFieldRow(label: "Start") {
+            AttributeRow(label: "Start", indent: GvSpacing.lg) {
                 DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart)
                 DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart)
             }
-            TemporalFieldRow(label: "End") {
+            AttributeRow(label: "End", indent: GvSpacing.lg) {
                 DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd)
                 DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd)
             }
-            TemporalFieldRow(label: "Duration") {
+            AttributeRow(label: "Duration", indent: GvSpacing.lg) {
                 DurationPickerPill(durationMs: $editDurationMs, onBeforeEdit: onBeforeEditDuration)
             }
         }
-    }
-}
-
-// MARK: - Field row layout
-
-private struct TemporalFieldRow<Content: View>: View {
-    let label: String
-    private let content: Content
-
-    init(label: String, @ViewBuilder content: () -> Content) {
-        self.label = label
-        self.content = content()
-    }
-
-    var body: some View {
-        HStack(alignment: .center) {
-            Text(label)
-                .font(.attrLabel)
-                .foregroundStyle(Color.entryTextSecondary)
-                .padding(.leading, GvSpacing.lg)
-            Spacer()
-            HStack(spacing: GvSpacing.lg) {
-                content
-            }
-        }
-        .frame(minHeight: GvSpacing.minAttributeHeight)
     }
 }
 
@@ -271,7 +245,7 @@ private struct DatePickerPill: View {
                     guard onBeforeEdit() else { return }
                     date = Date()
                 } label: {
-                    Text(emptyPillText).gvAttributePill()
+                    Text(gvEmptyPillText).gvAttributePill()
                 }
                 .buttonStyle(.plain)
             }
@@ -289,7 +263,7 @@ private struct DatePickerPill: View {
             if date == nil { date = Date() }
             isPresenting = true
         } label: {
-            Text(displayText.isEmpty ? emptyPillText : displayText)
+            Text(displayText.isEmpty ? gvEmptyPillText : displayText)
                 .gvAttributePill()
         }
         .buttonStyle(.plain)
@@ -323,7 +297,7 @@ private struct DurationPickerPill: View {
             loadFromBinding()
             isPresenting = true
         } label: {
-            Text(displayText.isEmpty ? emptyPillText : displayText)
+            Text(displayText.isEmpty ? gvEmptyPillText : displayText)
                 .gvAttributePill()
         }
         .buttonStyle(.plain)
@@ -525,30 +499,6 @@ private struct DurationStepperColumn: View {
     }
 }
 #endif
-
-// MARK: - AttributePill style
-
-/// Shared pill style for attribute value display across all attribute types.
-/// Apply with `.gvAttributePill()`.
-extension View {
-    func gvAttributePill(borderColor: Color = .entryTextSecondary) -> some View {
-        self
-            .font(.attrField)
-            .foregroundStyle(Color.entryTextPrimary)
-            .padding(.horizontal, GvSpacing.lg)
-            .padding(.vertical, GvSpacing.sm)
-            .frame(minHeight: GvSpacing.minAttributeHeight)
-            .background(.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(borderColor, lineWidth: 1)
-            )
-    }
-}
-
-/// Fixed-width whitespace so empty pills have a consistent minimum size.
-private let emptyPillText = "\u{00a0}\u{00a0}\u{00a0}\u{00a0}\u{00a0}"
 
 // MARK: - Formatting helpers
 

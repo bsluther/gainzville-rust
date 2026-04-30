@@ -30,12 +30,18 @@ struct EntryView: View {
                 entry: entry,
                 displayName: displayName,
                 isExpanded: isExpanded,
-                onToggle: { isExpanded.toggle() }
+                onToggle: {
+                    isExpanded.toggle()
+                }
             )
             if isExpanded {
-                EntryBody(entry: entry)
+                EntryBody(entry: entry, attributes: vm.entryJoin?.attributes ?? [])
             }
         }
+        // Pin to the parent's proposal so over-eager content (TextField
+        // minWidths, long pill text, deeply nested children) gets clipped by
+        // the container style rather than pushing the entry past the screen.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .entryContainerStyle(isSequence: entry.isSequence)
         .onAppear {
             vm.start(core: coreEnv.core, dataChange: dataChange, entryId: entry.id)
@@ -113,18 +119,19 @@ private struct EntryHeader: View {
 
 private struct EntryBody: View {
     let entry: FfiEntry
+    let attributes: [FfiAttributePair]
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.entrySpacing) {
             TemporalAttribute(entry: entry)
-            AttributesSection()
+            AttributesSection(entry: entry, attributes: attributes)
             if entry.isSequence {
                 ChildrenSection(parent: entry)
             }
             EntryFooter(entry: entry)
         }
         .padding(.horizontal, GvSpacing.entrySpacing)
-        .padding(.vertical, GvSpacing.entrySpacing)
+        .padding(.top, GvSpacing.entrySpacing)
     }
 }
 
@@ -217,6 +224,7 @@ private struct EntryFooter: View {
                     forestVM.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
                 })
             }
+            .padding(.trailing, -GvSpacing.entrySpacing)
         }
     }
 }
@@ -347,8 +355,26 @@ private struct EntryMenuDivider: View {
     }
 }
 
-// MARK: - Placeholder stubs
+// MARK: - Attributes
 
 private struct AttributesSection: View {
-    var body: some View { EmptyView() }
+    let entry: FfiEntry
+    let attributes: [FfiAttributePair]
+
+    var body: some View {
+        // ASCII name sort is a placeholder; see docs/attributes-design.md
+        // "Per-entry attribute order" for the long-term plan.
+        let sorted = attributes.sorted { $0.name < $1.name }
+        if !sorted.isEmpty {
+            VStack(alignment: .leading, spacing: GvSpacing.lg) {
+                ForEach(sorted) { pair in
+                    switch pair {
+                    case .numeric(let p): NumericAttribute(entry: entry, pair: p)
+                    case .select(let p):  SelectAttribute(entry: entry, pair: p)
+                    case .mass(let p):    MassAttribute(entry: entry, pair: p)
+                    }
+                }
+            }
+        }
+    }
 }

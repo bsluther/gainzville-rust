@@ -97,8 +97,19 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for Value {
         context: &C,
         (entries, attributes): (&[Entry], &[Attribute]),
     ) -> Self {
+        // Pick a (entry, attribute) pair whose owners match — `create_value`
+        // requires `entry.owner_id == attribute.owner_id`, so picking
+        // independently from both lists frequently produces values that the
+        // mutator then rejects.
         let entry = pick(entries, rng).expect("entries must not be empty");
-        let attribute = pick(attributes, rng).expect("attributes must not be empty");
+        let owned_attrs: Vec<&Attribute> = attributes
+            .iter()
+            .filter(|a| a.owner_id == entry.owner_id)
+            .collect();
+        let attribute = pick(&owned_attrs[..], rng).expect(
+            "no attribute matches the picked entry's owner; \
+             ensure attributes and entries share at least one owner",
+        );
         let plan = maybe(rng, 0.5, |rng| {
             AttributeValue::arbitrary_from(rng, context, &attribute.config)
         });

@@ -129,6 +129,26 @@ class ForestViewModel: ObservableObject {
         )))
     }
 
+    /// Update an entry's value for a given attribute. Today the Swift app only
+    /// reaches this via attribute pairs returned by `FindAttributePairsForEntry`,
+    /// so the underlying Value row is guaranteed to exist (per
+    /// docs/attributes-design.md state 2/3). When the entry-attribute add UI
+    /// lands, it will create the row first, then this can be called.
+    func updateAttributeValue(
+        entryId: String,
+        attributeId: String,
+        field: FfiValueField,
+        value: FfiAttributeValue
+    ) {
+        guard let core else { return }
+        try? core.runAction(action: .updateAttributeValue(FfiUpdateAttributeValue(
+            entryId: entryId,
+            attributeId: attributeId,
+            field: field,
+            value: value
+        )))
+    }
+
     func createRootEntry(activityId: String?, name: String?, isSequence: Bool, for logDay: LogDay) {
         guard let core else { return }
         let suggestedMs = core.forestSuggestedRootDayInsertionTime(dayStart: logDay.fromMs)

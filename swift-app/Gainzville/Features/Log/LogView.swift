@@ -23,6 +23,7 @@ struct LogView: View {
                     }
                     .padding(.horizontal, GvSpacing.lg)
                     .padding(.vertical, GvSpacing.lg)
+                    .containerRelativeFrame(.horizontal)
                 }
             }
         }
@@ -51,6 +52,7 @@ struct LogView: View {
                 isCreatePresented = false
             }
         }
+        .gvKeyboardDoneButton()
     }
 }
 

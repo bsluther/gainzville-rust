@@ -46,8 +46,9 @@ struct GainzvilleApp: App {
         }
 
         // Debug seeds — uncomment once on a fresh DB, then re-comment.
-        // try? c.devSeedStdLib()                       // creates Reps, Load, Outcome, YDS Grade attrs
-        // try? c.devCreateArbitraryEntries(count: 20)  // requires at least one activity to exist
+//         try? c.devSeedStdLib()                       // creates Reps, Load, Outcome, YDS Grade attrs
+//         try? c.devCreateArbitraryEntries(count: 20)  // requires at least one activity to exist
+//         try? c.devCreateArbitraryValues(count: 40)   // requires at least one entry and one attribute
         // Debug: uncomment to auto-create an activity every 10 s for testing.
         // c.startBackgroundTicker()
         core = c
