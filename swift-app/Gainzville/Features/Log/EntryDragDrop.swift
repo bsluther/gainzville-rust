@@ -3,36 +3,43 @@
 // Any entry (scalar or sequence, root or child) can be dragged to a new position within
 // a sequence, or to the root of a day.
 //
+// ## Drop target zones
+// 1. Sequence slots — between/around children inside an expanded sequence (DropTarget).
+// 2. Day-root empty area — anywhere inside the log not covered by an entry (DayRootDropDelegate).
+// 3. Root scalar entry body — file-system-style: dropping on a root-level scalar forwards
+//    to the day root (EntryDropDelegate, "forwarding" mode).
+// All other entry interiors (root sequences outside their child slots, every non-root entry)
+// return a .forbidden DropProposal so day-root targeting doesn't activate over them.
+//
 // ## Data flow
 // - Drag source: EntryHeader applies .onDrag, which fires synchronously at drag start and
-//   stores the dragged FfiEntry in DragState. The entry ID string is the NSItemProvider payload.
-// - Sequence drop targets: DropTarget views are interleaved before, between, and after each
-//   child in ChildrenSection. Each carries a pre-computed FfiPosition (from Forest.positionBetween)
-//   and the pred/succ entry IDs for its slot.
-// - Day-root drop target: DayRootDropDelegate is attached at the LogView level, covering the
-//   day's entire content area. SwiftUI's hit-testing delivers drops to the deepest matching
-//   delegate, so sequence-level DropTargets take precedence where they overlap. On a successful
-//   day-root drop, LogView opens a time picker sheet to choose the entry's start time.
-// - On hover (sequence): DropDelegate.validateDrop gates whether the indicator line is shown.
-//   A target is invalid if the dragged entry is adjacent to the slot (no-op move) or if dropping
-//   there would create a cycle (entry dragged into one of its own descendants).
-// - On hover (day-root): the day's background tints (lighten in dark mode, darken in light mode).
-// - On drop (sequence): performDrop re-validates and dispatches MoveEntry via ForestViewModel,
-//   preserving the entry's existing temporal.
-// - On drop (day-root): performDrop hands the dragged entry to LogView's onDrop callback, which
-//   opens the time picker. On confirm, MoveEntry is dispatched with position=nil and a temporal
-//   that uses the chosen start time (preserving duration if set, dropping any prior start/end).
+//   stores the dragged FfiEntry in DragState.
+// - Three delegates compete via SwiftUI's deepest-hit dispatch:
+//     • DropTarget (deepest, in ChildrenSection slots) — precise sequence insertion.
+//     • EntryDropDelegate (per EntryView) — forwards to day-root for root scalars; .forbidden
+//       elsewhere. The .forbidden return blocks the day-root delegate from receiving the
+//       drop while inside an entry's body.
+//     • DayRootDropDelegate (LogView outer) — handles drops outside any entry.
+// - Day-root targeting state lives on DragState.isTargetingDayRoot (shared across delegates)
+//   and drives LogView's background lighten effect.
+// - Day-root drops open RootDropTimePickerSheet; on confirm, MoveEntry runs with position=nil
+//   and a temporal that uses the chosen start time (preserving duration if set).
+//
+// ## Validity rules
+// - Sequence: drop is invalid if it'd be a no-op (adjacent to source) or create a cycle.
+// - Day-root (both empty-area and root-scalar forwarder): invalid if the dragged entry is
+//   already at root (position == nil); the indicator stays off and drop is rejected.
 //
 // ## Platform notes
 // - .onDrag (NSItemProvider) + .onDrop(delegate:) must be used together. The newer
 //   .draggable/.dropDestination(for:) pair does not interoperate with this API on iOS.
 // - Color.clear has no hit area for the drag system; DropTarget uses Color.white.opacity(0.001)
-//   as its base layer to ensure drops register. The day-root delegate doesn't need this because
-//   it attaches to a view that already has a non-clear background (Color.gvBackground).
+//   as its base layer to ensure drops register. EntryView and LogView attach to views with
+//   their own hit areas so this isn't needed there.
 // - Slot identity in ChildrenSection is pred/succ-based (not offset-based) to prevent SwiftUI
 //   from transferring isTargeted @State to mis-matched slots after a drop + forest refresh.
-// - DayRootDropDelegate dispatches its onDrop callback via DispatchQueue.main.async so the drag
-//   session unwinds before SwiftUI evaluates any new sheet item — avoids "sheet during drag" bugs.
+// - Day-root drops dispatch their callback via DispatchQueue.main.async so the drag session
+//   unwinds before SwiftUI evaluates any new sheet item — avoids "sheet during drag" bugs.
 
 import SwiftUI
 import UniformTypeIdentifiers
@@ -46,6 +53,13 @@ class DragState: ObservableObject {
     // where publishing is disallowed. DropTarget re-reads on isTargeted changes, so
     // reactivity isn't needed.
     var draggedEntry: FfiEntry? = nil
+
+    // Whether the current drag is targeting a day-root drop zone (empty area in
+    // the log, or a root scalar entry). Both DayRootDropDelegate and the root-scalar
+    // path of EntryDropDelegate write to this; LogView observes it to lighten the
+    // log background. Published is safe here because it's only mutated from
+    // dropEntered/dropExited/performDrop (action contexts), never the .onDrag closure.
+    @Published var isTargetingDayRoot: Bool = false
 }
 
 // MARK: - Drag preview
@@ -121,34 +135,100 @@ struct DropTarget: View, DropDelegate {
 
 // MARK: - Day-root drop target
 
-/// DropDelegate for the entire day's content area in LogView. Sibling DropTargets
-/// inside sequences take precedence via SwiftUI hit-testing; this delegate handles
-/// any drop that lands outside a sequence — i.e. dropping at the day's root.
+/// DropDelegate attached at the LogView level. Handles drops landing in empty
+/// space inside the log (outside any entry). Drops that land inside an entry
+/// are intercepted by EntryDropDelegate (deeper in the hit chain), which either
+/// forwards to day-root semantics (root scalars) or returns .forbidden.
 struct DayRootDropDelegate: DropDelegate {
     let dragState: DragState
-    @Binding var isTargeted: Bool
     let onDrop: (FfiEntry) -> Void
 
     func validateDrop(info: DropInfo) -> Bool {
-        dragState.draggedEntry != nil
+        // Reject if the dragged entry is already at root — moving root→root is a no-op.
+        guard let dragged = dragState.draggedEntry else { return false }
+        return dragged.position != nil
+    }
+
+    func dropEntered(info: DropInfo) {
+        dragState.isTargetingDayRoot = true
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        isTargeted = true
-        return DropProposal(operation: .move)
+        DropProposal(operation: .move)
     }
 
     func dropExited(info: DropInfo) {
-        isTargeted = false
+        dragState.isTargetingDayRoot = false
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        isTargeted = false
-        guard let entry = dragState.draggedEntry else { return false }
+        dragState.isTargetingDayRoot = false
+        guard let entry = dragState.draggedEntry, entry.position != nil else { return false }
         // Defer state mutation so the drag session unwinds before SwiftUI evaluates
         // a new sheet item — avoids "sheet during drag" presentation issues.
         DispatchQueue.main.async {
             onDrop(entry)
+        }
+        dragState.draggedEntry = nil
+        return true
+    }
+}
+
+// MARK: - Per-entry drop delegate
+
+/// Attached to every EntryView. Two modes:
+/// - "Forwarding": when the entry is a root scalar (position == nil && !isSequence)
+///   AND a day-root drop callback is provided, behaves like DayRootDropDelegate —
+///   file-system metaphor where dropping on a leaf inserts at the leaf's level.
+/// - "Forbidding": for all other entries (root sequences, child entries). Returns
+///   .forbidden so the day-root delegate above doesn't activate while the cursor
+///   is inside the entry's body. Sequence-level DropTargets are deeper still and
+///   continue to handle in-sequence drops normally.
+struct EntryDropDelegate: DropDelegate {
+    let entry: FfiEntry
+    let dragState: DragState
+    let onDayRootDrop: ((FfiEntry) -> Void)?
+
+    private var actsAsDayRoot: Bool {
+        onDayRootDrop != nil && entry.position == nil && !entry.isSequence
+    }
+
+    private var canAcceptAsDayRoot: Bool {
+        guard actsAsDayRoot else { return false }
+        guard let dragged = dragState.draggedEntry else { return false }
+        return dragged.position != nil
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        // Always claim the type so the parent (DayRootDropDelegate) doesn't
+        // receive it. dropUpdated returns .forbidden when we won't actually
+        // accept — that suppresses the indicator and rejects the drop.
+        dragState.draggedEntry != nil
+    }
+
+    func dropEntered(info: DropInfo) {
+        if canAcceptAsDayRoot {
+            dragState.isTargetingDayRoot = true
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: canAcceptAsDayRoot ? .move : .forbidden)
+    }
+
+    func dropExited(info: DropInfo) {
+        if actsAsDayRoot {
+            dragState.isTargetingDayRoot = false
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard canAcceptAsDayRoot,
+              let onDayRootDrop,
+              let dragged = dragState.draggedEntry else { return false }
+        dragState.isTargetingDayRoot = false
+        DispatchQueue.main.async {
+            onDayRootDrop(dragged)
         }
         dragState.draggedEntry = nil
         return true

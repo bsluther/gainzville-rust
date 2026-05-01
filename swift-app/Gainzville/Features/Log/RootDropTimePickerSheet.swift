@@ -50,15 +50,19 @@ struct RootDropTimePickerSheet: View {
     var body: some View {
         #if os(iOS)
         NavigationStack {
-            VStack {
+            VStack(spacing: GvSpacing.lg) {
+                // Title sits in content (not the navigation bar) so a long
+                // formatted date isn't truncated between the toolbar buttons.
+                Text(titleText)
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color.gvTextPrimary)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 DatePicker("", selection: $selected, displayedComponents: .hourAndMinute)
                     .datePickerStyle(.wheel)
                     .labelsHidden()
                 Spacer()
             }
             .padding(GvSpacing.lg)
-            .navigationTitle(titleText)
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: onCancel)

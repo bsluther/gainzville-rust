@@ -7,7 +7,6 @@ struct LogView: View {
     @EnvironmentObject var attributeFocus: AttributeFocusModel
     @EnvironmentObject var dragState: DragState
     @State private var isCreatePresented = false
-    @State private var isDayDropTargeted = false
     @State private var pendingRootDrop: PendingRootDrop?
 
     var body: some View {
@@ -23,7 +22,7 @@ struct LogView: View {
                 ScrollView {
                     VStack(spacing: GvSpacing.lg) {
                         ForEach(dayRoots, id: \.id) { entry in
-                            EntryView(entry: entry)
+                            EntryView(entry: entry, onDayRootDrop: handleDayRootDrop)
                         }
                     }
                     .padding(.horizontal, GvSpacing.lg)
@@ -42,23 +41,18 @@ struct LogView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // gvBackground at the back, with a Color.primary tint layer above it
-        // when a drag is hovering — auto-adapts (darken in light mode, lighten
-        // in dark mode). Both sit below entry content via a single .background.
+        // At rest the log inherits the surrounding app background. When a
+        // day-root drag is targeting (empty area or a root scalar), paint
+        // gvLoggedBlue on top as a high-contrast drop-zone indicator.
         .background(
-            ZStack {
-                Color.gvBackground
-                Color.primary.opacity(isDayDropTargeted ? 0.05 : 0)
-                    .animation(.easeInOut(duration: 0.12), value: isDayDropTargeted)
-            }
-            .allowsHitTesting(false)
+            Color.gvLoggedBlue
+                .opacity(dragState.isTargetingDayRoot ? 1 : 0)
+                .animation(.easeInOut(duration: 0.12), value: dragState.isTargetingDayRoot)
+                .allowsHitTesting(false)
         )
         .onDrop(of: [UTType.plainText], delegate: DayRootDropDelegate(
             dragState: dragState,
-            isTargeted: $isDayDropTargeted,
-            onDrop: { entry in
-                pendingRootDrop = PendingRootDrop(entry: entry, day: logDayStore.logDay)
-            }
+            onDrop: handleDayRootDrop
         ))
         .sheet(item: $pendingRootDrop) { drop in
             RootDropTimePickerSheet(
@@ -95,6 +89,10 @@ struct LogView: View {
             }
         }
         .gvKeyboardDoneButton()
+    }
+
+    private func handleDayRootDrop(_ entry: FfiEntry) {
+        pendingRootDrop = PendingRootDrop(entry: entry, day: logDayStore.logDay)
     }
 }
 

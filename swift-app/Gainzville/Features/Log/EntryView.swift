@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // We take the full FfiEntry rather than just an id even though `vm.entryJoin`
 // will provide its own copy of the entry. The forest gives us the entry as
@@ -10,10 +11,15 @@ import SwiftUI
 // the forest doesn't carry.
 struct EntryView: View {
     let entry: FfiEntry
+    // Only root EntryViews receive this from LogView; child EntryViews omit it
+    // so EntryDropDelegate falls into its forbidding mode and blocks the
+    // day-root drop indicator from activating over their bodies.
+    var onDayRootDrop: ((FfiEntry) -> Void)? = nil
     @EnvironmentObject var forestVM: ForestViewModel
     @EnvironmentObject var coreEnv: CoreEnv
     @EnvironmentObject var dataChange: DataChange
     @EnvironmentObject var attributeFocus: AttributeFocusModel
+    @EnvironmentObject var dragState: DragState
     @StateObject private var vm = EntryViewModel()
     @State private var isExpanded = false
 
@@ -55,6 +61,14 @@ struct EntryView: View {
         .onTapGesture {
             attributeFocus.focused = nil
         }
+        // Drop delegate: forwards to day-root for root scalars; forbids drops
+        // (blocking the day-root indicator) for everything else. See
+        // EntryDragDrop.swift for the full hit-test layering rationale.
+        .onDrop(of: [UTType.plainText], delegate: EntryDropDelegate(
+            entry: entry,
+            dragState: dragState,
+            onDayRootDrop: onDayRootDrop
+        ))
         .onAppear {
             vm.start(core: coreEnv.core, dataChange: dataChange, entryId: entry.id)
         }

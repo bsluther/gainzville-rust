@@ -1,4 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 // MARK: - Raw neutral scale
 //
@@ -18,6 +23,20 @@ extension Color {
     static var gvDivider: Color       { .gvNeutral200 }
     static var gvTextPrimary: Color   { .gvNeutral400 }
     static var gvTextSecondary: Color { .gvNeutral500 }
+
+    // The platform's app/window background. Used as the at-rest fill for
+    // surfaces that need to match what the OS paints behind the app — e.g.
+    // sequence entries, whose container is otherwise clear and would let
+    // the LogView's drop-target tint bleed through.
+    static var gvAppBackground: Color {
+        #if canImport(UIKit)
+        Color(UIColor.systemBackground)
+        #elseif canImport(AppKit)
+        Color(NSColor.windowBackgroundColor)
+        #else
+        .gvBackground
+        #endif
+    }
 }
 
 // MARK: - Action tokens
@@ -30,7 +49,7 @@ extension Color {
 
 extension Color {
     static var entryScalarBackground: Color   { .gvNeutral950 }
-    static var entrySequenceBackground: Color { .clear }
+    static var entrySequenceBackground: Color { .gvAppBackground }
     static var entryScalarBorder: Color       { .gvNeutral900 }
     static var entrySequenceBorder: Color     { .gvNeutral800 }
     static var entryTextPrimary: Color            { .gvNeutral400 }
