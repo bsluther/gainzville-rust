@@ -18,16 +18,12 @@ struct MassAttribute: View {
     @FocusState private var focusedUnit: FfiMassUnit?
     @EnvironmentObject private var focusModel: AttributeFocusModel
 
-    private var focusId: AttributeFocusID {
-        AttributeFocusID(entryId: entry.id, attributeId: pair.attrId)
-    }
-
-    private var isRowFocused: Bool {
-        focusModel.focusedId == focusId
+    private var focus: AttributeFocus {
+        .standard(entryId: entry.id, attrId: pair.attrId)
     }
 
     var body: some View {
-        AttributeRow(label: pair.name, isFocused: isRowFocused, onFocus: { focusModel.focusedId = focusId }) {
+        AttributeRow(label: pair.name, focus: focus) {
             ForEach(unitsToShow, id: \.self) { unit in
                 massField(unit: unit)
             }
@@ -39,7 +35,7 @@ struct MassAttribute: View {
         }
         .onChange(of: values) { _, _ in scheduleDebounce() }
         .onChange(of: focusedUnit) { _, newFocus in
-            if newFocus != nil { focusModel.focusedId = focusId }
+            if newFocus != nil { focusModel.focused = focus }
             if newFocus == nil { flushNow() }
         }
     }
@@ -58,7 +54,6 @@ struct MassAttribute: View {
                 .gvAttributePill()
                 .fixedSize(horizontal: true, vertical: false)
                 .gvSelectAllOnFocus(isFocused: focusedUnit == unit)
-                .onTapGesture { focusedUnit = unit; focusModel.focusedId = focusId }
                 .onSubmit { flushNow() }
             Text(unit.shortLabel)
                 .font(.attrLabel)

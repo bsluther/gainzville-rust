@@ -11,17 +11,13 @@ struct SelectAttribute: View {
     @State private var isPresenting = false
     @EnvironmentObject private var focusModel: AttributeFocusModel
 
-    private var focusId: AttributeFocusID {
-        AttributeFocusID(entryId: entry.id, attributeId: pair.attrId)
-    }
-
-    private var isRowFocused: Bool {
-        focusModel.focusedId == focusId
+    private var focus: AttributeFocus {
+        .standard(entryId: entry.id, attrId: pair.attrId)
     }
 
     var body: some View {
-        AttributeRow(label: pair.name, isFocused: isRowFocused, onFocus: { focusModel.focusedId = focusId }) {
-            Button { focusModel.focusedId = focusId; isPresenting = true } label: {
+        AttributeRow(label: pair.name, focus: focus) {
+            Button { focusModel.focused = focus; isPresenting = true } label: {
                 Text(displayText.isEmpty ? gvEmptyPillText : displayText)
                     .frame(minWidth: GvSpacing.minAttributeInputWidth)
                     .gvAttributePill()

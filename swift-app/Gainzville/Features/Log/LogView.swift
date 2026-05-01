@@ -3,6 +3,7 @@ import SwiftUI
 struct LogView: View {
     @EnvironmentObject var forestVM: ForestViewModel
     @EnvironmentObject var logDayStore: LogDayStore
+    @EnvironmentObject var attributeFocus: AttributeFocusModel
     @State private var isCreatePresented = false
 
     var body: some View {
@@ -24,6 +25,15 @@ struct LogView: View {
                     .padding(.horizontal, GvSpacing.lg)
                     .padding(.vertical, GvSpacing.lg)
                     .containerRelativeFrame(.horizontal)
+                    // Tap-outside-to-clear: catches taps in horizontal padding,
+                    // between entries, and below the last entry. Row taps win
+                    // over this background because SwiftUI delivers to the
+                    // deepest gesture.
+                    .background(
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { attributeFocus.focused = nil }
+                    )
                 }
             }
         }

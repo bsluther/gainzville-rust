@@ -1,21 +1,24 @@
 import SwiftUI
 
 // Shared layout for attribute-style rows: label on the left, custom input on the
-// right, consistent min-height across temporal and attribute editors.
+// right, consistent min-height across temporal and attribute editors. The row
+// owns its focus state — pass the focus identifier and the row reads/writes the
+// shared AttributeFocusModel directly.
 struct AttributeRow<Content: View>: View {
     let label: String
+    let focus: AttributeFocus
     let indent: CGFloat
-    let isFocused: Bool
-    let onFocus: (() -> Void)?
     private let content: Content
+    @EnvironmentObject private var focusModel: AttributeFocusModel
 
-    init(label: String, indent: CGFloat = 0, isFocused: Bool = false, onFocus: (() -> Void)? = nil, @ViewBuilder content: () -> Content) {
+    init(label: String, focus: AttributeFocus, indent: CGFloat = 0, @ViewBuilder content: () -> Content) {
         self.label = label
+        self.focus = focus
         self.indent = indent
-        self.isFocused = isFocused
-        self.onFocus = onFocus
         self.content = content()
     }
+
+    private var isFocused: Bool { focusModel.focused == focus }
 
     var body: some View {
         HStack(alignment: .center) {
@@ -23,21 +26,14 @@ struct AttributeRow<Content: View>: View {
                 .font(.attrLabel)
                 .foregroundStyle(Color.entryTextSecondary)
                 .padding(.leading, indent)
-            
-            Group {
-                if isFocused {
-                    Button(action: {}) {
-                        Image(systemName: "gearshape")
-                            .foregroundStyle(Color.gvTextSecondary)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Image(systemName: "gearshape")
-                        .opacity(0)
-                }
-            }
-            .frame(width: 20, height: 20)
-            .padding(.leading, GvSpacing.sm)
+
+            // Reserved 20×20 slot — gear is always laid out, only its opacity
+            // toggles, so showing/hiding doesn't shift the row.
+            Image(systemName: "gearshape")
+                .foregroundStyle(Color.gvTextSecondary)
+                .opacity(isFocused ? 1 : 0)
+                .frame(width: 20, height: 20)
+                .padding(.leading, GvSpacing.sm)
 
             Spacer()
             HStack(spacing: GvSpacing.lg) {
@@ -47,7 +43,7 @@ struct AttributeRow<Content: View>: View {
         .frame(minHeight: GvSpacing.minAttributeHeight)
         .contentShape(Rectangle())
         .onTapGesture {
-            onFocus?()
+            focusModel.focused = focus
         }
     }
 }

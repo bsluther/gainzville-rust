@@ -14,16 +14,12 @@ struct NumericAttribute: View {
     @FocusState private var isKeyboardFocused: Bool
     @EnvironmentObject private var focusModel: AttributeFocusModel
 
-    private var focusId: AttributeFocusID {
-        AttributeFocusID(entryId: entry.id, attributeId: pair.attrId)
-    }
-
-    private var isRowFocused: Bool {
-        focusModel.focusedId == focusId
+    private var focus: AttributeFocus {
+        .standard(entryId: entry.id, attrId: pair.attrId)
     }
 
     var body: some View {
-        AttributeRow(label: pair.name, isFocused: isRowFocused, onFocus: { focusModel.focusedId = focusId }) { field }
+        AttributeRow(label: pair.name, focus: focus) { field }
             .onAppear { syncEditState() }
             .onChange(of: pair.actual) { _, _ in
                 // Skip while the user is editing — otherwise an upstream cache
@@ -32,7 +28,7 @@ struct NumericAttribute: View {
             }
             .onChange(of: editValue) { _, _ in scheduleDebounce() }
             .onChange(of: isKeyboardFocused) { _, focused in
-                if focused { focusModel.focusedId = focusId }
+                if focused { focusModel.focused = focus }
                 if !focused { flushNow() }
             }
     }
@@ -51,7 +47,6 @@ struct NumericAttribute: View {
             .gvAttributePill()
             .fixedSize(horizontal: true, vertical: false)
             .gvSelectAllOnFocus(isFocused: isKeyboardFocused)
-            .onTapGesture { isKeyboardFocused = true; focusModel.focusedId = focusId }
             .onSubmit { flushNow() }
     }
 

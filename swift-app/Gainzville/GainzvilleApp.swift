@@ -74,9 +74,6 @@ struct GainzvilleApp: App {
                 .environmentObject(logDayStore)
                 .environmentObject(dragState)
                 .environmentObject(attributeFocus)
-                .onTapGesture {
-                    attributeFocus.focusedId = nil
-                }
         }
         #if os(macOS)
         .defaultSize(width: 1100, height: 700)

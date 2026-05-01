@@ -2,18 +2,16 @@ import SwiftUI
 internal import Combine
 import Foundation
 
-struct AttributeFocusID: Hashable {
-    let entryId: String
-    let attributeId: String
-    let subField: String?
-    
-    init(entryId: String, attributeId: String, subField: String? = nil) {
-        self.entryId = entryId
-        self.attributeId = attributeId
-        self.subField = subField
-    }
+// Identifies which attribute row currently owns the focused-state UI affordance
+// (the gear icon, future per-attribute menu). Standard rows focus as a unit;
+// the temporal "attribute" focuses at the sub-field level.
+enum AttributeFocus: Hashable {
+    case standard(entryId: String, attrId: String)
+    case temporalStart(entryId: String)
+    case temporalEnd(entryId: String)
+    case temporalDuration(entryId: String)
 }
 
-class AttributeFocusModel: ObservableObject {
-    @Published var focusedId: AttributeFocusID?
+final class AttributeFocusModel: ObservableObject {
+    @Published var focused: AttributeFocus?
 }

@@ -32,7 +32,7 @@ struct EntryView: View {
                 displayName: displayName,
                 isExpanded: isExpanded,
                 onToggle: {
-                    attributeFocus.focusedId = nil
+                    attributeFocus.focused = nil
                     isExpanded.toggle()
                 }
             )
@@ -45,6 +45,16 @@ struct EntryView: View {
         // the container style rather than pushing the entry past the screen.
         .frame(maxWidth: .infinity, alignment: .leading)
         .entryContainerStyle(isSequence: entry.isSequence)
+        // Tap-outside-to-clear inside an entry: the entry's colored background
+        // swallows taps before they reach LogView's clear-background, so we
+        // also clear at the entry level. AttributeRow's own .onTapGesture wins
+        // for taps on rows (SwiftUI delivers to the deepest gesture); inner
+        // Buttons (header, ellipsis, footer +Entry, checkbox) consume their
+        // own taps without firing this one.
+        .contentShape(Rectangle())
+        .onTapGesture {
+            attributeFocus.focused = nil
+        }
         .onAppear {
             vm.start(core: coreEnv.core, dataChange: dataChange, entryId: entry.id)
         }
