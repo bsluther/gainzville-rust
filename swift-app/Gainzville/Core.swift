@@ -129,6 +129,36 @@ class ForestViewModel: ObservableObject {
         )))
     }
 
+    /// Move an entry to root on the given day with a chosen start time.
+    /// Preserves duration if set; replaces any prior start and drops any prior end.
+    func moveEntryToRoot(_ entry: FfiEntry, startTime: Date) {
+        guard let core else { return }
+        let ms = Int64(startTime.timeIntervalSince1970 * 1000)
+        let newTemporal: FfiTemporal = {
+            switch entry.temporal {
+            case .none, .start, .end, .startAndEnd:
+                return .start(start: ms)
+            case .duration(let d),
+                 .startAndDuration(_, let d),
+                 .durationAndEnd(let d, _):
+                return .startAndDuration(start: ms, durationMs: d)
+            }
+        }()
+        try? core.runAction(action: .moveEntry(FfiMoveEntry(
+            entryId: entry.id,
+            position: nil,
+            temporal: newTemporal
+        )))
+    }
+
+    /// Suggested initial time for placing a root entry on `day`.
+    /// Wraps the same FFI helper used by `createRootEntry`.
+    func suggestedRootInsertionTime(for day: LogDay) -> Date? {
+        guard let core else { return nil }
+        let ms = core.forestSuggestedRootDayInsertionTime(dayStart: day.fromMs)
+        return Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
+    }
+
     /// Update an entry's value for a given attribute. Today the Swift app only
     /// reaches this via attribute pairs returned by `FindAttributePairsForEntry`,
     /// so the underlying Value row is guaranteed to exist (per
