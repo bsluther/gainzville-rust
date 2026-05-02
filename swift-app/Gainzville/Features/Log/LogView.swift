@@ -43,19 +43,28 @@ struct LogView: View {
                             .onTapGesture { attributeFocus.focused = nil }
                     )
                 }
+                // Blue background scoped to the scroll area (below the nav bar).
+                // Color.gvBackground on the outer view — a bare Color — extends
+                // through safe areas so toolbars stay correct; this inner modifier
+                // doesn't affect that. Top corners are rounded to soften the
+                // hard edge where the scroll area meets the navigation bar.
+                .background(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: GvSpacing.entryCornerRadius,
+                        bottomLeadingRadius: 0,
+                        bottomTrailingRadius: 0,
+                        topTrailingRadius: GvSpacing.entryCornerRadius
+                    )
+                    .fill(Color.gvLoggedBlue)
+                    .opacity(dragState.isTargetingDayRoot ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.12), value: dragState.isTargetingDayRoot)
+                    .allowsHitTesting(false)
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Bare Color extends through safe areas — toolbars and tab bar adopt gvBackground.
         .background(Color.gvBackground)
-        // At rest the log inherits the surrounding app background. When a
-        // day-root drag is targeting (empty area or a root scalar), paint
-        // gvLoggedBlue on top as a high-contrast drop-zone indicator.
-        .background(
-            Color.gvLoggedBlue
-                .opacity(dragState.isTargetingDayRoot ? 1 : 0)
-                .animation(.easeInOut(duration: 0.12), value: dragState.isTargetingDayRoot)
-                .allowsHitTesting(false)
-        )
         .onDrop(of: [UTType.plainText], delegate: DayRootDropDelegate(
             dragState: dragState,
             onDrop: handleDayRootDrop
