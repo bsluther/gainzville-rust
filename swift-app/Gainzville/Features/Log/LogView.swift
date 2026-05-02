@@ -26,7 +26,7 @@ struct LogView: View {
                         }
                     }
                     .padding(.horizontal, GvSpacing.lg)
-                    .padding(.vertical, GvSpacing.lg)
+                    .padding(.vertical, GvSpacing.xl)
                     .containerRelativeFrame(.horizontal)
                     // Tap-outside-to-clear: catches taps in horizontal padding,
                     // between entries, and below the last entry. Row taps win
@@ -88,6 +88,9 @@ struct LogView: View {
                 isCreatePresented = false
             }
         }
+        #if !os(macOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .gvKeyboardDoneButton()
     }
 

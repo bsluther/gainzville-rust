@@ -86,7 +86,9 @@ extension View {
     }
 
     /// Selects all text when the bound focus state becomes true.
+    @ViewBuilder
     func gvSelectAllOnFocus(isFocused: Bool) -> some View {
+        #if os(iOS)
         self.onChange(of: isFocused) { _, focused in
             if focused {
                 DispatchQueue.main.async {
@@ -94,6 +96,9 @@ extension View {
                 }
             }
         }
+        #else
+        self
+        #endif
     }
 }
 
