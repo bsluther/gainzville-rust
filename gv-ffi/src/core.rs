@@ -1,4 +1,4 @@
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Once};
 
 use gv_client::{client::SqliteClient, query_store::QuerySubscription};
 use tokio::runtime::Runtime;
@@ -17,6 +17,18 @@ use crate::types::{
     FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiEntry, FfiError, FfiPosition,
     ffi_action_to_core, parse_timestamp_ms, parse_uuid,
 };
+
+static LOGGING: Once = Once::new();
+
+fn init_logging() {
+    LOGGING.call_once(|| {
+        use tracing_oslog::OsLogger;
+        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+        tracing_subscriber::registry()
+            .with(OsLogger::new("com.gainzville", "rust"))
+            .init();
+    });
+}
 
 // Single shared runtime for all FFI calls. Swift calls into Rust without a tokio
 // context, so we drive all async work through this runtime via block_on.
@@ -62,6 +74,7 @@ impl GainzvilleCore {
         actor_id: String,
         listener: Arc<dyn CoreListener>,
     ) -> Result<Arc<Self>, FfiError> {
+        init_logging();
         let actor_id = parse_uuid(&actor_id)?;
         let client = RUNTIME
             .block_on(SqliteClient::init(&db_path))

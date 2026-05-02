@@ -13,11 +13,13 @@ generation   = { path = "../generation" }
 rand         = { workspace = true }
 # "tokio" — static runtime for sync FFI wrappers.
 # "cli"   — enables uniffi_bindgen for the uniffi-bindgen binary target below.
-uniffi    = { version = "0.31", features = ["tokio", "cli"] }
-tokio     = { workspace = true }
-uuid      = { workspace = true }
-chrono    = { workspace = true }
-thiserror = { workspace = true }
+uniffi              = { version = "0.31", features = ["tokio", "cli"] }
+tokio               = { workspace = true }
+uuid                = { workspace = true }
+chrono              = { workspace = true }
+thiserror           = { workspace = true }
+tracing-subscriber  = { workspace = true }
+tracing-oslog       = "0.3"
 
 # Generates Swift/Kotlin bindings by reading metadata from the compiled cdylib.
 # Usage (from workspace root):
