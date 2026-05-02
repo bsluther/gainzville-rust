@@ -27,7 +27,12 @@ struct LogView: View {
                     }
                     .padding(.horizontal, GvSpacing.lg)
                     .padding(.vertical, GvSpacing.xl)
-                    .containerRelativeFrame(.horizontal)
+                    #if os(macOS)
+                    .frame(maxWidth: 720)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    #else
+                    .frame(maxWidth: .infinity)
+                    #endif
                     // Tap-outside-to-clear: catches taps in horizontal padding,
                     // between entries, and below the last entry. Row taps win
                     // over this background because SwiftUI delivers to the
