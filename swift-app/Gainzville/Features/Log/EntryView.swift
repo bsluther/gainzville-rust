@@ -36,6 +36,7 @@ struct EntryView: View {
             EntryHeader(
                 entry: entry,
                 displayName: displayName,
+                activityName: vm.entryJoin?.activity?.name,
                 isExpanded: isExpanded,
                 onToggle: {
                     attributeFocus.focused = nil
@@ -95,6 +96,7 @@ extension View {
 private struct EntryHeader: View {
     let entry: FfiEntry
     let displayName: String
+    let activityName: String?
     let isExpanded: Bool
     let onToggle: () -> Void
     @State private var isMenuPresented = false
@@ -124,7 +126,7 @@ private struct EntryHeader: View {
                 }
                 .buttonStyle(.plain)
                 .platformPopover(isPresented: $isMenuPresented) {
-                    EntryMenuContent(entry: entry)
+                    EntryMenuContent(entry: entry, entryName: displayName, activityName: activityName, isPresented: $isMenuPresented)
                 }
             } else {
                 FillCheckbox(checked: entry.isComplete, onToggle: {
@@ -284,54 +286,78 @@ private struct FillCheckbox: View {
 
 private struct EntryMenuContent: View {
     let entry: FfiEntry
+    let entryName: String
+    let activityName: String?
+    @Binding var isPresented: Bool
     @EnvironmentObject private var forestVM: ForestViewModel
 
     var body: some View {
         let isRoot = entry.position == nil
-        ScrollView {
-            VStack(spacing: GvSpacing.md) {
-                // Group 1 — workflow
-                GvMenuRow("Duplicate", icon: "doc.on.doc")
-                GvMenuRow("Add set", icon: "rectangle.stack.badge.plus")
-                if entry.isSequence {
-                    GvMenuRow("Add entry", icon: "plus.circle")
-                }
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: GvSpacing.md) {
+                    // Group 1 — workflow
+                    GvMenuRow("Duplicate", icon: "doc.on.doc")
+                    GvMenuRow("Add set", icon: "rectangle.stack.badge.plus")
+                    if entry.isSequence {
+                        GvMenuRow("Add entry", icon: "plus.circle")
+                    }
 
-                GvMenuDivider()
-
-                // Group 2 — attributes
-                GvMenuRow("Add attribute", icon: "tag")
-                GvMenuRow("Edit attributes", icon: "slider.horizontal.3")
-
-                // Group 3 — conditional navigation
-                if entry.activityId != nil || !isRoot {
                     GvMenuDivider()
-                    if entry.activityId != nil {
-                        GvMenuRow("View activity", icon: "figure.run")
+
+                    // Group 2 — attributes
+                    GvMenuRow("Add attribute", icon: "tag")
+                    NavigationLink {
+                        EditAttributesView(entryName: entryName, activityName: activityName, isPresented: $isPresented)
+                    } label: {
+                        HStack(spacing: GvSpacing.lg) {
+                            Image(systemName: "slider.horizontal.3").frame(width: 20)
+                            Text("Edit attributes").font(.gvBody)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(Color.gvTextSecondary)
+                        }
+                        .foregroundStyle(Color.gvTextPrimary)
+                        .padding(.horizontal, GvSpacing.lg)
+                        .padding(.vertical, GvSpacing.lg)
+                        .contentShape(Rectangle())
                     }
-                    if !isRoot {
-                        GvMenuRow("Move to time", icon: "clock")
+                    .buttonStyle(.plain)
+
+                    // Group 3 — conditional navigation
+                    if entry.activityId != nil || !isRoot {
+                        GvMenuDivider()
+                        if entry.activityId != nil {
+                            GvMenuRow("View activity", icon: "figure.run")
+                        }
+                        if !isRoot {
+                            GvMenuRow("Move to time", icon: "clock")
+                        }
+                    }
+
+                    GvMenuDivider()
+
+                    // Group 4 — destructive
+                    if entry.isSequence {
+                        GvMenuRow("Delete recursive", icon: "trash.fill", isDestructive: true) {
+                            forestVM.deleteEntry(entry: entry)
+                        }
+                        GvMenuRow("Delete unbox", icon: "arrow.up.backward.and.arrow.down.forward", isDestructive: true)
+                    } else {
+                        GvMenuRow("Delete", icon: "trash", isDestructive: true) {
+                            forestVM.deleteEntry(entry: entry)
+                        }
                     }
                 }
-
-                GvMenuDivider()
-
-                // Group 4 — destructive
-                if entry.isSequence {
-                    GvMenuRow("Delete recursive", icon: "trash.fill", isDestructive: true) {
-                        forestVM.deleteEntry(entry: entry)
-                    }
-                    GvMenuRow("Delete unbox", icon: "arrow.up.backward.and.arrow.down.forward", isDestructive: true)
-                } else {
-                    GvMenuRow("Delete", icon: "trash", isDestructive: true) {
-                        forestVM.deleteEntry(entry: entry)
-                    }
-                }
+                .padding(GvSpacing.md)
             }
-            .padding(GvSpacing.md)
+            #if os(iOS)
+            .toolbar(.hidden, for: .navigationBar)
+            #endif
         }
         #if os(iOS)
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
         #endif
     }
 }
