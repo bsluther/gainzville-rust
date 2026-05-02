@@ -31,11 +31,11 @@ extension Color {
 // MARK: - Entry tokens
 
 extension Color {
-    static var entryScalarBackground: Color   { .gvNeutral950 }
+    static var entryScalarBackground: Color   { .gvNeutral900 }
     static var entrySequenceBackground: Color { .gvAppBackground }
-    static var entryScalarBorder: Color       { .gvNeutral900 }
+    static var entryScalarBorder: Color       { .gvNeutral850 }
     static var entrySequenceBorder: Color     { .gvNeutral800 }
-    static var entryTextPrimary: Color            { .gvNeutral400 }
+    static var entryTextPrimary: Color            { .gvNeutral350 }
     static var entryTextSecondary: Color          { .gvNeutral500 }
 }
 
