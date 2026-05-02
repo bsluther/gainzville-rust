@@ -46,6 +46,7 @@ struct LogView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.gvBackground)
         // At rest the log inherits the surrounding app background. When a
         // day-root drag is targeting (empty area or a root scalar), paint
         // gvLoggedBlue on top as a high-contrast drop-zone indicator.

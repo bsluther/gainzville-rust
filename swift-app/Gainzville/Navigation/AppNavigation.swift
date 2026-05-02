@@ -25,16 +25,19 @@ struct IOSNavigation: View {
                 NavigationStack {
                     LogView()
                 }
+                .background(Color.gvBackground)
             }
             Tab("Library", systemImage: AppSection.library.icon) {
                 NavigationStack {
                     LibraryView()
                 }
+                .background(Color.gvBackground)
             }
             Tab("Settings", systemImage: AppSection.settings.icon) {
                 NavigationStack {
                     SettingsView()
                 }
+                .background(Color.gvBackground)
             }
         }
         .tabViewStyle(.sidebarAdaptable)
@@ -60,6 +63,8 @@ struct MacNavigation: View {
                         .tag(section)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.gvBackground)
             .navigationSplitViewColumnWidth(min: 160, ideal: 200)
             .navigationTitle("Gainzville")
         } detail: {
@@ -75,6 +80,7 @@ struct MacNavigation: View {
                     ContentUnavailableView("Select a section", systemImage: "sidebar.left")
                 }
             }
+            .background(Color.gvBackground)
         }
     }
 }

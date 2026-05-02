@@ -30,6 +30,7 @@ struct LibraryView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.gvBackground)
         .navigationTitle("Library")
         .navigationDestination(for: LibraryDestination.self) { destination in
             switch destination {

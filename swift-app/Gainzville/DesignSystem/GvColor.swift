@@ -1,9 +1,4 @@
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#elseif canImport(AppKit)
-import AppKit
-#endif
 
 // MARK: - Raw neutral scale
 //
@@ -24,19 +19,7 @@ extension Color {
     static var gvTextPrimary: Color   { .gvNeutral400 }
     static var gvTextSecondary: Color { .gvNeutral500 }
 
-    // The platform's app/window background. Used as the at-rest fill for
-    // surfaces that need to match what the OS paints behind the app — e.g.
-    // sequence entries, whose container is otherwise clear and would let
-    // the LogView's drop-target tint bleed through.
-    static var gvAppBackground: Color {
-        #if canImport(UIKit)
-        Color(UIColor.systemBackground)
-        #elseif canImport(AppKit)
-        Color(NSColor.windowBackgroundColor)
-        #else
-        .gvBackground
-        #endif
-    }
+    static var gvAppBackground: Color { .gvBackground }
 }
 
 // MARK: - Action tokens

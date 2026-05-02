@@ -13,6 +13,8 @@ struct SettingsView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Color.gvBackground)
         .navigationTitle("Settings")
     }
 }
