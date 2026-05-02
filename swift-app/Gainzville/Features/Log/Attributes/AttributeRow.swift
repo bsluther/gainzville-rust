@@ -4,16 +4,26 @@ import SwiftUI
 // right, consistent min-height across temporal and attribute editors. The row
 // owns its focus state — pass the focus identifier and the row reads/writes the
 // shared AttributeFocusModel directly.
+enum AttributeMenuKind {
+    case numeric
+    case mass
+    case select
+    case temporal
+}
+
 struct AttributeRow<Content: View>: View {
     let label: String
     let focus: AttributeFocus
+    let kind: AttributeMenuKind
     let indent: CGFloat
     private let content: Content
     @EnvironmentObject private var focusModel: AttributeFocusModel
+    @State private var isMenuPresented = false
 
-    init(label: String, focus: AttributeFocus, indent: CGFloat = 0, @ViewBuilder content: () -> Content) {
+    init(label: String, focus: AttributeFocus, kind: AttributeMenuKind, indent: CGFloat = 0, @ViewBuilder content: () -> Content) {
         self.label = label
         self.focus = focus
+        self.kind = kind
         self.indent = indent
         self.content = content()
     }
@@ -29,11 +39,21 @@ struct AttributeRow<Content: View>: View {
 
             // Reserved 20×20 slot — gear is always laid out, only its opacity
             // toggles, so showing/hiding doesn't shift the row.
-            Image(systemName: "gearshape")
-                .foregroundStyle(Color.gvTextSecondary)
-                .opacity(isFocused ? 1 : 0)
-                .frame(width: 20, height: 20)
-                .padding(.leading, GvSpacing.sm)
+            Button {
+                focusModel.focused = focus
+                isMenuPresented = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .foregroundStyle(Color.gvTextSecondary)
+                    .opacity(isFocused ? 1 : 0)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, GvSpacing.sm)
+            .platformPopover(isPresented: $isMenuPresented) {
+                AttributeMenuContent(kind: kind)
+            }
 
             Spacer()
             HStack(spacing: GvSpacing.lg) {
@@ -45,6 +65,32 @@ struct AttributeRow<Content: View>: View {
         .onTapGesture {
             focusModel.focused = focus
         }
+    }
+}
+
+private struct AttributeMenuContent: View {
+    let kind: AttributeMenuKind
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: GvSpacing.md) {
+                GvMenuRow("Clear", icon: "xmark.circle")
+
+                if kind != .temporal {
+                    GvMenuDivider()
+                    GvMenuRow("Remove attribute", icon: "trash", isDestructive: true)
+                }
+
+                if kind == .mass {
+                    GvMenuDivider()
+                    GvMenuRow("Pick units", icon: "ruler")
+                }
+            }
+            .padding(GvSpacing.md)
+        }
+        #if os(iOS)
+        .presentationDetents([.medium])
+        #endif
     }
 }
 

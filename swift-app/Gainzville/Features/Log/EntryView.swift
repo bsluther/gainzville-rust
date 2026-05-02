@@ -291,39 +291,39 @@ private struct EntryMenuContent: View {
         ScrollView {
             VStack(spacing: GvSpacing.md) {
                 // Group 1 — workflow
-                EntryMenuRow("Duplicate", icon: "doc.on.doc")
-                EntryMenuRow("Add set", icon: "rectangle.stack.badge.plus")
+                GvMenuRow("Duplicate", icon: "doc.on.doc")
+                GvMenuRow("Add set", icon: "rectangle.stack.badge.plus")
                 if entry.isSequence {
-                    EntryMenuRow("Add entry", icon: "plus.circle")
+                    GvMenuRow("Add entry", icon: "plus.circle")
                 }
 
-                EntryMenuDivider()
+                GvMenuDivider()
 
                 // Group 2 — attributes
-                EntryMenuRow("Add attribute", icon: "tag")
-                EntryMenuRow("Edit attributes", icon: "slider.horizontal.3")
+                GvMenuRow("Add attribute", icon: "tag")
+                GvMenuRow("Edit attributes", icon: "slider.horizontal.3")
 
                 // Group 3 — conditional navigation
                 if entry.activityId != nil || !isRoot {
-                    EntryMenuDivider()
+                    GvMenuDivider()
                     if entry.activityId != nil {
-                        EntryMenuRow("View activity", icon: "figure.run")
+                        GvMenuRow("View activity", icon: "figure.run")
                     }
                     if !isRoot {
-                        EntryMenuRow("Move to time", icon: "clock")
+                        GvMenuRow("Move to time", icon: "clock")
                     }
                 }
 
-                EntryMenuDivider()
+                GvMenuDivider()
 
                 // Group 4 — destructive
                 if entry.isSequence {
-                    EntryMenuRow("Delete recursive", icon: "trash.fill", isDestructive: true) {
+                    GvMenuRow("Delete recursive", icon: "trash.fill", isDestructive: true) {
                         forestVM.deleteEntry(entry: entry)
                     }
-                    EntryMenuRow("Delete unbox", icon: "arrow.up.backward.and.arrow.down.forward", isDestructive: true)
+                    GvMenuRow("Delete unbox", icon: "arrow.up.backward.and.arrow.down.forward", isDestructive: true)
                 } else {
-                    EntryMenuRow("Delete", icon: "trash", isDestructive: true) {
+                    GvMenuRow("Delete", icon: "trash", isDestructive: true) {
                         forestVM.deleteEntry(entry: entry)
                     }
                 }
@@ -333,51 +333,6 @@ private struct EntryMenuContent: View {
         #if os(iOS)
         .presentationDetents([.medium])
         #endif
-    }
-}
-
-private struct EntryMenuRow: View {
-    let label: String
-    var icon: String? = nil
-    var isDestructive: Bool = false
-    var action: () -> Void = {}
-    @Environment(\.dismiss) private var dismiss
-
-    init(_ label: String, icon: String? = nil, isDestructive: Bool = false, action: @escaping () -> Void = {}) {
-        self.label = label
-        self.icon = icon
-        self.isDestructive = isDestructive
-        self.action = action
-    }
-
-    var body: some View {
-        Button {
-            dismiss()
-            action()
-        } label: {
-            HStack(spacing: GvSpacing.lg) {
-                if let icon {
-                    Image(systemName: icon)
-                        .frame(width: 20)
-                }
-                Text(label)
-                    .font(.gvBody)
-                Spacer()
-            }
-            .foregroundStyle(isDestructive ? Color.red : Color.gvTextPrimary)
-            .padding(.horizontal, GvSpacing.lg)
-            .padding(.vertical, GvSpacing.lg)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct EntryMenuDivider: View {
-    var body: some View {
-        Rectangle()
-            .fill(Color.gvNeutral800)
-            .frame(height: 0.5)
     }
 }
 

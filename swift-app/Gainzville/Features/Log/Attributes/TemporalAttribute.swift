@@ -197,15 +197,15 @@ private struct TemporalExpandedRows: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
-            AttributeRow(label: "Start", focus: focusFor(.start, entryId: entryId), indent: GvSpacing.lg) {
+            AttributeRow(label: "Start", focus: focusFor(.start, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
                 DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart)
                 DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart)
             }
-            AttributeRow(label: "End", focus: focusFor(.end, entryId: entryId), indent: GvSpacing.lg) {
+            AttributeRow(label: "End", focus: focusFor(.end, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
                 DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd)
                 DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd)
             }
-            AttributeRow(label: "Duration", focus: focusFor(.duration, entryId: entryId), indent: GvSpacing.lg) {
+            AttributeRow(label: "Duration", focus: focusFor(.duration, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
                 DurationPickerPill(durationMs: $editDurationMs, onBeforeEdit: onBeforeEditDuration)
             }
         }

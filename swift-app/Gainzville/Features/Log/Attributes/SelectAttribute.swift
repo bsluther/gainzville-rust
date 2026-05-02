@@ -16,7 +16,7 @@ struct SelectAttribute: View {
     }
 
     var body: some View {
-        AttributeRow(label: pair.name, focus: focus) {
+        AttributeRow(label: pair.name, focus: focus, kind: .select) {
             Button { focusModel.focused = focus; isPresenting = true } label: {
                 Text(displayText.isEmpty ? gvEmptyPillText : displayText)
                     .frame(minWidth: GvSpacing.minAttributeInputWidth)

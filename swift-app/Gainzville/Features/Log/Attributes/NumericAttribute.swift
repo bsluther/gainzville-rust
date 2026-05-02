@@ -19,7 +19,7 @@ struct NumericAttribute: View {
     }
 
     var body: some View {
-        AttributeRow(label: pair.name, focus: focus) { field }
+        AttributeRow(label: pair.name, focus: focus, kind: .numeric) { field }
             .onAppear { syncEditState() }
             .onChange(of: pair.actual) { _, _ in
                 // Skip while the user is editing — otherwise an upstream cache

@@ -23,7 +23,7 @@ struct MassAttribute: View {
     }
 
     var body: some View {
-        AttributeRow(label: pair.name, focus: focus) {
+        AttributeRow(label: pair.name, focus: focus, kind: .mass) {
             ForEach(unitsToShow, id: \.self) { unit in
                 massField(unit: unit)
             }
