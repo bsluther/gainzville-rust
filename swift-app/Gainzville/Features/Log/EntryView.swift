@@ -232,13 +232,21 @@ private struct EntryFooter: View {
     var body: some View {
         if entry.isSequence {
             HStack {
-                Button("+ Entry") { isCreatePresented = true }
-                    .font(.gvBody)
-                    .foregroundStyle(Color.gvTextSecondary)
-                    .buttonStyle(.plain)
-                    .padding(.vertical, GvSpacing.entrySpacing)
                 Spacer()
+                Button { isCreatePresented = true } label: {
+                    Label("Entry", systemImage: "plus")
+                        .font(.gvBody)
+                        .foregroundStyle(Color.gvTextSecondary)
+                        .padding(.horizontal, GvSpacing.lg)
+                        .padding(.vertical, GvSpacing.md)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.gvNeutral700, lineWidth: 1.5)
+                        )
+                }
+                .buttonStyle(.plain)
             }
+            .padding(.bottom, GvSpacing.entrySpacing)
             .sheet(isPresented: $isCreatePresented) {
                 CreateEntrySheet(isPresented: $isCreatePresented) { activityId, name, isSeq in
                     forestVM.createChildEntry(in: entry, activityId: activityId, name: name, isSequence: isSeq)
