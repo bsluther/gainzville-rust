@@ -68,6 +68,16 @@ impl Forest {
         children
     }
 
+    pub fn siblngs(&self, entry_id: Uuid) -> Vec<&Entry> {
+        let Some(parent_id) = self.entry(entry_id).and_then(|e| e.parent_id()) else {
+            return Vec::new();
+        };
+        self.data()
+            .iter()
+            .filter(|e| e.parent_id().is_some_and(|id| id == parent_id))
+            .collect()
+    }
+
     /// Get the ancestors of an entry from immediate parent up to the root.
     pub fn ancestors(&self, entry_id: Uuid) -> Vec<&Entry> {
         let mut ancestors = Vec::new();

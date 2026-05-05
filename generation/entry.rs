@@ -7,39 +7,12 @@ use uuid::Uuid;
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick};
 use gv_core::{
     SYSTEM_ACTOR_ID,
+    forest::Forest,
     models::{
         activity::Activity,
         entry::{Entry, Position, Temporal},
     },
 };
-
-// TODO: switch to Forest impl in `core`.
-struct Forest {}
-impl Forest {
-    #[allow(unused)]
-    pub fn siblings<'a>(entry: &Entry, entries: &'a [Entry]) -> Vec<&'a Entry> {
-        // CONSIDER:
-        // Currently this returns an empty array if the entry is at the root. In some sense this is
-        // correct, because root entries don't have frac_indices. In another sense, every root entry
-        // is a sibling.
-        // What if everythiing had a frac_index? I.e. root is no lnger time ordered. Then, the user
-        // can just press "move to time" to put it in that order. But wait, that order doesn't exist.
-        // Probably the way i have it is good.
-        let Some(parent_id) = entry.parent_id() else {
-            return Vec::new();
-        };
-        entries
-            .iter()
-            .filter(|e| e.parent_id().is_some_and(|id| id == parent_id))
-            .collect::<Vec<_>>()
-    }
-    pub fn children_of<'a>(entry: &Entry, entries: &'a [Entry]) -> Vec<&'a Entry> {
-        entries
-            .iter()
-            .filter(|e| e.parent_id().is_some_and(|id| id == entry.id))
-            .collect::<Vec<_>>()
-    }
-}
 
 impl Arbitrary for FractionalIndex {
     fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
@@ -130,7 +103,9 @@ impl ArbitraryFrom<&[Entry]> for Option<Position> {
 
         // Choose a child position.
         let parent_choice = pick(&sequence_entries, rng)?;
-        let sibling_findices: Vec<FractionalIndex> = Forest::children_of(parent_choice, entries)
+        let forest = Forest::from(entries.to_vec());
+        let sibling_findices: Vec<FractionalIndex> = forest
+            .children(parent_choice.id)
             .iter()
             .filter_map(|e| e.frac_index().cloned())
             .collect();

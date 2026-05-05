@@ -1,5 +1,9 @@
 use chrono::{DateTime, Duration, Utc};
-use gv_core::validation::{Email, Username};
+use gv_core::{
+    models::{actor::Actor, attribute::Attribute, entry::Entry},
+    validation::{Email, Username},
+};
+use gv_server::server::tests::Activity;
 use rand::{Rng, rand_core};
 use rand_distr::{Distribution, Normal};
 use uuid::Uuid;
@@ -12,6 +16,25 @@ pub mod samples;
 
 pub trait GenerationContext {
     fn opts(&self) -> &Opts;
+    fn model(&self) -> &Model;
+}
+
+pub struct Model {
+    pub actors: Vec<Actor>,
+    pub entries: Vec<Entry>,
+    pub activities: Vec<Activity>,
+    pub attributes: Vec<Attribute>,
+}
+
+impl Model {
+    pub fn empty() -> Self {
+        Model {
+            actors: Vec::new(),
+            entries: Vec::new(),
+            activities: Vec::new(),
+            attributes: Vec::new(),
+        }
+    }
 }
 
 /// Options for configuring how values are generated.
@@ -58,24 +81,33 @@ impl Opts {
 pub struct SimulationContext {
     // rng: rand_chacha::ChaCha8Rng
     opts: Opts,
+    model: Model,
 }
 impl Default for SimulationContext {
     fn default() -> Self {
         SimulationContext {
             opts: Opts::default(),
+            model: Model::empty(),
         }
     }
 }
 
 impl SimulationContext {
     pub fn with_opts(opts: Opts) -> Self {
-        SimulationContext { opts }
+        SimulationContext {
+            opts,
+            model: Model::empty(),
+        }
     }
 }
 
 impl GenerationContext for SimulationContext {
     fn opts(&self) -> &Opts {
         &self.opts
+    }
+
+    fn model(&self) -> &Model {
+        &self.model
     }
 }
 
