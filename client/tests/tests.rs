@@ -1,16 +1,11 @@
 use sqlx::SqlitePool;
 
+use gv_client::client::SqliteClient;
 use gv_core::{
-    SYSTEM_ACTOR_ID,
     actions::{Action, CreateUser},
-    models::{
-        activity,
-        entry::{Entry, Position, Temporal},
-        user::User,
-    },
+    models::user::User,
     validation::{Email, Username},
 };
-use gv_client::client::SqliteClient;
 
 use uuid::Uuid;
 

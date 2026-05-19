@@ -2,7 +2,6 @@ use fractional_index::FractionalIndex;
 use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
 use gv_core::{
     actions::{Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, MoveEntry},
-    delta::Delta,
     models::{
         activity::Activity,
         attribute::Attribute,

@@ -90,7 +90,7 @@ pub async fn create_user(
 }
 
 pub async fn create_activity(
-    executor: &mut impl AnyQueryExecutor,
+    _executor: &mut impl AnyQueryExecutor,
     action: CreateActivity,
 ) -> Result<Mutation> {
     let activity = action.activity.clone();
@@ -294,7 +294,7 @@ pub async fn delete_entry_recursive(
 }
 
 pub async fn create_attribute(
-    executor: &mut impl AnyQueryExecutor,
+    _executor: &mut impl AnyQueryExecutor,
     action: CreateAttribute,
 ) -> Result<Mutation> {
     let attribute = action.attribute.clone();
