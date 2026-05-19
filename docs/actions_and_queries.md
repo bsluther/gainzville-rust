@@ -13,9 +13,9 @@ registration (for the reactive iOS cache model).
 |-----------|----------|------|
 | `Action` enum + structs | `core/src/actions.rs` | Named write intent; one struct per variant, enum for dispatch |
 | Mutators | `core/src/mutators.rs` | Validate an action against current state; produce a `Mutation` |
-| `Delta<M>` / `ModelDelta` | `core/src/delta.rs` | Typed (Insert/Update/Delete) and type-erased change records |
-| `Mutation` | `core/src/delta.rs` | Bundles action + timestamp + `Vec<ModelDelta>` for apply/audit |
-| `SqliteApply` / `PgApply` | `sqlite/apply.rs`, `postgres/apply.rs` | Write `ModelDelta` to DB inside the current transaction |
+| `Delta<M>` / `AnyDelta` | `core/src/delta.rs` | Typed (Insert/Update/Delete) and type-erased change records |
+| `Mutation` | `core/src/delta.rs` | Bundles action + timestamp + `Vec<AnyDelta>` for apply/audit |
+| `SqliteApply` / `PgApply` | `sqlite/apply.rs`, `postgres/apply.rs` | Write `AnyDelta` to DB inside the current transaction |
 | `Query` (sealed trait) | `core/src/queries.rs` | Binds each request type to its `Response` type at compile time |
 | `define_query!` macro | `core/src/queries.rs` | One-line declaration: struct + seal impl + `Query` impl |
 | `AnyQuery` enum | `core/src/queries.rs` | Type-erased wrapper for all query types; used in FFI / streaming |
@@ -90,7 +90,7 @@ pub enum Delta<M> {
     Delete { old: M },
 }
 
-pub enum ModelDelta {
+pub enum AnyDelta {
     User(Delta<User>),
     Actor(Delta<Actor>),
     Activity(Delta<Activity>),
@@ -103,11 +103,11 @@ pub struct Mutation {
     pub id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub action: Action,
-    pub changes: Vec<ModelDelta>,
+    pub changes: Vec<AnyDelta>,
 }
 ```
 
-`Delta<M>` is typed per model; `ModelDelta` erases the type for heterogeneous collections.
+`Delta<M>` is typed per model; `AnyDelta` erases the type for heterogeneous collections.
 `Mutation` bundles user intent (`action`) with its effects (`changes`) for logging, sync, and
 auditing.
 
@@ -120,11 +120,11 @@ pub trait SqliteApply: Sized {
     async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()>;
 }
 
-impl SqliteApply for ModelDelta {
+impl SqliteApply for AnyDelta {
     async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
         match self {
-            ModelDelta::Actor(delta) => delta.apply_delta(tx).await,
-            ModelDelta::Entry(delta) => delta.apply_delta(tx).await,
+            AnyDelta::Actor(delta) => delta.apply_delta(tx).await,
+            AnyDelta::Entry(delta) => delta.apply_delta(tx).await,
             // ... one arm per model
         }
     }

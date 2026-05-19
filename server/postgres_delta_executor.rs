@@ -1,8 +1,9 @@
-use sqlx::{Postgres, Transaction};
+use sqlx::PgConnection;
 use tracing::{info, instrument, warn};
 
 use gv_core::{
     delta::{AnyDelta, Delta},
+    delta_executor::{AnyDeltaExecutor, DeltaExecutor},
     error::Result,
     models::{
         activity::Activity,
@@ -13,29 +14,34 @@ use gv_core::{
     },
 };
 
-#[allow(async_fn_in_trait)]
-trait PgApply: Sized {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()>;
+pub struct PostgresDeltaExecutor<'c> {
+    conn: &'c mut PgConnection,
 }
 
-impl PgApply for AnyDelta {
+impl<'c> PostgresDeltaExecutor<'c> {
+    pub fn new(conn: &'c mut PgConnection) -> Self {
+        PostgresDeltaExecutor { conn }
+    }
+}
+
+impl AnyDeltaExecutor for PostgresDeltaExecutor<'_> {
     #[instrument(skip_all)]
-    async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-        info!(?self, "Applying delta");
-        match self {
-            AnyDelta::Actor(delta) => delta.apply_delta(tx).await,
-            AnyDelta::User(delta) => delta.apply_delta(tx).await,
-            AnyDelta::Activity(delta) => delta.apply_delta(tx).await,
-            AnyDelta::Entry(delta) => delta.apply_delta(tx).await,
-            AnyDelta::Attribute(delta) => delta.apply_delta(tx).await,
-            AnyDelta::Value(delta) => delta.apply_delta(tx).await,
+    async fn apply_any_delta(&mut self, delta: AnyDelta) -> Result<()> {
+        info!(?delta, "Applying delta");
+        match delta {
+            AnyDelta::Actor(delta) => self.apply_delta(delta).await,
+            AnyDelta::User(delta) => self.apply_delta(delta).await,
+            AnyDelta::Activity(delta) => self.apply_delta(delta).await,
+            AnyDelta::Entry(delta) => self.apply_delta(delta).await,
+            AnyDelta::Attribute(delta) => self.apply_delta(delta).await,
+            AnyDelta::Value(delta) => self.apply_delta(delta).await,
         }
     }
 }
 
-impl PgApply for Delta<Actor> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-        match self {
+impl DeltaExecutor<Actor> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Actor>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 sqlx::query!(
                     r#"
@@ -46,11 +52,10 @@ impl PgApply for Delta<Actor> {
                     new.actor_kind.to_string(),
                     new.created_at,
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { .. } => {
-                // No-op, shouldn't happen.
                 warn!("Applying update delta to Actor table which does not support updates");
             }
             Delta::Delete { old } => {
@@ -60,7 +65,7 @@ impl PgApply for Delta<Actor> {
                     "#,
                     old.actor_id
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
         };
@@ -68,9 +73,9 @@ impl PgApply for Delta<Actor> {
     }
 }
 
-impl PgApply for Delta<User> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-        match self {
+impl DeltaExecutor<User> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<User>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 sqlx::query!(
                     r#"
@@ -81,7 +86,7 @@ impl PgApply for Delta<User> {
                     new.username.as_str(),
                     new.email.as_str(),
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
@@ -89,21 +94,19 @@ impl PgApply for Delta<User> {
                     old.actor_id, new.actor_id,
                     "update must not mutate primary key"
                 );
-                // TODO: this updates all fields, even those that haven't changed.
                 sqlx::query!(
                     r#"
                     UPDATE users
                     SET
                         username = $1,
                         email = $2
-
                     WHERE actor_id = $3
                     "#,
                     new.username.as_str().to_string(),
                     new.email.as_str().to_string(),
                     new.actor_id
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
@@ -113,7 +116,7 @@ impl PgApply for Delta<User> {
                     "#,
                     old.actor_id
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
         };
@@ -121,9 +124,9 @@ impl PgApply for Delta<User> {
     }
 }
 
-impl PgApply for Delta<Activity> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-        match self {
+impl DeltaExecutor<Activity> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Activity>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 sqlx::query!(
                     r#"
@@ -136,7 +139,7 @@ impl PgApply for Delta<Activity> {
                     new.name.to_string(),
                     new.description
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
@@ -157,7 +160,7 @@ impl PgApply for Delta<Activity> {
                     new.description,
                     new.id
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
@@ -167,7 +170,7 @@ impl PgApply for Delta<Activity> {
                     "#,
                     old.id
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
         };
@@ -175,9 +178,9 @@ impl PgApply for Delta<Activity> {
     }
 }
 
-impl PgApply for Delta<Entry> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-        match self {
+impl DeltaExecutor<Entry> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Entry>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 sqlx::query!(
                     r#"
@@ -212,7 +215,7 @@ impl PgApply for Delta<Entry> {
                     new.temporal.end(),
                     new.temporal.duration().map(|d| d as i64)
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
@@ -245,7 +248,7 @@ impl PgApply for Delta<Entry> {
                     new.temporal.duration().map(|d| d as i64),
                     new.id
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
@@ -255,7 +258,7 @@ impl PgApply for Delta<Entry> {
                     "#,
                     old.id
                 )
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
         };
@@ -263,9 +266,9 @@ impl PgApply for Delta<Entry> {
     }
 }
 
-impl PgApply for Delta<Attribute> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-        match self {
+impl DeltaExecutor<Attribute> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Attribute>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 let row = AttributeRow::from_attribute(&new)?;
                 sqlx::query(
@@ -279,7 +282,7 @@ impl PgApply for Delta<Attribute> {
                 .bind(row.name)
                 .bind(row.data_type)
                 .bind(row.config)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
@@ -297,13 +300,13 @@ impl PgApply for Delta<Attribute> {
                 .bind(row.data_type)
                 .bind(row.config)
                 .bind(row.id)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM attributes WHERE id = $1")
                     .bind(old.id)
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
         };
@@ -311,9 +314,9 @@ impl PgApply for Delta<Attribute> {
     }
 }
 
-impl PgApply for Delta<Value> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-        match self {
+impl DeltaExecutor<Value> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Value>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 let row = ValueRow::from_value(&new)?;
                 sqlx::query(
@@ -328,7 +331,7 @@ impl PgApply for Delta<Value> {
                 .bind(row.actual)
                 .bind(row.index_float)
                 .bind(row.index_string)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
@@ -351,7 +354,7 @@ impl PgApply for Delta<Value> {
                 .bind(row.index_string)
                 .bind(row.entry_id)
                 .bind(row.attribute_id)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
@@ -360,7 +363,7 @@ impl PgApply for Delta<Value> {
                 )
                 .bind(old.entry_id)
                 .bind(old.attribute_id)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
         };

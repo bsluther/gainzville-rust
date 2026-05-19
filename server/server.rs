@@ -1,9 +1,11 @@
-use gv_core::{actions::Action, error::Result, mutators};
+use gv_core::{actions::Action, delta_executor::AnyDeltaExecutor, error::Result, mutators};
 
 use sqlx::PgPool;
 use tracing::instrument;
 
-use crate::{apply::PgApply, postgres_executor::PostgresQueryExecutor};
+use crate::{
+    postgres_delta_executor::PostgresDeltaExecutor, postgres_executor::PostgresQueryExecutor,
+};
 
 pub struct PostgresServer {
     pub pool: PgPool,
@@ -51,9 +53,11 @@ impl PostgresServer {
             .execute(&mut *tx)
             .await?;
 
+        let mut delta_executor = PostgresDeltaExecutor::new(&mut *tx);
         // Apply deltas.
         for delta in mx.changes {
-            delta.apply_delta(&mut tx).await?;
+            // delta.apply_delta(&mut tx).await?;
+            delta_executor.apply_any_delta(delta).await?;
         }
 
         // Commit the transaction.
@@ -70,7 +74,9 @@ pub mod tests {
     pub use super::*;
     pub use crate::postgres_executor::PostgresQueryExecutor;
     pub use gv_core::{SYSTEM_ACTOR_ID, actions::CreateActivity};
-    pub use gv_core::{models::activity::Activity, queries::FindActivityById, query_executor::QueryExecutor};
+    pub use gv_core::{
+        models::activity::Activity, queries::FindActivityById, query_executor::QueryExecutor,
+    };
     pub use uuid::Uuid;
 
     #[sqlx::test(migrations = "./migrations")]

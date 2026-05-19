@@ -1,7 +1,6 @@
-use sqlx::{Sqlite, Transaction};
-
 use gv_core::{
     delta::{AnyDelta, Delta},
+    delta_executor::{AnyDeltaExecutor, DeltaExecutor},
     error::Result,
     models::{
         activity::Activity,
@@ -11,44 +10,45 @@ use gv_core::{
         user::User,
     },
 };
+use sqlx::SqliteConnection;
 
-// TODO: update impls update all columns, even those that haven't changed. Fine for now, but could
-// be optimized.
-
-#[allow(async_fn_in_trait)]
-trait SqliteApply: Sized {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()>;
+pub struct SqliteDeltaExecutor<'c> {
+    conn: &'c mut SqliteConnection,
 }
-
-impl SqliteApply for AnyDelta {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
-        match self {
-            AnyDelta::Actor(delta) => delta.apply_delta(tx).await,
-            AnyDelta::User(delta) => delta.apply_delta(tx).await,
-            AnyDelta::Activity(delta) => delta.apply_delta(tx).await,
-            AnyDelta::Entry(delta) => delta.apply_delta(tx).await,
-            AnyDelta::Attribute(delta) => delta.apply_delta(tx).await,
-            AnyDelta::Value(delta) => delta.apply_delta(tx).await,
-        }
+impl<'c> SqliteDeltaExecutor<'c> {
+    pub fn new(conn: &'c mut SqliteConnection) -> Self {
+        SqliteDeltaExecutor { conn }
     }
 }
 
-impl SqliteApply for Delta<Actor> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
-        match self {
+impl AnyDeltaExecutor for SqliteDeltaExecutor<'_> {
+    async fn apply_any_delta(&mut self, delta: AnyDelta) -> Result<()> {
+        match delta {
+            AnyDelta::Actor(delta) => self.apply_delta(delta).await,
+            AnyDelta::User(delta) => self.apply_delta(delta).await,
+            AnyDelta::Activity(delta) => self.apply_delta(delta).await,
+            AnyDelta::Entry(delta) => self.apply_delta(delta).await,
+            AnyDelta::Attribute(delta) => self.apply_delta(delta).await,
+            AnyDelta::Value(delta) => self.apply_delta(delta).await,
+        }
+    }
+}
+impl DeltaExecutor<Actor> for SqliteDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Actor>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 sqlx::query("INSERT INTO actors (id, actor_kind, created_at) VALUES (?, ?, ?)")
                     .bind(new.actor_id)
                     .bind(new.actor_kind.to_string())
                     .bind(new.created_at.to_rfc3339())
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
             Delta::Update { .. } => {} // No-op
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM actors WHERE id = ?")
                     .bind(old.actor_id)
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
         };
@@ -56,15 +56,15 @@ impl SqliteApply for Delta<Actor> {
     }
 }
 
-impl SqliteApply for Delta<User> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
-        match self {
+impl DeltaExecutor<User> for SqliteDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<User>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 sqlx::query("INSERT INTO users (actor_id, username, email) VALUES (?, ?, ?)")
                     .bind(new.actor_id)
                     .bind(new.username.as_str())
                     .bind(new.email.as_str())
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
             Delta::Update { old, new } => {
@@ -78,13 +78,13 @@ impl SqliteApply for Delta<User> {
                 .bind(new.username.as_str())
                 .bind(new.email.as_str())
                 .bind(new.actor_id)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM users WHERE actor_id = ?")
                     .bind(old.actor_id)
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
         };
@@ -92,9 +92,9 @@ impl SqliteApply for Delta<User> {
     }
 }
 
-impl SqliteApply for Delta<Activity> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
-        match self {
+impl DeltaExecutor<Activity> for SqliteDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Activity>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 sqlx::query("INSERT INTO activities (id, owner_id, source_activity_id, name, description) VALUES (?, ?, ?, ?, ?)")
                     .bind(new.id)
@@ -102,7 +102,7 @@ impl SqliteApply for Delta<Activity> {
                     .bind(new.source_activity_id)
                     .bind(new.name.to_string())
                     .bind(new.description)
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
             Delta::Update { old, new } => {
@@ -113,13 +113,13 @@ impl SqliteApply for Delta<Activity> {
                     .bind(new.name.to_string())
                     .bind(new.description)
                     .bind(new.id)
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM activities WHERE id = ?")
                     .bind(old.id)
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
         };
@@ -127,9 +127,9 @@ impl SqliteApply for Delta<Activity> {
     }
 }
 
-impl SqliteApply for Delta<Entry> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
-        match self {
+impl DeltaExecutor<Entry> for SqliteDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Entry>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 sqlx::query(
                     r#"
@@ -163,7 +163,7 @@ impl SqliteApply for Delta<Entry> {
                 .bind(new.temporal.start().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.end().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.duration().map(|d| d as i64))
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
@@ -195,13 +195,13 @@ impl SqliteApply for Delta<Entry> {
                 .bind(new.temporal.end().map(|dt| dt.to_rfc3339()))
                 .bind(new.temporal.duration().map(|d| d as i64))
                 .bind(new.id)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM entries WHERE id = ?")
                     .bind(old.id)
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
         };
@@ -209,9 +209,9 @@ impl SqliteApply for Delta<Entry> {
     }
 }
 
-impl SqliteApply for Delta<Attribute> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
-        match self {
+impl DeltaExecutor<Attribute> for SqliteDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Attribute>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 let row = AttributeRow::from_attribute(&new)?;
                 sqlx::query(
@@ -222,7 +222,7 @@ impl SqliteApply for Delta<Attribute> {
                 .bind(row.name)
                 .bind(row.data_type)
                 .bind(row.config)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
@@ -236,13 +236,13 @@ impl SqliteApply for Delta<Attribute> {
                 .bind(row.data_type)
                 .bind(row.config)
                 .bind(row.id)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM attributes WHERE id = ?")
                     .bind(old.id)
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
         };
@@ -250,9 +250,9 @@ impl SqliteApply for Delta<Attribute> {
     }
 }
 
-impl SqliteApply for Delta<Value> {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
-        match self {
+impl DeltaExecutor<Value> for SqliteDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Value>) -> Result<()> {
+        match delta {
             Delta::Insert { new } => {
                 let row = ValueRow::from_value(&new)?;
                 sqlx::query(
@@ -267,7 +267,7 @@ impl SqliteApply for Delta<Value> {
                 .bind(row.actual)
                 .bind(row.index_float)
                 .bind(row.index_string)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
@@ -290,14 +290,14 @@ impl SqliteApply for Delta<Value> {
                 .bind(row.index_string)
                 .bind(row.entry_id)
                 .bind(row.attribute_id)
-                .execute(&mut **tx)
+                .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM attribute_values WHERE entry_id = ? AND attribute_id = ?")
                     .bind(old.entry_id)
                     .bind(old.attribute_id)
-                    .execute(&mut **tx)
+                    .execute(&mut *self.conn)
                     .await?;
             }
         };

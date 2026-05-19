@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use futures_core::Stream;
+use gv_core::delta_executor::AnyDeltaExecutor;
 use gv_core::error::DomainError;
 use gv_core::{
     actions::{Action, CreateActivity},
@@ -27,8 +28,8 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
+use crate::sqlite_delta_executor::SqliteDeltaExecutor;
 use crate::{
-    apply::SqliteApply,
     query_store::{QueryStore, QuerySubscription},
     sqlite_executor::SqliteQueryExecutor,
 };
@@ -125,10 +126,13 @@ impl SqliteClient {
 
         info!("delta count = {}", mx.changes.len());
         // Apply deltas.
+        // for delta in mx.changes {
+        //     delta.apply_delta(&mut tx).await?;
+        // }
+        let mut delta_executor = SqliteDeltaExecutor::new(&mut *tx);
         for delta in mx.changes {
-            delta.apply_delta(&mut tx).await?;
+            delta_executor.apply_any_delta(delta).await?;
         }
-
         // Commit the transaction.
         tx.commit().await?;
 
@@ -330,8 +334,8 @@ impl SqliteClient {
 
 pub mod tests {
     pub use super::*;
-    pub use gv_core::queries::FindActivityById;
     pub use gv_core::SYSTEM_ACTOR_ID;
+    pub use gv_core::queries::FindActivityById;
     pub use uuid::Uuid;
 
     #[sqlx::test(migrations = "./migrations")]

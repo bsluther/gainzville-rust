@@ -104,9 +104,9 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 
     var icon: String {
         switch self {
-        case .log:      return "list.bullet.rectangle"
-        case .library:  return "books.vertical"
-        case .settings: return "gear"
+        case .log:      return "list.dash.header.rectangle"
+        case .library:  return "rectangle.portrait.on.rectangle.portrait.angled"
+        case .settings: return "gearshape"
         }
     }
 

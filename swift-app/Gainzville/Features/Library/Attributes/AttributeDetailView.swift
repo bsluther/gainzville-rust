@@ -4,16 +4,29 @@ struct AttributeDetailView: View {
     let attribute: FfiAttribute
 
     var body: some View {
-        List {
-            Section("Type") {
-                LabeledContent("Kind", value: attribute.config.typeName)
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: GvSpacing.xl) {
+                GvDetailSection(title: "Name", actionIcon: "pencil", onAction: {}) {
+                    Text(attribute.name)
+                        .font(.gvBody)
+                        .foregroundStyle(Color.gvTextPrimary)
+                }
 
-            Section("Info") {
-                LabeledContent("ID", value: attribute.id)
-                LabeledContent("Owner", value: attribute.ownerId)
+                GvDetailSection(title: "Type") {
+                    Text(attribute.config.typeName)
+                        .font(.gvBody)
+                        .foregroundStyle(Color.gvTextPrimary)
+                }
+
+                GvDetailSection(title: "Config") {
+                    Text("Coming soon")
+                        .font(.gvBody)
+                        .foregroundStyle(Color.gvTextSecondary)
+                }
             }
+            .padding(GvSpacing.xl)
         }
+        .background(Color.gvBackground)
         .navigationTitle(attribute.name)
     }
 }

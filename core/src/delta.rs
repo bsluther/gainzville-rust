@@ -13,10 +13,16 @@ pub enum Delta<M> {
     Delete { old: M },
 }
 
+impl<T> Delta<T> {
+    pub fn insert(new: T) -> Self {
+        Delta::Insert { new }
+    }
+}
+
 // If we need to the PK for sync logic, this would be a good place to implement. Need an Id type of
 // some sort to represent both scalar and composite keys (values have a composite PK).
 #[derive(Debug, Clone)]
-pub enum ModelDelta {
+pub enum AnyDelta {
     User(Delta<User>),
     Actor(Delta<Actor>),
     Activity(Delta<Activity>),
@@ -25,34 +31,34 @@ pub enum ModelDelta {
     Value(Delta<Value>),
 }
 
-/// Convert Delta<T> --> ModelDelta::T.
-impl From<Delta<User>> for ModelDelta {
+/// Convert Delta<T> --> AnyDelta::T.
+impl From<Delta<User>> for AnyDelta {
     fn from(d: Delta<User>) -> Self {
-        ModelDelta::User(d)
+        AnyDelta::User(d)
     }
 }
-impl From<Delta<Actor>> for ModelDelta {
+impl From<Delta<Actor>> for AnyDelta {
     fn from(d: Delta<Actor>) -> Self {
-        ModelDelta::Actor(d)
+        AnyDelta::Actor(d)
     }
 }
-impl From<Delta<Activity>> for ModelDelta {
+impl From<Delta<Activity>> for AnyDelta {
     fn from(d: Delta<Activity>) -> Self {
-        ModelDelta::Activity(d)
+        AnyDelta::Activity(d)
     }
 }
-impl From<Delta<Entry>> for ModelDelta {
+impl From<Delta<Entry>> for AnyDelta {
     fn from(d: Delta<Entry>) -> Self {
-        ModelDelta::Entry(d)
+        AnyDelta::Entry(d)
     }
 }
-impl From<Delta<Attribute>> for ModelDelta {
+impl From<Delta<Attribute>> for AnyDelta {
     fn from(d: Delta<Attribute>) -> Self {
-        ModelDelta::Attribute(d)
+        AnyDelta::Attribute(d)
     }
 }
-impl From<Delta<Value>> for ModelDelta {
+impl From<Delta<Value>> for AnyDelta {
     fn from(d: Delta<Value>) -> Self {
-        ModelDelta::Value(d)
+        AnyDelta::Value(d)
     }
 }

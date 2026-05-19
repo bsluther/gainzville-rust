@@ -6,7 +6,7 @@ use crate::{
         Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
         DeleteEntryRecursive, MoveEntry, UpdateAttributeValue, UpdateEntryCompletion, ValueField,
     },
-    delta::{Delta, ModelDelta},
+    delta::{AnyDelta, Delta},
     error::{DomainError, Result},
     models::{
         actor::{Actor, ActorKind},
@@ -32,7 +32,7 @@ pub struct Mutation {
     pub id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub action: Action,
-    pub changes: Vec<ModelDelta>,
+    pub changes: Vec<AnyDelta>,
 }
 
 pub async fn create_user(
@@ -271,13 +271,13 @@ pub async fn delete_entry_recursive(
     }
 
     // Create delete deltas for entry and descendants.
-    let entry_deltas: Vec<ModelDelta> = subtree
+    let entry_deltas: Vec<AnyDelta> = subtree
         .into_iter()
         .map(|e| Delta::Delete { old: e }.into())
         .collect();
 
     // Create delete deltas for entry and descendants attribute values.
-    let attr_value_deltas: Vec<ModelDelta> = subtree_attr_values
+    let attr_value_deltas: Vec<AnyDelta> = subtree_attr_values
         .into_iter()
         .map(|v| Delta::Delete { old: v }.into())
         .collect();

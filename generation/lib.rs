@@ -1,40 +1,21 @@
 use chrono::{DateTime, Duration, Utc};
-use gv_core::{
-    models::{actor::Actor, attribute::Attribute, entry::Entry},
-    validation::{Email, Username},
-};
-use gv_server::server::tests::Activity;
+use gv_core::validation::{Email, Username};
 use rand::{Rng, rand_core};
 use rand_distr::{Distribution, Normal};
 use uuid::Uuid;
+
+use crate::model::Model;
 
 pub mod actions;
 pub mod activity;
 pub mod attribute;
 pub mod entry;
+pub mod model;
 pub mod samples;
 
 pub trait GenerationContext {
     fn opts(&self) -> &Opts;
     fn model(&self) -> &Model;
-}
-
-pub struct Model {
-    pub actors: Vec<Actor>,
-    pub entries: Vec<Entry>,
-    pub activities: Vec<Activity>,
-    pub attributes: Vec<Attribute>,
-}
-
-impl Model {
-    pub fn empty() -> Self {
-        Model {
-            actors: Vec::new(),
-            entries: Vec::new(),
-            activities: Vec::new(),
-            attributes: Vec::new(),
-        }
-    }
 }
 
 /// Options for configuring how values are generated.

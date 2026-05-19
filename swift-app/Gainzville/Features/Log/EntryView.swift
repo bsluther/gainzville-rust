@@ -235,13 +235,14 @@ private struct EntryFooter: View {
                 Spacer()
                 Button { isCreatePresented = true } label: {
                     Label("Entry", systemImage: "plus")
-                        .font(.gvBody)
+                        .font(.attrLabel)
+                        .fontWeight(.semibold)
                         .foregroundStyle(Color.gvTextSecondary)
-                        .padding(.horizontal, GvSpacing.lg)
+                        .padding(.horizontal, GvSpacing.md)
                         .padding(.vertical, GvSpacing.md)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.gvNeutral700, lineWidth: 1.5)
+                            RoundedRectangle(cornerRadius: 2)
+                                .stroke(Color.gvNeutral600, lineWidth: 1.5)
                         )
                 }
                 .buttonStyle(.plain)

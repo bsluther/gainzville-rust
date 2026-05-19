@@ -21,6 +21,8 @@ uuid = { workspace = true }
 fractional_index = { workspace = true }
 anarchist-readable-name-generator-lib = { workspace = true }
 chrono = { workspace = true }
+rustc-hash = { workspace = true }
+anyhow = { workspace = true }
 
 # Binary dependencies
 tokio = { workspace = true }

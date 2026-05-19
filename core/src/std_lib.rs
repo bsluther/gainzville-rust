@@ -63,7 +63,6 @@ impl StandardLibrary {
                     "10".to_string(),
                     "10+".to_string(),
                     "11-".to_string(),
-                    "11-".to_string(),
                     "11".to_string(),
                     "11+".to_string(),
                     "12-".to_string(),

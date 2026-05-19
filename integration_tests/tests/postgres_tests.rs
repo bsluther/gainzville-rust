@@ -1,13 +1,16 @@
 use fractional_index::FractionalIndex;
 use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
 use gv_core::{
-    actions::{Action, CreateActivity, CreateEntry, CreateUser, MoveEntry},
+    actions::{Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, MoveEntry},
+    delta::Delta,
     models::{
         activity::Activity,
+        attribute::Attribute,
         entry::{Entry, Position, Temporal},
     },
     queries::{AllActivities, AllActorIds, AllAttributes, AllEntries},
     query_executor::QueryExecutor,
+    std_lib,
 };
 use gv_server::{postgres_executor::PostgresQueryExecutor, server::PostgresServer};
 use rand::SeedableRng;
@@ -138,7 +141,7 @@ async fn test_arbitrary_actions(pool: PgPool) {
     let context = SimulationContext::default();
 
     for _ in 0..1_000 {
-        let (actor_ids, activities, entries, attributes) = {
+        let (actor_ids, activities, entries, mut attributes) = {
             let mut connection = server.pool.acquire().await.unwrap();
             let mut executor = PostgresQueryExecutor::new(&mut *connection);
             let actor_ids = executor.execute(AllActorIds {}).await.unwrap();
@@ -147,6 +150,29 @@ async fn test_arbitrary_actions(pool: PgPool) {
             let attributes = executor.execute(AllAttributes {}).await.unwrap();
             (actor_ids, activities, entries, attributes)
         };
+
+        // Temporary workaround: currently need every actor to have at least one attribute.
+        // Check if each actor has no attributes, if not insert the std_lib.
+        for actor_id in actor_ids.clone() {
+            if !attributes.iter().any(|attr| attr.owner_id == actor_id) {
+                let std_attrs: Vec<Attribute> = std_lib::StandardLibrary::attributes()
+                    .into_iter()
+                    .map(|attr| Attribute {
+                        owner_id: actor_id,
+                        ..attr
+                    })
+                    .collect();
+                for std_attr in std_attrs.iter().cloned() {
+                    let create_attr_action = CreateAttribute {
+                        actor_id,
+                        attribute: std_attr,
+                    };
+                    let _result = server.run_action(create_attr_action.into()).await;
+                }
+                attributes.extend(std_attrs);
+            }
+        }
+
         let action = Action::arbitrary_from(
             &mut rng,
             &context,
