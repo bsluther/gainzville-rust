@@ -757,3 +757,21 @@ Stage 4 handoff:
   use. The `[Remote]` and `custom_type!` machinery the Stage 4 plan
   relies on is supported on this version per Stage 1's hypothesis;
   Stage 3 didn't have occasion to verify it empirically.
+
+- **Watch for partially-overridden trait surfaces on generic wrappers.**
+  A late-Stage-3 regression (commit `423a727`) traced back to
+  `*Column<DB>` impls only overriding `Type::type_info()` and inheriting
+  the default `compatible()` (strict equality). sqlx's `DateTime<Utc>`
+  overrides `compatible()` to accept multiple SQL types — TEXT in
+  particular, since SQLite stores datetimes as TEXT despite the
+  canonical `type_info` being DATETIME. The wrapper silently became
+  stricter than its inner type, every `AllEntries` decode failed, and
+  Swift's `try?` swallowed the error so the symptom was just "no
+  entries visible." Stage 4's `custom_type!` declarations have an
+  analogous shape (wrap a Rust type for cross-boundary conversion); if
+  uniffi's custom_type macinery has any defaulted methods, delegate
+  *all* of them to the inner type, not just the one mentioned in the
+  example. Also: the leaf round-trip helper in
+  `gv_sql/tests/columns_sqlite.rs` now uses `try_get` (the strict
+  variant `#[derive(FromRow)]` generates) so this class of bug is
+  caught at the leaf level next time.
