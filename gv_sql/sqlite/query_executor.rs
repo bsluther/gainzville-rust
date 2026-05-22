@@ -351,11 +351,11 @@ impl QueryExecutor<FindValueByKey> for SqliteQueryExecutor<'_> {
         &mut self,
         query: FindValueByKey,
     ) -> Result<<FindValueByKey as Query>::Response> {
-        sqlx::query_as::<_, ValueRow>(
+        sqlx::query_as::<_, crate::rows::ValueRow>(
             "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id = ? AND attribute_id = ?",
         )
-        .bind(query.entry_id)
-        .bind(query.attribute_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
+        .bind(crate::columns::UuidColumn(query.attribute_id))
         .fetch_optional(&mut *self.conn)
         .await?
         .map(|row| row.to_value())
@@ -368,10 +368,10 @@ impl QueryExecutor<FindValuesForEntry> for SqliteQueryExecutor<'_> {
         &mut self,
         query: FindValuesForEntry,
     ) -> Result<<FindValuesForEntry as Query>::Response> {
-        sqlx::query_as::<_, ValueRow>(
+        sqlx::query_as::<_, crate::rows::ValueRow>(
             "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE entry_id = ?",
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
@@ -393,11 +393,11 @@ impl QueryExecutor<FindValuesForEntries> for SqliteQueryExecutor<'_> {
         );
         let mut separated = builder.separated(", ");
         for id in &query.entry_ids {
-            separated.push_bind(*id);
+            separated.push_bind(crate::columns::UuidColumn(*id));
         }
         builder.push(")");
         builder
-            .build_query_as::<ValueRow>()
+            .build_query_as::<crate::rows::ValueRow>()
             .fetch_all(&mut *self.conn)
             .await?
             .into_iter()
