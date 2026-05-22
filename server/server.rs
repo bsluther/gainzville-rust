@@ -3,9 +3,7 @@ use gv_core::{actions::Action, delta_executor::AnyDeltaExecutor, error::Result, 
 use sqlx::PgPool;
 use tracing::instrument;
 
-use crate::{
-    postgres_delta_executor::PostgresDeltaExecutor, postgres_executor::PostgresQueryExecutor,
-};
+use gv_sql::postgres::{PostgresDeltaExecutor, PostgresQueryExecutor};
 
 pub struct PostgresServer {
     pub pool: PgPool,
@@ -75,14 +73,14 @@ impl PostgresServer {
 
 pub mod tests {
     pub use super::*;
-    pub use crate::postgres_executor::PostgresQueryExecutor;
+    pub use gv_sql::postgres::PostgresQueryExecutor;
     pub use gv_core::{SYSTEM_ACTOR_ID, actions::CreateScalarActivity};
     pub use gv_core::{
         models::activity::Activity, queries::FindActivityById, query_executor::QueryExecutor,
     };
     pub use uuid::Uuid;
 
-    #[sqlx::test(migrations = "./migrations")]
+    #[sqlx::test(migrations = "../gv_sql/postgres/migrations")]
     fn test_create_activity(pool: PgPool) {
         let postgres_server = PostgresServer { pool };
 

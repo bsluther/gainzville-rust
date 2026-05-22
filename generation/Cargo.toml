@@ -14,6 +14,7 @@ path = "bin/sim_sandbox.rs"
 # Core dependency
 gv_core = { path = "../core" }
 gv_server = { path = "../server" }
+gv_sql = { path = "../gv_sql" }
 
 # Workspace deps
 rand = { workspace = true }

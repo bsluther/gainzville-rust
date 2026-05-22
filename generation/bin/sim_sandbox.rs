@@ -7,7 +7,8 @@ use gv_core::{
     queries::AllActorIds,
     query_executor::QueryExecutor,
 };
-use gv_server::{postgres_executor::PostgresQueryExecutor, server::PostgresServer};
+use gv_server::server::PostgresServer;
+use gv_sql::postgres::PostgresQueryExecutor;
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]

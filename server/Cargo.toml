@@ -17,6 +17,7 @@ path = "tests/sandbox_test.rs"
 [dependencies]
 # Core dependency
 gv_core = { path = "../core" }
+gv_sql = { path = "../gv_sql", default-features = false, features = ["postgres"] }
 
 # Workspace deps
 sqlx = { workspace = true }
