@@ -1,13 +1,6 @@
 use gv_core::{
     error::{DomainError, Result},
-    models::{
-        activity::Activity,
-        attribute::{AttributeRow, ValueRow},
-        attribute_pair::AttributePairRow,
-        entry::EntryRow,
-        entry_join::{EntryJoin, EntryJoinRow},
-        user::User,
-    },
+    models::{activity::Activity, user::User},
     queries::*,
     query_executor::QueryExecutor,
 };
@@ -123,7 +116,7 @@ impl QueryExecutor<AllEntries> for SqliteQueryExecutor<'_> {
         &mut self,
         _query: AllEntries,
     ) -> Result<<AllEntries as Query>::Response> {
-        sqlx::query_as::<_, EntryRow>("SELECT * FROM entries")
+        sqlx::query_as::<_, crate::rows::EntryRow>("SELECT * FROM entries")
             .fetch_all(&mut *self.conn)
             .await?
             .into_iter()
@@ -137,7 +130,7 @@ impl QueryExecutor<EntriesRootedInTimeInterval> for SqliteQueryExecutor<'_> {
         &mut self,
         query: EntriesRootedInTimeInterval,
     ) -> Result<<EntriesRootedInTimeInterval as Query>::Response> {
-        sqlx::query_as::<sqlx::Sqlite, EntryRow>(
+        sqlx::query_as::<sqlx::Sqlite, crate::rows::EntryRow>(
             r#"
             WITH RECURSIVE forest AS (
                 SELECT * FROM entries e
@@ -150,8 +143,8 @@ impl QueryExecutor<EntriesRootedInTimeInterval> for SqliteQueryExecutor<'_> {
             SELECT * FROM forest
             "#,
         )
-        .bind(query.from)
-        .bind(query.to)
+        .bind(crate::columns::DateTimeColumn(query.from))
+        .bind(crate::columns::DateTimeColumn(query.to))
         .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
@@ -180,7 +173,7 @@ impl QueryExecutor<FindAncestors> for SqliteQueryExecutor<'_> {
             ORDER BY dist
             "#,
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
         .await?;
 
@@ -215,14 +208,14 @@ impl QueryExecutor<FindEntryById> for SqliteQueryExecutor<'_> {
         &mut self,
         query: FindEntryById,
     ) -> Result<<FindEntryById as Query>::Response> {
-        sqlx::query_as::<_, EntryRow>(
+        sqlx::query_as::<_, crate::rows::EntryRow>(
             r#"
             SELECT id, owner_id, activity_id, name, parent_id, frac_index, is_template, display_as_sets, is_sequence, is_complete, start_time, end_time, duration_ms
             FROM entries
             WHERE id = ?
             "#,
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_optional(&mut *self.conn)
         .await?
         .map(|e| e.to_entry())
@@ -235,7 +228,7 @@ impl QueryExecutor<FindEntryJoinById> for SqliteQueryExecutor<'_> {
         &mut self,
         query: FindEntryJoinById,
     ) -> Result<<FindEntryJoinById as Query>::Response> {
-        let row = sqlx::query_as::<_, EntryJoinRow>(
+        let row = sqlx::query_as::<_, crate::rows::EntryJoinRow>(
             r#"
             SELECT
                 e.id, e.activity_id, e.owner_id, e.name, e.parent_id, e.frac_index,
@@ -249,7 +242,7 @@ impl QueryExecutor<FindEntryJoinById> for SqliteQueryExecutor<'_> {
             WHERE e.id = ?
             "#,
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_optional(&mut *self.conn)
         .await?;
 
@@ -261,7 +254,7 @@ impl QueryExecutor<FindEntryJoinById> for SqliteQueryExecutor<'_> {
                         entry_id: query.entry_id,
                     })
                     .await?;
-                Ok(Some(EntryJoin::from_row(row, attributes)?))
+                Ok(Some(row.into_entry_join(attributes)?))
             }
         }
     }
@@ -272,7 +265,7 @@ impl QueryExecutor<FindDescendants> for SqliteQueryExecutor<'_> {
         &mut self,
         query: FindDescendants,
     ) -> Result<<FindDescendants as Query>::Response> {
-        sqlx::query_as::<sqlx::Sqlite, EntryRow>(
+        sqlx::query_as::<sqlx::Sqlite, crate::rows::EntryRow>(
             r#"
             WITH RECURSIVE tree AS (
                 SELECT * FROM entries e
@@ -284,7 +277,7 @@ impl QueryExecutor<FindDescendants> for SqliteQueryExecutor<'_> {
             SELECT * FROM tree
             "#,
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
@@ -411,7 +404,7 @@ impl QueryExecutor<FindAttributePairsForEntry> for SqliteQueryExecutor<'_> {
         &mut self,
         query: FindAttributePairsForEntry,
     ) -> Result<<FindAttributePairsForEntry as Query>::Response> {
-        sqlx::query_as::<_, AttributePairRow>(
+        sqlx::query_as::<_, crate::rows::AttributePairRow>(
             r#"
             SELECT
                 a.id as attr_id, a.owner_id as attr_owner_id,
@@ -424,7 +417,7 @@ impl QueryExecutor<FindAttributePairsForEntry> for SqliteQueryExecutor<'_> {
             WHERE v.entry_id = ?
             "#,
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
         .await?
         .into_iter()

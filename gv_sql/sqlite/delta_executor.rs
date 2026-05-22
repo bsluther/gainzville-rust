@@ -5,7 +5,7 @@ use gv_core::{
     models::{
         activity::Activity,
         actor::Actor,
-        attribute::{Attribute, AttributeRow, Value, ValueRow},
+        attribute::{Attribute, Value},
         entry::Entry,
         user::User,
     },
@@ -137,6 +137,7 @@ impl DeltaExecutor<Entry> for SqliteDeltaExecutor<'_> {
     async fn apply_delta(&mut self, delta: Delta<Entry>) -> Result<()> {
         match delta {
             Delta::Insert { new } => {
+                let row = crate::rows::EntryRow::from_entry(&new);
                 sqlx::query(
                     r#"
                     INSERT INTO entries (
@@ -156,24 +157,25 @@ impl DeltaExecutor<Entry> for SqliteDeltaExecutor<'_> {
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     "#,
                 )
-                .bind(new.id)
-                .bind(new.activity_id)
-                .bind(new.owner_id)
-                .bind(new.name.as_deref())
-                .bind(new.parent_id())
-                .bind(new.frac_index().map(|f| f.to_string()))
-                .bind(new.is_template)
-                .bind(new.display_as_sets)
-                .bind(new.is_sequence)
-                .bind(new.is_complete)
-                .bind(new.temporal.start().map(|dt| dt.to_rfc3339()))
-                .bind(new.temporal.end().map(|dt| dt.to_rfc3339()))
-                .bind(new.temporal.duration().map(|d| d as i64))
+                .bind(row.id)
+                .bind(row.activity_id)
+                .bind(row.owner_id)
+                .bind(row.name)
+                .bind(row.parent_id)
+                .bind(row.frac_index)
+                .bind(row.is_template)
+                .bind(row.display_as_sets)
+                .bind(row.is_sequence)
+                .bind(row.is_complete)
+                .bind(row.start_time)
+                .bind(row.end_time)
+                .bind(row.duration_ms)
                 .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
+                let row = crate::rows::EntryRow::from_entry(&new);
                 sqlx::query(
                     r#"
                     UPDATE entries SET
@@ -190,23 +192,23 @@ impl DeltaExecutor<Entry> for SqliteDeltaExecutor<'_> {
                     WHERE id = ?
                     "#,
                 )
-                .bind(new.activity_id)
-                .bind(new.name.as_deref())
-                .bind(new.parent_id())
-                .bind(new.frac_index().map(|f| f.to_string()))
-                .bind(new.display_as_sets)
-                .bind(new.is_sequence)
-                .bind(new.is_complete)
-                .bind(new.temporal.start().map(|dt| dt.to_rfc3339()))
-                .bind(new.temporal.end().map(|dt| dt.to_rfc3339()))
-                .bind(new.temporal.duration().map(|d| d as i64))
-                .bind(new.id)
+                .bind(row.activity_id)
+                .bind(row.name)
+                .bind(row.parent_id)
+                .bind(row.frac_index)
+                .bind(row.display_as_sets)
+                .bind(row.is_sequence)
+                .bind(row.is_complete)
+                .bind(row.start_time)
+                .bind(row.end_time)
+                .bind(row.duration_ms)
+                .bind(row.id)
                 .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM entries WHERE id = ?")
-                    .bind(old.id)
+                    .bind(crate::columns::UuidColumn(old.id))
                     .execute(&mut *self.conn)
                     .await?;
             }

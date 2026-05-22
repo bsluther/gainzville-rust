@@ -8,7 +8,7 @@ use gv_core::{
     models::{
         activity::Activity,
         actor::Actor,
-        attribute::{Attribute, AttributeRow, Value, ValueRow},
+        attribute::{Attribute, Value},
         entry::Entry,
         user::User,
     },
@@ -188,6 +188,7 @@ impl DeltaExecutor<Entry> for PostgresDeltaExecutor<'_> {
     async fn apply_delta(&mut self, delta: Delta<Entry>) -> Result<()> {
         match delta {
             Delta::Insert { new } => {
+                let row = crate::rows::EntryRow::from_entry(&new);
                 sqlx::query!(
                     r#"
                     INSERT INTO entries (
@@ -207,25 +208,26 @@ impl DeltaExecutor<Entry> for PostgresDeltaExecutor<'_> {
                     )
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                     "#,
-                    new.id,
-                    new.activity_id,
-                    new.owner_id,
-                    new.name.as_deref(),
-                    new.parent_id(),
-                    new.frac_index().map(|f| f.to_string()),
-                    new.is_template,
-                    new.display_as_sets,
-                    new.is_sequence,
-                    new.is_complete,
-                    new.temporal.start(),
-                    new.temporal.end(),
-                    new.temporal.duration().map(|d| d as i64)
+                    row.id as _,
+                    row.activity_id as _,
+                    row.owner_id as _,
+                    row.name,
+                    row.parent_id as _,
+                    row.frac_index as _,
+                    row.is_template,
+                    row.display_as_sets,
+                    row.is_sequence,
+                    row.is_complete,
+                    row.start_time as _,
+                    row.end_time as _,
+                    row.duration_ms,
                 )
                 .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
+                let row = crate::rows::EntryRow::from_entry(&new);
                 sqlx::query!(
                     r#"
                     UPDATE entries
@@ -242,17 +244,17 @@ impl DeltaExecutor<Entry> for PostgresDeltaExecutor<'_> {
                         duration_ms = $10
                     WHERE id = $11
                     "#,
-                    new.activity_id,
-                    new.name.as_deref(),
-                    new.parent_id(),
-                    new.frac_index().map(|f| f.to_string()),
-                    new.display_as_sets,
-                    new.is_sequence,
-                    new.is_complete,
-                    new.temporal.start(),
-                    new.temporal.end(),
-                    new.temporal.duration().map(|d| d as i64),
-                    new.id
+                    row.activity_id as _,
+                    row.name,
+                    row.parent_id as _,
+                    row.frac_index as _,
+                    row.display_as_sets,
+                    row.is_sequence,
+                    row.is_complete,
+                    row.start_time as _,
+                    row.end_time as _,
+                    row.duration_ms,
+                    row.id as _,
                 )
                 .execute(&mut *self.conn)
                 .await?;
@@ -262,7 +264,7 @@ impl DeltaExecutor<Entry> for PostgresDeltaExecutor<'_> {
                     r#"
                     DELETE FROM entries WHERE id = $1
                     "#,
-                    old.id
+                    crate::columns::UuidColumn(old.id) as _,
                 )
                 .execute(&mut *self.conn)
                 .await?;

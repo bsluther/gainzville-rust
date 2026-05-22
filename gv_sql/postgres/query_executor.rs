@@ -1,13 +1,6 @@
 use gv_core::{
     error::{DomainError, Result},
-    models::{
-        activity::Activity,
-        attribute::{AttributeRow, ValueRow},
-        attribute_pair::AttributePairRow,
-        entry::EntryRow,
-        entry_join::{EntryJoin, EntryJoinRow},
-        user::User,
-    },
+    models::{activity::Activity, user::User},
     queries::*,
     query_executor::QueryExecutor,
 };
@@ -116,7 +109,7 @@ impl QueryExecutor<AllActivities> for PostgresQueryExecutor<'_> {
 
 impl QueryExecutor<AllEntries> for PostgresQueryExecutor<'_> {
     async fn execute(&mut self, _query: AllEntries) -> Result<<AllEntries as Query>::Response> {
-        sqlx::query_as::<_, EntryRow>("SELECT * FROM entries")
+        sqlx::query_as::<_, crate::rows::EntryRow>("SELECT * FROM entries")
             .fetch_all(&mut *self.conn)
             .await?
             .into_iter()
@@ -130,7 +123,7 @@ impl QueryExecutor<EntriesRootedInTimeInterval> for PostgresQueryExecutor<'_> {
         &mut self,
         query: EntriesRootedInTimeInterval,
     ) -> Result<<EntriesRootedInTimeInterval as Query>::Response> {
-        sqlx::query_as::<sqlx::Postgres, EntryRow>(
+        sqlx::query_as::<sqlx::Postgres, crate::rows::EntryRow>(
             r#"
             WITH RECURSIVE forest AS (
                 SELECT * FROM entries e
@@ -143,8 +136,8 @@ impl QueryExecutor<EntriesRootedInTimeInterval> for PostgresQueryExecutor<'_> {
             SELECT * FROM forest
             "#,
         )
-        .bind(query.from)
-        .bind(query.to)
+        .bind(crate::columns::DateTimeColumn(query.from))
+        .bind(crate::columns::DateTimeColumn(query.to))
         .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
@@ -173,7 +166,7 @@ impl QueryExecutor<FindAncestors> for PostgresQueryExecutor<'_> {
             ORDER BY dist
             "#,
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
         .await?;
 
@@ -212,14 +205,14 @@ impl QueryExecutor<FindEntryById> for PostgresQueryExecutor<'_> {
         &mut self,
         query: FindEntryById,
     ) -> Result<<FindEntryById as Query>::Response> {
-        sqlx::query_as::<_, EntryRow>(
+        sqlx::query_as::<_, crate::rows::EntryRow>(
             r#"
             SELECT id, owner_id, activity_id, name, parent_id, frac_index, is_template, display_as_sets, is_sequence, is_complete, start_time, end_time, duration_ms
             FROM entries
             WHERE id = $1
             "#,
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_optional(&mut *self.conn)
         .await?
         .map(|e| e.to_entry())
@@ -232,7 +225,7 @@ impl QueryExecutor<FindEntryJoinById> for PostgresQueryExecutor<'_> {
         &mut self,
         query: FindEntryJoinById,
     ) -> Result<<FindEntryJoinById as Query>::Response> {
-        let row = sqlx::query_as::<_, EntryJoinRow>(
+        let row = sqlx::query_as::<_, crate::rows::EntryJoinRow>(
             r#"
             SELECT
                 e.id, e.activity_id, e.owner_id, e.name, e.parent_id, e.frac_index,
@@ -246,7 +239,7 @@ impl QueryExecutor<FindEntryJoinById> for PostgresQueryExecutor<'_> {
             WHERE e.id = $1
             "#,
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_optional(&mut *self.conn)
         .await?;
 
@@ -258,7 +251,7 @@ impl QueryExecutor<FindEntryJoinById> for PostgresQueryExecutor<'_> {
                         entry_id: query.entry_id,
                     })
                     .await?;
-                Ok(Some(EntryJoin::from_row(row, attributes)?))
+                Ok(Some(row.into_entry_join(attributes)?))
             }
         }
     }
@@ -269,7 +262,7 @@ impl QueryExecutor<FindDescendants> for PostgresQueryExecutor<'_> {
         &mut self,
         query: FindDescendants,
     ) -> Result<<FindDescendants as Query>::Response> {
-        sqlx::query_as::<sqlx::Postgres, EntryRow>(
+        sqlx::query_as::<sqlx::Postgres, crate::rows::EntryRow>(
             r#"
             WITH RECURSIVE tree AS (
                 SELECT * FROM entries e
@@ -281,7 +274,7 @@ impl QueryExecutor<FindDescendants> for PostgresQueryExecutor<'_> {
             SELECT * FROM tree
             "#,
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
@@ -402,7 +395,7 @@ impl QueryExecutor<FindAttributePairsForEntry> for PostgresQueryExecutor<'_> {
         &mut self,
         query: FindAttributePairsForEntry,
     ) -> Result<<FindAttributePairsForEntry as Query>::Response> {
-        sqlx::query_as::<_, AttributePairRow>(
+        sqlx::query_as::<_, crate::rows::AttributePairRow>(
             r#"
             SELECT
                 a.id as attr_id, a.owner_id as attr_owner_id,
@@ -415,7 +408,7 @@ impl QueryExecutor<FindAttributePairsForEntry> for PostgresQueryExecutor<'_> {
             WHERE v.entry_id = $1
             "#,
         )
-        .bind(query.entry_id)
+        .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
         .await?
         .into_iter()
