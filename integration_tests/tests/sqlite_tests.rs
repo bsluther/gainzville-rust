@@ -1,5 +1,6 @@
 use fractional_index::FractionalIndex;
-use gv_client::{client::SqliteClient, sqlite_executor::SqliteQueryExecutor};
+use gv_client::client::SqliteClient;
+use gv_sql::sqlite::SqliteQueryExecutor;
 use gv_core::{
     SYSTEM_ACTOR_ID,
     actions::{CreateAttribute, CreateEntry, CreateValue},
@@ -15,7 +16,7 @@ use gv_core::{
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "../client/migrations")]
+#[sqlx::test(migrations = "../gv_sql/sqlite/migrations")]
 async fn test_find_descendants(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
 
@@ -75,7 +76,7 @@ async fn test_find_descendants(pool: SqlitePool) {
     assert_eq!(b_descs.len(), 1);
 }
 
-#[sqlx::test(migrations = "../client/migrations")]
+#[sqlx::test(migrations = "../gv_sql/sqlite/migrations")]
 async fn test_create_attribute_and_value(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
 

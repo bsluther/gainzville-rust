@@ -11,7 +11,7 @@ use gv_core::{
 use sqlx::SqlitePool;
 use tokio::sync::broadcast;
 
-use crate::sqlite_executor::SqliteQueryExecutor;
+use gv_sql::sqlite::SqliteQueryExecutor;
 
 type QueryCache = Arc<Mutex<HashMap<AnyQuery, AnyQueryResponse>>>;
 

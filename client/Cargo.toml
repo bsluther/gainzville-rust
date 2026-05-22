@@ -13,6 +13,7 @@ path = "tests/tests.rs"
 [dependencies]
 # Core dependency
 gv_core = { path = "../core" }
+gv_sql = { path = "../gv_sql", default-features = false, features = ["sqlite"] }
 futures-core = "0.3"
 async-stream = "0.3"
 

@@ -10,6 +10,7 @@ edition = "2024"
 gv_core = { path = "../core" }
 gv_server = { path = "../server" }
 gv_client = { path = "../client" }
+gv_sql = { path = "../gv_sql" }
 generation = { path = "../generation" }
 sqlx = { workspace = true }
 tracing = { workspace = true }

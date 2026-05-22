@@ -28,11 +28,9 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use crate::sqlite_delta_executor::SqliteDeltaExecutor;
-use crate::{
-    query_store::{QueryStore, QuerySubscription},
-    sqlite_executor::SqliteQueryExecutor,
-};
+use gv_sql::sqlite::{SqliteDeltaExecutor, SqliteQueryExecutor};
+
+use crate::query_store::{QueryStore, QuerySubscription};
 
 #[derive(Debug, Clone)]
 pub struct SqliteClient {
@@ -75,7 +73,7 @@ impl SqliteClient {
     /// Run migrations on the database. Safe to call multiple times - sqlx tracks which migrations
     /// have already been applied.
     async fn run_migrations(&self) -> Result<()> {
-        sqlx::migrate!("./migrations")
+        sqlx::migrate!("../gv_sql/sqlite/migrations")
             .run(&self.pool)
             .await
             .map_err(|e| gv_core::error::DomainError::Other(e.to_string()))
@@ -341,7 +339,7 @@ pub mod tests {
     pub use gv_core::queries::FindActivityById;
     pub use uuid::Uuid;
 
-    #[sqlx::test(migrations = "./migrations")]
+    #[sqlx::test(migrations = "../gv_sql/sqlite/migrations")]
     fn test_create_activity(pool: SqlitePool) {
         let sqlite_client = SqliteClient::from_pool(pool);
 
