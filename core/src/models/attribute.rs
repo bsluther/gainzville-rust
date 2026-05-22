@@ -14,7 +14,6 @@
 // - All config/value types derive Serialize + Deserialize.
 
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::error::{DomainError, Result, ValidationError};
@@ -261,96 +260,3 @@ pub struct MassMeasurement {
     pub value: f64,
 }
 
-///// Rows /////
-
-#[derive(Debug, Clone, PartialEq, FromRow)]
-pub struct AttributeRow {
-    pub id: Uuid,
-    pub owner_id: Uuid,
-    pub name: String,
-    pub data_type: String,
-    pub config: String, // JSON as TEXT
-}
-
-impl AttributeRow {
-    pub fn from_attribute(attr: &Attribute) -> Result<Self> {
-        Ok(Self {
-            id: attr.id,
-            owner_id: attr.owner_id,
-            name: attr.name.clone(),
-            data_type: attr.config.data_type().to_string(),
-            config: serde_json::to_string(&attr.config)
-                .map_err(|e| DomainError::Other(e.to_string()))?,
-        })
-    }
-
-    pub fn to_attribute(self) -> Result<Attribute> {
-        let config: AttributeConfig =
-            serde_json::from_str(&self.config).map_err(|e| DomainError::Other(e.to_string()))?;
-        Ok(Attribute {
-            id: self.id,
-            owner_id: self.owner_id,
-            name: self.name,
-            config,
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, FromRow)]
-pub struct ValueRow {
-    // Composite PK = (entry_id, attribute_id).
-    pub entry_id: Uuid,
-    pub attribute_id: Uuid,
-    pub plan: Option<String>,   // JSON as TEXT
-    pub actual: Option<String>, // JSON as TEXT
-    pub index_float: Option<f64>,
-    pub index_string: Option<String>,
-}
-
-impl ValueRow {
-    pub fn from_value(value: &Value) -> Result<Self> {
-        let plan = value
-            .plan
-            .as_ref()
-            .map(|v| serde_json::to_string(v))
-            .transpose()
-            .map_err(|e| DomainError::Other(e.to_string()))?;
-        let actual = value
-            .actual
-            .as_ref()
-            .map(|v| serde_json::to_string(v))
-            .transpose()
-            .map_err(|e| DomainError::Other(e.to_string()))?;
-        Ok(Self {
-            entry_id: value.entry_id,
-            attribute_id: value.attribute_id,
-            plan,
-            actual,
-            index_float: value.index_float,
-            index_string: value.index_string.clone(),
-        })
-    }
-
-    pub fn to_value(self) -> Result<Value> {
-        let plan: Option<AttributeValue> = self
-            .plan
-            .as_deref()
-            .map(|v| serde_json::from_str(v))
-            .transpose()
-            .map_err(|e| DomainError::Other(e.to_string()))?;
-        let actual: Option<AttributeValue> = self
-            .actual
-            .as_deref()
-            .map(|v| serde_json::from_str(v))
-            .transpose()
-            .map_err(|e| DomainError::Other(e.to_string()))?;
-        Ok(Value {
-            entry_id: self.entry_id,
-            attribute_id: self.attribute_id,
-            index_float: self.index_float,
-            index_string: self.index_string,
-            plan,
-            actual,
-        })
-    }
-}

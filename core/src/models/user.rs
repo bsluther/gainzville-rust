@@ -2,10 +2,9 @@ use crate::{
     delta::Delta,
     validation::{Email, Username},
 };
-use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, FromRow)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct User {
     pub actor_id: Uuid,
     pub username: Username,

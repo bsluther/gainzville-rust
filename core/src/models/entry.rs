@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
-use sqlx::prelude::FromRow;
 use uuid::Uuid;
 
 use crate::{
@@ -8,7 +7,7 @@ use crate::{
     error::{DomainError, Result, ValidationError},
 };
 
-#[derive(Debug, Clone, PartialEq, FromRow)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
     pub id: Uuid,
     pub activity_id: Option<Uuid>,
@@ -36,53 +35,6 @@ impl Entry {
             old: self.clone(),
             new: self.clone(),
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, FromRow)]
-pub struct EntryRow {
-    pub id: Uuid,
-    pub activity_id: Option<Uuid>,
-    pub owner_id: Uuid,
-    pub name: Option<String>,
-    pub parent_id: Option<Uuid>,
-    pub frac_index: Option<String>,
-    pub is_template: bool,
-    pub display_as_sets: bool,
-    pub is_sequence: bool,
-    pub is_complete: bool,
-    pub start_time: Option<DateTime<Utc>>,
-    pub end_time: Option<DateTime<Utc>>,
-    pub duration_ms: Option<i64>,
-}
-
-impl EntryRow {
-    /// Convert this EntryRow to an Entry. May fail if constraints are violated.
-    // Implement TryFrom instead?
-    pub fn to_entry(self) -> Result<Entry> {
-        let duration_ms: Option<u32> =
-            self.duration_ms
-                .map(|d| d.try_into())
-                .transpose()
-                .map_err(|_| {
-                    ValidationError::Other(
-                        "duration must fit in a u32, failed to convert i64 to u32"
-                            .to_string()
-                            .into(),
-                    )
-                })?;
-        Ok(Entry {
-            id: self.id,
-            activity_id: self.activity_id,
-            owner_id: self.owner_id,
-            name: self.name,
-            position: Position::parse(self.parent_id, self.frac_index)?,
-            is_template: self.is_template,
-            is_sequence: self.is_sequence,
-            is_complete: self.is_complete,
-            display_as_sets: self.display_as_sets,
-            temporal: Temporal::parse(self.start_time, self.end_time, duration_ms)?,
-        })
     }
 }
 
