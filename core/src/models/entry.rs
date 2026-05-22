@@ -94,26 +94,30 @@ pub struct Position {
 
 impl Position {
     pub fn parse(parent_id: Option<Uuid>, frac_index: Option<String>) -> Result<Option<Position>> {
-        if (parent_id.is_none() && frac_index.is_some())
-            || (parent_id.is_some() && frac_index.is_none())
-        {
-            return Err(DomainError::Consistency(
-                "parent_id and frac_index must both be defined or both be null".to_string(),
-            ));
-        }
+        let frac_index = frac_index
+            .map(|s| {
+                FractionalIndex::from_string(&s).expect("fractional index should be valid")
+            });
+        Self::from_parts(parent_id, frac_index)
+    }
 
-        let position = match (parent_id, frac_index) {
-            (Some(parent_id), Some(frac_index)) => Some(Position {
+    /// Validate the pairing invariant on already-parsed parts. Used by
+    /// callers that decoded `frac_index` upstream (e.g. via `gv_sql`'s
+    /// `FractionalIndexColumn`).
+    pub fn from_parts(
+        parent_id: Option<Uuid>,
+        frac_index: Option<FractionalIndex>,
+    ) -> Result<Option<Position>> {
+        match (parent_id, frac_index) {
+            (Some(parent_id), Some(frac_index)) => Ok(Some(Position {
                 parent_id,
-                frac_index: FractionalIndex::from_string(&frac_index)
-                    .expect("fractonal index should be valid"),
-            }),
-            (None, None) => None,
-            _ => unreachable!(
-                "parent_id and frac_index must both be defined or both be null, already checked above"
-            ),
-        };
-        Ok(position)
+                frac_index,
+            })),
+            (None, None) => Ok(None),
+            _ => Err(DomainError::Consistency(
+                "parent_id and frac_index must both be defined or both be null".to_string(),
+            )),
+        }
     }
 }
 
