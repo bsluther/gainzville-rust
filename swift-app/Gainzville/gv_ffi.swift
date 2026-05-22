@@ -2500,64 +2500,6 @@ public func FfiConverterTypeFfiUpdateEntryCompletion_lower(_ value: FfiUpdateEnt
 }
 
 
-public struct FfiUser: Equatable, Hashable {
-    public var actorId: String
-    public var username: String
-    public var email: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(actorId: String, username: String, email: String) {
-        self.actorId = actorId
-        self.username = username
-        self.email = email
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FfiUser: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFfiUser: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiUser {
-        return
-            try FfiUser(
-                actorId: FfiConverterString.read(from: &buf), 
-                username: FfiConverterString.read(from: &buf), 
-                email: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FfiUser, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.actorId, into: &buf)
-        FfiConverterString.write(value.username, into: &buf)
-        FfiConverterString.write(value.email, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiUser_lift(_ buf: RustBuffer) throws -> FfiUser {
-    return try FfiConverterTypeFfiUser.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiUser_lower(_ value: FfiUser) -> RustBuffer {
-    return FfiConverterTypeFfiUser.lower(value)
-}
-
-
 public struct FfiValue: Equatable, Hashable {
     public var entryId: String
     public var attributeId: String
@@ -2625,6 +2567,64 @@ public func FfiConverterTypeFfiValue_lift(_ buf: RustBuffer) throws -> FfiValue 
 #endif
 public func FfiConverterTypeFfiValue_lower(_ value: FfiValue) -> RustBuffer {
     return FfiConverterTypeFfiValue.lower(value)
+}
+
+
+public struct User: Equatable, Hashable {
+    public var actorId: Uuid
+    public var username: Username
+    public var email: Email
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(actorId: Uuid, username: Username, email: Email) {
+        self.actorId = actorId
+        self.username = username
+        self.email = email
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension User: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUser: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> User {
+        return
+            try User(
+                actorId: FfiConverterTypeUuid.read(from: &buf), 
+                username: FfiConverterTypeUsername.read(from: &buf), 
+                email: FfiConverterTypeEmail.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: User, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.actorId, into: &buf)
+        FfiConverterTypeUsername.write(value.username, into: &buf)
+        FfiConverterTypeEmail.write(value.email, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUser_lift(_ buf: RustBuffer) throws -> User {
+    return try FfiConverterTypeUser.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUser_lower(_ value: User) -> RustBuffer {
+    return FfiConverterTypeUser.lower(value)
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -2990,9 +2990,9 @@ public enum FfiAnyQueryResponse: Equatable, Hashable {
     
     case isEmailRegistered(Bool
     )
-    case findUserById(FfiUser?
+    case findUserById(User?
     )
-    case findUserByUsername(FfiUser?
+    case findUserByUsername(User?
     )
     case allActorIds([String]
     )
@@ -3050,10 +3050,10 @@ public struct FfiConverterTypeFfiAnyQueryResponse: FfiConverterRustBuffer {
         case 1: return .isEmailRegistered(try FfiConverterBool.read(from: &buf)
         )
         
-        case 2: return .findUserById(try FfiConverterOptionTypeFfiUser.read(from: &buf)
+        case 2: return .findUserById(try FfiConverterOptionTypeUser.read(from: &buf)
         )
         
-        case 3: return .findUserByUsername(try FfiConverterOptionTypeFfiUser.read(from: &buf)
+        case 3: return .findUserByUsername(try FfiConverterOptionTypeUser.read(from: &buf)
         )
         
         case 4: return .allActorIds(try FfiConverterSequenceString.read(from: &buf)
@@ -3119,12 +3119,12 @@ public struct FfiConverterTypeFfiAnyQueryResponse: FfiConverterRustBuffer {
         
         case let .findUserById(v1):
             writeInt(&buf, Int32(2))
-            FfiConverterOptionTypeFfiUser.write(v1, into: &buf)
+            FfiConverterOptionTypeUser.write(v1, into: &buf)
             
         
         case let .findUserByUsername(v1):
             writeInt(&buf, Int32(3))
-            FfiConverterOptionTypeFfiUser.write(v1, into: &buf)
+            FfiConverterOptionTypeUser.write(v1, into: &buf)
             
         
         case let .allActorIds(v1):
@@ -4213,30 +4213,6 @@ fileprivate struct FfiConverterOptionTypeFfiPosition: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeFfiUser: FfiConverterRustBuffer {
-    typealias SwiftType = FfiUser?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeFfiUser.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeFfiUser.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeFfiValue: FfiConverterRustBuffer {
     typealias SwiftType = FfiValue?
 
@@ -4253,6 +4229,30 @@ fileprivate struct FfiConverterOptionTypeFfiValue: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFfiValue.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeUser: FfiConverterRustBuffer {
+    typealias SwiftType = User?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeUser.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeUser.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

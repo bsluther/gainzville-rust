@@ -197,21 +197,11 @@ pub(crate) fn ffi_action_to_core(
 
 // --- User ---
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiUser {
-    pub actor_id: String,
-    pub username: String,
-    pub email: String,
-}
-
-impl From<User> for FfiUser {
-    fn from(u: User) -> Self {
-        FfiUser {
-            actor_id: u.actor_id.to_string(),
-            username: u.username.as_str().to_string(),
-            email: u.email.as_str().to_string(),
-        }
-    }
+#[uniffi::remote(Record)]
+pub struct User {
+    pub actor_id: Uuid,
+    pub username: Username,
+    pub email: Email,
 }
 
 // --- Activity ---
@@ -889,8 +879,8 @@ impl TryFrom<FfiAnyQuery> for AnyQuery {
 pub enum FfiAnyQueryResponse {
     // Auth
     IsEmailRegistered(bool),
-    FindUserById(Option<FfiUser>),
-    FindUserByUsername(Option<FfiUser>),
+    FindUserById(Option<User>),
+    FindUserByUsername(Option<User>),
     AllActorIds(Vec<String>),
     // Activity
     FindActivityById(Option<FfiActivity>),
@@ -918,12 +908,8 @@ impl From<AnyQueryResponse> for FfiAnyQueryResponse {
         match r {
             // Auth
             AnyQueryResponse::IsEmailRegistered(v) => FfiAnyQueryResponse::IsEmailRegistered(v),
-            AnyQueryResponse::FindUserById(v) => {
-                FfiAnyQueryResponse::FindUserById(v.map(FfiUser::from))
-            }
-            AnyQueryResponse::FindUserByUsername(v) => {
-                FfiAnyQueryResponse::FindUserByUsername(v.map(FfiUser::from))
-            }
+            AnyQueryResponse::FindUserById(v) => FfiAnyQueryResponse::FindUserById(v),
+            AnyQueryResponse::FindUserByUsername(v) => FfiAnyQueryResponse::FindUserByUsername(v),
             AnyQueryResponse::AllActorIds(v) => {
                 FfiAnyQueryResponse::AllActorIds(v.into_iter().map(|id| id.to_string()).collect())
             }
