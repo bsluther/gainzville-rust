@@ -1748,26 +1748,12 @@ public func FfiConverterTypeFfiEntry_lower(_ value: FfiEntry) -> RustBuffer {
 public struct FfiEntryJoin: Equatable, Hashable {
     public var entry: FfiEntry
     public var activity: FfiActivity?
-    /**
-     * Flattened from HashMap<Uuid, AttributePair> via `.attributes()` iterator.
-     */
     public var attributes: [FfiAttributePair]
-    /**
-     * Resolved at the FFI boundary so Swift doesn't re-implement the
-     * fallback rule. Source of truth: `EntryJoin::display_name`.
-     */
     public var displayName: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(entry: FfiEntry, activity: FfiActivity?, 
-        /**
-         * Flattened from HashMap<Uuid, AttributePair> via `.attributes()` iterator.
-         */attributes: [FfiAttributePair], 
-        /**
-         * Resolved at the FFI boundary so Swift doesn't re-implement the
-         * fallback rule. Source of truth: `EntryJoin::display_name`.
-         */displayName: String) {
+    public init(entry: FfiEntry, activity: FfiActivity?, attributes: [FfiAttributePair], displayName: String) {
         self.entry = entry
         self.activity = activity
         self.attributes = attributes

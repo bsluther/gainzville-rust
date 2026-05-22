@@ -1,7 +1,7 @@
 # Boundary Transformations — Gap Analysis
 
 *Stage 2 output for the refactor proposed in [boundary-transformations-assessment.md](./boundary-transformations-assessment.md).*
-*Status: Stage 2 — assessment against the codebase complete. Next: Stage 3 (DB refactor) / Stage 4 (FFI refactor).*
+*Status: Stage 3 (Phases A–C) shipped on main. Next: Stage 4 (FFI refactor). See "Notes from Stage 3 execution" near the bottom for handoff details.*
 
 ## How to read this document
 
@@ -627,17 +627,18 @@ models — they get swapped as part of `Entry` / `Attribute` respectively
 
 ### Stage 4 (FFI refactor) — prerequisites and order
 
-0. **(Preparatory, lands ahead of Stage 3.)** Two small core changes
-   that together make `EntryJoin` a pure 1:1 mirror with the FFI side:
+0. **(Preparatory — DONE, landed at the start of Stage 3.)** Two small
+   core changes that together make `EntryJoin` a pure 1:1 mirror with
+   the FFI side:
    - Switch `EntryJoin.attributes` from `HashMap<Uuid, AttributePair>` to
      `Vec<AttributePair>`. The HashMap has no real callers (see FFI
-     section).
+     section). Shipped in `65fcc2f` ("Simplify EntryJoin").
    - Promote `display_name: String` to a real field on `EntryJoin`,
-     populated at construction by the existing fallback logic. The
-     fallback rule stays defined in one place.
-
-   Landing these as the very first commit of this work eliminates code
-   paths the rest of the refactor would otherwise have to carry through.
+     populated at construction by the existing fallback logic. Shipped
+     in the same commit. Core also gained `EntryJoin::new(entry,
+     activity, attributes)` (`334bc20`) for stitching from already-parsed
+     parts — uniffi's record machinery won't use it, but any surviving
+     hand-written FFI transform can.
 1. **Leaf layer.** Declare `custom_type!` for `Uuid`, `DateTime<Utc>`,
    `FractionalIndex`, `Username`, `Email`, `ActivityName` (priority order in
    the FFI section above). On uniffi 0.29+ the closures can be elided where
@@ -697,3 +698,62 @@ The Stage 2 → Stage 3 handoff resolved the open design questions:
   landing as the first commit of this work, ahead of Stage 3, since both
   simplifications eliminate code paths the refactor would otherwise have
   to carry.
+
+## Notes from Stage 3 execution — relevant for Stage 4
+
+Stage 3 (Phases A–C) shipped on main as 18 commits, all tests green,
+`cargo tree -p gv_core | grep sqlx` returns 0. Findings that affect the
+Stage 4 handoff:
+
+- **Stage 4 step 0 is already complete.** `EntryJoin` is a pure 1:1
+  mirror today: `Vec<AttributePair>` (not HashMap) and a stored
+  `display_name: String` field. `FfiEntryJoin` was simplified to match
+  in the same commit (`65fcc2f`). The Stage 4 planner can skip step 0
+  entirely.
+
+- **`generation` crate is dependency-clean.** It now depends only on
+  `gv_core` plus arbitrary-data utilities — `sqlx`, `tokio`, `dotenvy`,
+  `gv_server`, and `gv_sql` were all stripped (`2ae6fb8`). Stage 4
+  round-trip tests for `custom_type!` declarations can dev-dep
+  `generation` freely without dragging in DB plumbing.
+
+- **`DbErr` extension trait pattern.** Core now has
+  `error::DbErr` that converts any `std::error::Error` into
+  `DomainError::Database(Box<dyn Error>)`. The variant is type-erased so
+  core doesn't depend on sqlx. Stage 4 likely doesn't need a parallel
+  pattern at the FFI boundary (`FfiError(Generic(String))` already
+  flattens to a string) — but if any FFI conversion needs to surface a
+  backend error into `DomainError` from the FFI side, `DbErr` is the
+  ready-made bridge.
+
+- **`Position::from_parts(parent_id, frac_index)` is now public in
+  core** (`0652b52`). Direct constructor for already-decoded parts,
+  bypassing `Position::parse`'s string round-trip. If any surviving
+  hand-written FFI Position transform decodes leaves upstream, it can
+  call this instead of re-stringifying.
+
+- **The "additive scaffold → per-model swap → cleanup" sequencing
+  pattern worked very well** for Stage 3 and is worth reusing for
+  Stage 4. Translated:
+  - *Phase A-FFI:* declare all `custom_type!` for leaves; add per-leaf
+    round-trip tests; nothing else touches FFI structs yet.
+  - *Phase B-FFI:* convert one FFI struct at a time to `[Remote]` (or
+    elide it entirely if it becomes a pure mirror), deleting that
+    struct's hand-written `From`/`TryFrom`. Tests catch breakage at each
+    step.
+  - *Phase C-FFI:* delete any residual transforms; the only ones that
+    should remain are deliberate non-mirrors. With `EntryJoin` now a
+    pure mirror, the doc's "investigate before deleting" sharpens to
+    "after Phase C-FFI, zero hand-written transforms should remain — any
+    survivor is a bug."
+
+- **File line numbers in the FFI section may have drifted slightly.**
+  `gv-ffi/src/types.rs` grew to ~1070 lines and the EntryJoin
+  simplification touched lines around 644–670. Spot-check with
+  `grep -n "^pub struct\|^impl From\|^pub fn ffi_"` before relying on a
+  cited line number. Symbol names are stable.
+
+- **`uniffi 0.31` proc-macro mode** is still the only configuration in
+  use. The `[Remote]` and `custom_type!` machinery the Stage 4 plan
+  relies on is supported on this version per Stage 1's hypothesis;
+  Stage 3 didn't have occasion to verify it empirically.
