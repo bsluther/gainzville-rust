@@ -254,12 +254,11 @@ impl QueryExecutor<FindEntryJoinById> for SqliteQueryExecutor<'_> {
         match row {
             None => Ok(None),
             Some(row) => {
-                let pairs = self
+                let attributes = self
                     .execute(FindAttributePairsForEntry {
                         entry_id: query.entry_id,
                     })
                     .await?;
-                let attributes = pairs.into_iter().map(|p| (p.attr_id(), p)).collect();
                 Ok(Some(EntryJoin::from_row(row, attributes)?))
             }
         }

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use chrono::{DateTime, Utc};
 use sqlx::prelude::FromRow;
 use uuid::Uuid;
@@ -15,7 +13,20 @@ use crate::models::attribute_pair::AttributePair;
 pub struct EntryJoin {
     pub entry: Entry,
     pub activity: Option<Activity>,
-    attributes: HashMap<Uuid, AttributePair>,
+    pub attributes: Vec<AttributePair>,
+    pub display_name: String,
+}
+
+fn compute_display_name(entry: &Entry, activity: Option<&Activity>) -> String {
+    if let Some(name) = entry.name.as_deref() {
+        if !name.is_empty() {
+            return name.to_string();
+        }
+    }
+    if let Some(activity) = activity {
+        return activity.name.to_string();
+    }
+    "Unnamed".to_string()
 }
 
 impl EntryJoin {
@@ -23,27 +34,7 @@ impl EntryJoin {
         self.entry.is_sequence
     }
 
-    pub fn display_name(&self) -> String {
-        if let Some(name) = self.entry.name.as_deref() {
-            if !name.is_empty() {
-                return name.to_string();
-            }
-        }
-        if let Some(activity) = self.activity.as_ref() {
-            return activity.name.to_string();
-        }
-        "Unnamed".to_string()
-    }
-
-    pub fn attribute(&self, attr_id: Uuid) -> Option<&AttributePair> {
-        self.attributes.get(&attr_id)
-    }
-
-    pub fn attributes(&self) -> impl Iterator<Item = &AttributePair> {
-        self.attributes.values()
-    }
-
-    pub fn from_row(row: EntryJoinRow, attributes: HashMap<Uuid, AttributePair>) -> Result<Self> {
+    pub fn from_row(row: EntryJoinRow, attributes: Vec<AttributePair>) -> Result<Self> {
         let duration_ms: Option<u32> =
             row.duration_ms
                 .map(|d| d.try_into())
@@ -83,10 +74,13 @@ impl EntryJoin {
             None => None,
         };
 
+        let display_name = compute_display_name(&entry, activity.as_ref());
+
         Ok(EntryJoin {
             entry,
             activity,
             attributes,
+            display_name,
         })
     }
 }

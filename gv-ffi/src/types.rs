@@ -647,24 +647,17 @@ impl From<AttributePair> for FfiAttributePair {
 pub struct FfiEntryJoin {
     pub entry: FfiEntry,
     pub activity: Option<FfiActivity>,
-    /// Flattened from HashMap<Uuid, AttributePair> via `.attributes()` iterator.
     pub attributes: Vec<FfiAttributePair>,
-    /// Resolved at the FFI boundary so Swift doesn't re-implement the
-    /// fallback rule. Source of truth: `EntryJoin::display_name`.
     pub display_name: String,
 }
 
 impl From<EntryJoin> for FfiEntryJoin {
     fn from(ej: EntryJoin) -> Self {
-        let display_name = ej.display_name();
         FfiEntryJoin {
-            entry: ej.entry.clone().into(),
-            activity: ej.activity.clone().map(FfiActivity::from),
-            attributes: ej
-                .attributes()
-                .map(|a| FfiAttributePair::from(a.clone()))
-                .collect(),
-            display_name,
+            entry: ej.entry.into(),
+            activity: ej.activity.map(FfiActivity::from),
+            attributes: ej.attributes.into_iter().map(FfiAttributePair::from).collect(),
+            display_name: ej.display_name,
         }
     }
 }
