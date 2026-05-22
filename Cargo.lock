@@ -1941,9 +1941,12 @@ dependencies = [
  "chrono",
  "fractional_index",
  "gv_core",
+ "itertools 0.14.0",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.17",
  "tokio",
+ "tracing",
  "uuid",
 ]
 

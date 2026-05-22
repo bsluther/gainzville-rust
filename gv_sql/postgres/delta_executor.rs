@@ -1,0 +1,372 @@
+use sqlx::PgConnection;
+use tracing::{info, instrument, warn};
+
+use gv_core::{
+    delta::{AnyDelta, Delta},
+    delta_executor::{AnyDeltaExecutor, DeltaExecutor},
+    error::Result,
+    models::{
+        activity::Activity,
+        actor::Actor,
+        attribute::{Attribute, AttributeRow, Value, ValueRow},
+        entry::Entry,
+        user::User,
+    },
+};
+
+pub struct PostgresDeltaExecutor<'c> {
+    conn: &'c mut PgConnection,
+}
+
+impl<'c> PostgresDeltaExecutor<'c> {
+    pub fn new(conn: &'c mut PgConnection) -> Self {
+        PostgresDeltaExecutor { conn }
+    }
+}
+
+impl AnyDeltaExecutor for PostgresDeltaExecutor<'_> {
+    #[instrument(skip_all)]
+    async fn apply_any_delta(&mut self, delta: AnyDelta) -> Result<()> {
+        info!(?delta, "Applying delta");
+        match delta {
+            AnyDelta::Actor(delta) => self.apply_delta(delta).await,
+            AnyDelta::User(delta) => self.apply_delta(delta).await,
+            AnyDelta::Activity(delta) => self.apply_delta(delta).await,
+            AnyDelta::Entry(delta) => self.apply_delta(delta).await,
+            AnyDelta::Attribute(delta) => self.apply_delta(delta).await,
+            AnyDelta::Value(delta) => self.apply_delta(delta).await,
+        }
+    }
+}
+
+impl DeltaExecutor<Actor> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Actor>) -> Result<()> {
+        match delta {
+            Delta::Insert { new } => {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO actors (id, actor_kind, created_at)
+                    VALUES ($1, $2, $3)
+                    "#,
+                    new.actor_id,
+                    new.actor_kind.to_string(),
+                    new.created_at,
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Update { .. } => {
+                warn!("Applying update delta to Actor table which does not support updates");
+            }
+            Delta::Delete { old } => {
+                sqlx::query!(
+                    r#"
+                    DELETE FROM actors WHERE id = $1
+                    "#,
+                    old.actor_id
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl DeltaExecutor<User> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<User>) -> Result<()> {
+        match delta {
+            Delta::Insert { new } => {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO users (actor_id, username, email)
+                    VALUES ($1, $2, $3)
+                    "#,
+                    new.actor_id,
+                    new.username.as_str(),
+                    new.email.as_str(),
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Update { old, new } => {
+                assert_eq!(
+                    old.actor_id, new.actor_id,
+                    "update must not mutate primary key"
+                );
+                sqlx::query!(
+                    r#"
+                    UPDATE users
+                    SET
+                        username = $1,
+                        email = $2
+                    WHERE actor_id = $3
+                    "#,
+                    new.username.as_str().to_string(),
+                    new.email.as_str().to_string(),
+                    new.actor_id
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Delete { old } => {
+                sqlx::query!(
+                    r#"
+                    DELETE FROM users WHERE actor_id = $1
+                    "#,
+                    old.actor_id
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl DeltaExecutor<Activity> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Activity>) -> Result<()> {
+        match delta {
+            Delta::Insert { new } => {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO activities (id, owner_id, source_activity_id, name, description)
+                    VALUES ($1, $2, $3, $4, $5)
+                    "#,
+                    new.id,
+                    new.owner_id,
+                    new.source_activity_id,
+                    new.name.to_string(),
+                    new.description
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Update { old, new } => {
+                assert_eq!(old.id, new.id, "update must not mutate primary key");
+                sqlx::query!(
+                    r#"
+                    UPDATE activities
+                    SET
+                        owner_id = $1,
+                        source_activity_id = $2,
+                        name = $3,
+                        description = $4
+                    WHERE id = $5
+                    "#,
+                    new.owner_id,
+                    new.source_activity_id,
+                    new.name.to_string(),
+                    new.description,
+                    new.id
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Delete { old } => {
+                sqlx::query!(
+                    r#"
+                    DELETE FROM activities WHERE id = $1
+                    "#,
+                    old.id
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl DeltaExecutor<Entry> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Entry>) -> Result<()> {
+        match delta {
+            Delta::Insert { new } => {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO entries (
+                        id,
+                        activity_id,
+                        owner_id,
+                        name,
+                        parent_id,
+                        frac_index,
+                        is_template,
+                        display_as_sets,
+                        is_sequence,
+                        is_complete,
+                        start_time,
+                        end_time,
+                        duration_ms
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    "#,
+                    new.id,
+                    new.activity_id,
+                    new.owner_id,
+                    new.name.as_deref(),
+                    new.parent_id(),
+                    new.frac_index().map(|f| f.to_string()),
+                    new.is_template,
+                    new.display_as_sets,
+                    new.is_sequence,
+                    new.is_complete,
+                    new.temporal.start(),
+                    new.temporal.end(),
+                    new.temporal.duration().map(|d| d as i64)
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Update { old, new } => {
+                assert_eq!(old.id, new.id, "update must not mutate primary key");
+                sqlx::query!(
+                    r#"
+                    UPDATE entries
+                    SET
+                        activity_id = $1,
+                        name = $2,
+                        parent_id = $3,
+                        frac_index = $4,
+                        display_as_sets = $5,
+                        is_sequence = $6,
+                        is_complete = $7,
+                        start_time = $8,
+                        end_time = $9,
+                        duration_ms = $10
+                    WHERE id = $11
+                    "#,
+                    new.activity_id,
+                    new.name.as_deref(),
+                    new.parent_id(),
+                    new.frac_index().map(|f| f.to_string()),
+                    new.display_as_sets,
+                    new.is_sequence,
+                    new.is_complete,
+                    new.temporal.start(),
+                    new.temporal.end(),
+                    new.temporal.duration().map(|d| d as i64),
+                    new.id
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Delete { old } => {
+                sqlx::query!(
+                    r#"
+                    DELETE FROM entries WHERE id = $1
+                    "#,
+                    old.id
+                )
+                .execute(&mut *self.conn)
+                .await?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl DeltaExecutor<Attribute> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Attribute>) -> Result<()> {
+        match delta {
+            Delta::Insert { new } => {
+                let row = AttributeRow::from_attribute(&new)?;
+                sqlx::query(
+                    r#"
+                    INSERT INTO attributes (id, owner_id, name, data_type, config)
+                    VALUES ($1, $2, $3, $4, $5)
+                    "#,
+                )
+                .bind(row.id)
+                .bind(row.owner_id)
+                .bind(row.name)
+                .bind(row.data_type)
+                .bind(row.config)
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Update { old, new } => {
+                assert_eq!(old.id, new.id, "update must not mutate primary key");
+                let row = AttributeRow::from_attribute(&new)?;
+                sqlx::query(
+                    r#"
+                    UPDATE attributes
+                    SET owner_id = $1, name = $2, data_type = $3, config = $4
+                    WHERE id = $5
+                    "#,
+                )
+                .bind(row.owner_id)
+                .bind(row.name)
+                .bind(row.data_type)
+                .bind(row.config)
+                .bind(row.id)
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Delete { old } => {
+                sqlx::query("DELETE FROM attributes WHERE id = $1")
+                    .bind(old.id)
+                    .execute(&mut *self.conn)
+                    .await?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl DeltaExecutor<Value> for PostgresDeltaExecutor<'_> {
+    async fn apply_delta(&mut self, delta: Delta<Value>) -> Result<()> {
+        match delta {
+            Delta::Insert { new } => {
+                let row = ValueRow::from_value(&new)?;
+                sqlx::query(
+                    r#"
+                    INSERT INTO attribute_values (entry_id, attribute_id, plan, actual, index_float, index_string)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    "#,
+                )
+                .bind(row.entry_id)
+                .bind(row.attribute_id)
+                .bind(row.plan)
+                .bind(row.actual)
+                .bind(row.index_float)
+                .bind(row.index_string)
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Update { old, new } => {
+                assert_eq!(
+                    (old.entry_id, old.attribute_id),
+                    (new.entry_id, new.attribute_id),
+                    "update must not mutate primary key"
+                );
+                let row = ValueRow::from_value(&new)?;
+                sqlx::query(
+                    r#"
+                    UPDATE attribute_values
+                    SET plan = $1, actual = $2, index_float = $3, index_string = $4
+                    WHERE entry_id = $5 AND attribute_id = $6
+                    "#,
+                )
+                .bind(row.plan)
+                .bind(row.actual)
+                .bind(row.index_float)
+                .bind(row.index_string)
+                .bind(row.entry_id)
+                .bind(row.attribute_id)
+                .execute(&mut *self.conn)
+                .await?;
+            }
+            Delta::Delete { old } => {
+                sqlx::query(
+                    "DELETE FROM attribute_values WHERE entry_id = $1 AND attribute_id = $2",
+                )
+                .bind(old.entry_id)
+                .bind(old.attribute_id)
+                .execute(&mut *self.conn)
+                .await?;
+            }
+        };
+        Ok(())
+    }
+}
