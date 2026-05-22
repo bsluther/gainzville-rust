@@ -60,10 +60,11 @@ impl DeltaExecutor<User> for SqliteDeltaExecutor<'_> {
     async fn apply_delta(&mut self, delta: Delta<User>) -> Result<()> {
         match delta {
             Delta::Insert { new } => {
+                let row = crate::rows::UserRow::from(new);
                 sqlx::query("INSERT INTO users (actor_id, username, email) VALUES (?, ?, ?)")
-                    .bind(new.actor_id)
-                    .bind(new.username.as_str())
-                    .bind(new.email.as_str())
+                    .bind(row.actor_id)
+                    .bind(row.username)
+                    .bind(row.email)
                     .execute(&mut *self.conn)
                     .await?;
             }
@@ -72,18 +73,20 @@ impl DeltaExecutor<User> for SqliteDeltaExecutor<'_> {
                     old.actor_id, new.actor_id,
                     "update must not mutate primary key"
                 );
+                let row = crate::rows::UserRow::from(new);
                 sqlx::query(
                     "UPDATE users SET username = COALESCE(?, username), email = COALESCE(?, email) WHERE actor_id = ?"
                 )
-                .bind(new.username.as_str())
-                .bind(new.email.as_str())
-                .bind(new.actor_id)
+                .bind(row.username)
+                .bind(row.email)
+                .bind(row.actor_id)
                 .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
+                let row = crate::rows::UserRow::from(old);
                 sqlx::query("DELETE FROM users WHERE actor_id = ?")
-                    .bind(old.actor_id)
+                    .bind(row.actor_id)
                     .execute(&mut *self.conn)
                     .await?;
             }

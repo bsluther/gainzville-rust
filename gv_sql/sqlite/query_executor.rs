@@ -33,7 +33,7 @@ impl QueryExecutor<IsEmailRegistered> for SqliteQueryExecutor<'_> {
         query: IsEmailRegistered,
     ) -> Result<<IsEmailRegistered as Query>::Response> {
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE email = ?")
-            .bind(query.email.as_str())
+            .bind(crate::columns::EmailColumn(query.email))
             .fetch_one(&mut *self.conn)
             .await?;
 
@@ -46,14 +46,14 @@ impl QueryExecutor<FindUserById> for SqliteQueryExecutor<'_> {
         &mut self,
         query: FindUserById,
     ) -> Result<<FindUserById as Query>::Response> {
-        let user = sqlx::query_as::<_, User>(
+        let row = sqlx::query_as::<_, crate::rows::UserRow>(
             "SELECT actor_id, username, email FROM users WHERE actor_id = ?",
         )
-        .bind(query.actor_id)
+        .bind(crate::columns::UuidColumn(query.actor_id))
         .fetch_optional(&mut *self.conn)
         .await?;
 
-        Ok(user)
+        Ok(row.map(User::from))
     }
 }
 
@@ -62,12 +62,14 @@ impl QueryExecutor<FindUserByUsername> for SqliteQueryExecutor<'_> {
         &mut self,
         query: FindUserByUsername,
     ) -> Result<<FindUserByUsername as Query>::Response> {
-        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = ?")
-            .bind(query.username.as_str())
-            .fetch_optional(&mut *self.conn)
-            .await?;
+        let row = sqlx::query_as::<_, crate::rows::UserRow>(
+            "SELECT actor_id, username, email FROM users WHERE username = ?",
+        )
+        .bind(crate::columns::UsernameColumn(query.username))
+        .fetch_optional(&mut *self.conn)
+        .await?;
 
-        Ok(user)
+        Ok(row.map(User::from))
     }
 }
 

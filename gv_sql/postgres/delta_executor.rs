@@ -77,14 +77,15 @@ impl DeltaExecutor<User> for PostgresDeltaExecutor<'_> {
     async fn apply_delta(&mut self, delta: Delta<User>) -> Result<()> {
         match delta {
             Delta::Insert { new } => {
+                let row = crate::rows::UserRow::from(new);
                 sqlx::query!(
                     r#"
                     INSERT INTO users (actor_id, username, email)
                     VALUES ($1, $2, $3)
                     "#,
-                    new.actor_id,
-                    new.username.as_str(),
-                    new.email.as_str(),
+                    row.actor_id as _,
+                    row.username as _,
+                    row.email as _,
                 )
                 .execute(&mut *self.conn)
                 .await?;
@@ -94,6 +95,7 @@ impl DeltaExecutor<User> for PostgresDeltaExecutor<'_> {
                     old.actor_id, new.actor_id,
                     "update must not mutate primary key"
                 );
+                let row = crate::rows::UserRow::from(new);
                 sqlx::query!(
                     r#"
                     UPDATE users
@@ -102,19 +104,20 @@ impl DeltaExecutor<User> for PostgresDeltaExecutor<'_> {
                         email = $2
                     WHERE actor_id = $3
                     "#,
-                    new.username.as_str().to_string(),
-                    new.email.as_str().to_string(),
-                    new.actor_id
+                    row.username as _,
+                    row.email as _,
+                    row.actor_id as _,
                 )
                 .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
+                let row = crate::rows::UserRow::from(old);
                 sqlx::query!(
                     r#"
                     DELETE FROM users WHERE actor_id = $1
                     "#,
-                    old.actor_id
+                    row.actor_id as _,
                 )
                 .execute(&mut *self.conn)
                 .await?;
