@@ -37,6 +37,9 @@ macro_rules! impl_column_via {
             fn type_info() -> DB::TypeInfo {
                 <$primitive as sqlx::Type<DB>>::type_info()
             }
+            fn compatible(ty: &DB::TypeInfo) -> bool {
+                <$primitive as sqlx::Type<DB>>::compatible(ty)
+            }
         }
 
         impl<'q, DB> sqlx::Encode<'q, DB> for $column
@@ -165,6 +168,9 @@ where
     fn type_info() -> DB::TypeInfo {
         <Uuid as sqlx::Type<DB>>::type_info()
     }
+    fn compatible(ty: &DB::TypeInfo) -> bool {
+        <Uuid as sqlx::Type<DB>>::compatible(ty)
+    }
 }
 
 impl<'q, DB> sqlx::Encode<'q, DB> for UuidColumn
@@ -207,6 +213,9 @@ where
 {
     fn type_info() -> DB::TypeInfo {
         <DateTime<Utc> as sqlx::Type<DB>>::type_info()
+    }
+    fn compatible(ty: &DB::TypeInfo) -> bool {
+        <DateTime<Utc> as sqlx::Type<DB>>::compatible(ty)
     }
 }
 

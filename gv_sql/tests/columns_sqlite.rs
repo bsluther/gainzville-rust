@@ -51,11 +51,11 @@ where
         .fetch_one(pool)
         .await
         .expect("select");
-    // `try_get_unchecked` matches what `#[derive(FromRow)]` generates and
-    // skips sqlx's strict SQLite type-compatibility check (necessary for
-    // e.g. `DateTime<Utc>` whose `type_info()` claims DATETIME while the
-    // production schema stores it as TEXT).
-    row.try_get_unchecked::<T, _>("v").expect("decode")
+    // Use `try_get` (with the strict type-compatibility check) — this is
+    // what `#[derive(FromRow)]` generates. If a `*Column` type's
+    // `compatible()` is stricter than its inner type's, the check fails
+    // here, catching the regression at the leaf-test level.
+    row.try_get::<T, _>("v").expect("decode")
 }
 
 #[tokio::test]

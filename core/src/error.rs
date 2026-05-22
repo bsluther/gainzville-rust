@@ -44,6 +44,9 @@ where
     E: std::error::Error + Send + Sync + 'static,
 {
     fn db_err(self) -> Result<T> {
-        self.map_err(|e| DomainError::Database(Box::new(e)))
+        self.map_err(|e| {
+            tracing::warn!(error = %e, "db error at boundary");
+            DomainError::Database(Box::new(e))
+        })
     }
 }

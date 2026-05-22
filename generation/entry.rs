@@ -46,8 +46,7 @@ impl Arbitrary for Entry {
                 parent_id: Uuid::arbitrary(rng, context),
                 frac_index: FractionalIndex::arbitrary(rng, context),
             }),
-            // TODO: generate arbitrarily
-            temporal: Temporal::None,
+            temporal: Temporal::arbitrary(rng, context),
         }
     }
 }
