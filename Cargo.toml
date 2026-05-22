@@ -3,6 +3,7 @@ members = [
     "core",
     "generation",
     "gv-ffi",
+    "gv_sql",
     "integration_tests",
     "ivm",
     "client",

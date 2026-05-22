@@ -1,0 +1,24 @@
+[package]
+name = "gv_sql"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "lib.rs"
+
+[features]
+default = []
+sqlite = ["sqlx/sqlite"]
+postgres = ["sqlx/postgres"]
+
+[dependencies]
+gv_core = { path = "../core" }
+
+sqlx = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+fractional_index = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
