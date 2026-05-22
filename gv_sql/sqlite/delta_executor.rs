@@ -99,29 +99,32 @@ impl DeltaExecutor<Activity> for SqliteDeltaExecutor<'_> {
     async fn apply_delta(&mut self, delta: Delta<Activity>) -> Result<()> {
         match delta {
             Delta::Insert { new } => {
+                let row = crate::rows::ActivityRow::from(new);
                 sqlx::query("INSERT INTO activities (id, owner_id, source_activity_id, name, description) VALUES (?, ?, ?, ?, ?)")
-                    .bind(new.id)
-                    .bind(new.owner_id)
-                    .bind(new.source_activity_id)
-                    .bind(new.name.to_string())
-                    .bind(new.description)
+                    .bind(row.id)
+                    .bind(row.owner_id)
+                    .bind(row.source_activity_id)
+                    .bind(row.name)
+                    .bind(row.description)
                     .execute(&mut *self.conn)
                     .await?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
+                let row = crate::rows::ActivityRow::from(new);
                 sqlx::query("UPDATE activities SET owner_id = ?, source_activity_id = ?, name = ?, description = ? WHERE id = ?")
-                    .bind(new.owner_id)
-                    .bind(new.source_activity_id)
-                    .bind(new.name.to_string())
-                    .bind(new.description)
-                    .bind(new.id)
+                    .bind(row.owner_id)
+                    .bind(row.source_activity_id)
+                    .bind(row.name)
+                    .bind(row.description)
+                    .bind(row.id)
                     .execute(&mut *self.conn)
                     .await?;
             }
             Delta::Delete { old } => {
+                let row = crate::rows::ActivityRow::from(old);
                 sqlx::query("DELETE FROM activities WHERE id = ?")
-                    .bind(old.id)
+                    .bind(row.id)
                     .execute(&mut *self.conn)
                     .await?;
             }

@@ -86,14 +86,14 @@ impl QueryExecutor<FindActivityById> for PostgresQueryExecutor<'_> {
         &mut self,
         query: FindActivityById,
     ) -> Result<<FindActivityById as Query>::Response> {
-        let activity = sqlx::query_as::<_, Activity>(
+        let row = sqlx::query_as::<_, crate::rows::ActivityRow>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities WHERE id = $1",
         )
-        .bind(query.id)
+        .bind(crate::columns::UuidColumn(query.id))
         .fetch_optional(&mut *self.conn)
         .await?;
 
-        Ok(activity)
+        Ok(row.map(Activity::from))
     }
 }
 
@@ -102,13 +102,13 @@ impl QueryExecutor<AllActivities> for PostgresQueryExecutor<'_> {
         &mut self,
         _query: AllActivities,
     ) -> Result<<AllActivities as Query>::Response> {
-        let activities = sqlx::query_as::<_, Activity>(
+        let rows = sqlx::query_as::<_, crate::rows::ActivityRow>(
             "SELECT id, owner_id, source_activity_id, name, description FROM activities",
         )
         .fetch_all(&mut *self.conn)
         .await?;
 
-        Ok(activities)
+        Ok(rows.into_iter().map(Activity::from).collect())
     }
 }
 

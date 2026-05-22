@@ -131,22 +131,24 @@ impl DeltaExecutor<Activity> for PostgresDeltaExecutor<'_> {
     async fn apply_delta(&mut self, delta: Delta<Activity>) -> Result<()> {
         match delta {
             Delta::Insert { new } => {
+                let row = crate::rows::ActivityRow::from(new);
                 sqlx::query!(
                     r#"
                     INSERT INTO activities (id, owner_id, source_activity_id, name, description)
                     VALUES ($1, $2, $3, $4, $5)
                     "#,
-                    new.id,
-                    new.owner_id,
-                    new.source_activity_id,
-                    new.name.to_string(),
-                    new.description
+                    row.id as _,
+                    row.owner_id as _,
+                    row.source_activity_id as _,
+                    row.name as _,
+                    row.description,
                 )
                 .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
+                let row = crate::rows::ActivityRow::from(new);
                 sqlx::query!(
                     r#"
                     UPDATE activities
@@ -157,21 +159,22 @@ impl DeltaExecutor<Activity> for PostgresDeltaExecutor<'_> {
                         description = $4
                     WHERE id = $5
                     "#,
-                    new.owner_id,
-                    new.source_activity_id,
-                    new.name.to_string(),
-                    new.description,
-                    new.id
+                    row.owner_id as _,
+                    row.source_activity_id as _,
+                    row.name as _,
+                    row.description,
+                    row.id as _,
                 )
                 .execute(&mut *self.conn)
                 .await?;
             }
             Delta::Delete { old } => {
+                let row = crate::rows::ActivityRow::from(old);
                 sqlx::query!(
                     r#"
                     DELETE FROM activities WHERE id = $1
                     "#,
-                    old.id
+                    row.id as _,
                 )
                 .execute(&mut *self.conn)
                 .await?;
