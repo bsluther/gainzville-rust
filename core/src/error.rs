@@ -1,7 +1,7 @@
 #[derive(thiserror::Error, Debug)]
 pub enum DomainError {
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(Box<dyn std::error::Error + Send + Sync>),
     #[error("Email already exists")]
     EmailAlreadyExists,
     #[error("Other: {0}")]
@@ -31,3 +31,19 @@ pub enum ValidationError {
 }
 
 pub type Result<T> = std::result::Result<T, DomainError>;
+
+/// Convert any concrete error into a `DomainError::Database`. Used at the
+/// DB boundary to lift backend errors (sqlx, etc.) into the domain error
+/// type without core having to know about those backends.
+pub trait DbErr<T> {
+    fn db_err(self) -> Result<T>;
+}
+
+impl<T, E> DbErr<T> for std::result::Result<T, E>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    fn db_err(self) -> Result<T> {
+        self.map_err(|e| DomainError::Database(Box::new(e)))
+    }
+}

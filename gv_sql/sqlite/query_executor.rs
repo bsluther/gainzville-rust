@@ -1,5 +1,5 @@
 use gv_core::{
-    error::{DomainError, Result},
+    error::{DbErr, DomainError, Result},
     models::{activity::Activity, user::User},
     queries::*,
     query_executor::QueryExecutor,
@@ -28,7 +28,7 @@ impl QueryExecutor<IsEmailRegistered> for SqliteQueryExecutor<'_> {
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE email = ?")
             .bind(crate::columns::EmailColumn(query.email))
             .fetch_one(&mut *self.conn)
-            .await?;
+            .await.db_err()?;
 
         Ok(count > 0)
     }
@@ -44,7 +44,7 @@ impl QueryExecutor<FindUserById> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.actor_id))
         .fetch_optional(&mut *self.conn)
-        .await?;
+        .await.db_err()?;
 
         Ok(row.map(User::from))
     }
@@ -60,7 +60,7 @@ impl QueryExecutor<FindUserByUsername> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UsernameColumn(query.username))
         .fetch_optional(&mut *self.conn)
-        .await?;
+        .await.db_err()?;
 
         Ok(row.map(User::from))
     }
@@ -73,7 +73,7 @@ impl QueryExecutor<AllActorIds> for SqliteQueryExecutor<'_> {
     ) -> Result<<AllActorIds as Query>::Response> {
         let actor_ids = sqlx::query_scalar("SELECT id FROM actors")
             .fetch_all(&mut *self.conn)
-            .await?;
+            .await.db_err()?;
         Ok(actor_ids)
     }
 }
@@ -90,7 +90,7 @@ impl QueryExecutor<FindActivityById> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.id))
         .fetch_optional(&mut *self.conn)
-        .await?;
+        .await.db_err()?;
         Ok(row.map(Activity::from))
     }
 }
@@ -104,7 +104,7 @@ impl QueryExecutor<AllActivities> for SqliteQueryExecutor<'_> {
             "SELECT id, owner_id, source_activity_id, name, description FROM activities",
         )
         .fetch_all(&mut *self.conn)
-        .await?;
+        .await.db_err()?;
         Ok(rows.into_iter().map(Activity::from).collect())
     }
 }
@@ -118,7 +118,7 @@ impl QueryExecutor<AllEntries> for SqliteQueryExecutor<'_> {
     ) -> Result<<AllEntries as Query>::Response> {
         sqlx::query_as::<_, crate::rows::EntryRow>("SELECT * FROM entries")
             .fetch_all(&mut *self.conn)
-            .await?
+            .await.db_err()?
             .into_iter()
             .map(|r| r.to_entry())
             .collect()
@@ -146,7 +146,7 @@ impl QueryExecutor<EntriesRootedInTimeInterval> for SqliteQueryExecutor<'_> {
         .bind(crate::columns::DateTimeColumn(query.from))
         .bind(crate::columns::DateTimeColumn(query.to))
         .fetch_all(&mut *self.conn)
-        .await?
+        .await.db_err()?
         .into_iter()
         .map(|r| r.to_entry())
         .collect()
@@ -175,7 +175,7 @@ impl QueryExecutor<FindAncestors> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
-        .await?;
+        .await.db_err()?;
 
         if results.is_empty() {
             return Err(DomainError::Other("entry not found".to_string()));
@@ -217,7 +217,7 @@ impl QueryExecutor<FindEntryById> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_optional(&mut *self.conn)
-        .await?
+        .await.db_err()?
         .map(|e| e.to_entry())
         .transpose()
     }
@@ -244,7 +244,7 @@ impl QueryExecutor<FindEntryJoinById> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_optional(&mut *self.conn)
-        .await?;
+        .await.db_err()?;
 
         match row {
             None => Ok(None),
@@ -279,7 +279,7 @@ impl QueryExecutor<FindDescendants> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
-        .await?
+        .await.db_err()?
         .into_iter()
         .map(|e| e.to_entry())
         .collect()
@@ -298,7 +298,7 @@ impl QueryExecutor<FindAttributeById> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.attribute_id))
         .fetch_optional(&mut *self.conn)
-        .await?
+        .await.db_err()?
         .map(|row| row.to_attribute())
         .transpose()
     }
@@ -313,7 +313,7 @@ impl QueryExecutor<AllAttributes> for SqliteQueryExecutor<'_> {
             "SELECT id, owner_id, name, data_type, config FROM attributes",
         )
         .fetch_all(&mut *self.conn)
-        .await?
+        .await.db_err()?
         .into_iter()
         .map(|row| row.to_attribute())
         .collect()
@@ -330,7 +330,7 @@ impl QueryExecutor<FindAttributesByOwner> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.owner_id))
         .fetch_all(&mut *self.conn)
-        .await?
+        .await.db_err()?
         .into_iter()
         .map(|row| row.to_attribute())
         .collect()
@@ -350,7 +350,7 @@ impl QueryExecutor<FindValueByKey> for SqliteQueryExecutor<'_> {
         .bind(crate::columns::UuidColumn(query.entry_id))
         .bind(crate::columns::UuidColumn(query.attribute_id))
         .fetch_optional(&mut *self.conn)
-        .await?
+        .await.db_err()?
         .map(|row| row.to_value())
         .transpose()
     }
@@ -366,7 +366,7 @@ impl QueryExecutor<FindValuesForEntry> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
-        .await?
+        .await.db_err()?
         .into_iter()
         .map(|row| row.to_value())
         .collect()
@@ -392,7 +392,7 @@ impl QueryExecutor<FindValuesForEntries> for SqliteQueryExecutor<'_> {
         builder
             .build_query_as::<crate::rows::ValueRow>()
             .fetch_all(&mut *self.conn)
-            .await?
+            .await.db_err()?
             .into_iter()
             .map(|row| row.to_value())
             .collect()
@@ -419,7 +419,7 @@ impl QueryExecutor<FindAttributePairsForEntry> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
-        .await?
+        .await.db_err()?
         .into_iter()
         .map(|row| row.to_attribute_pair())
         .collect()

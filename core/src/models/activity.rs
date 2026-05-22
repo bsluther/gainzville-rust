@@ -11,8 +11,7 @@ pub struct Activity {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, sqlx::Type)]
-#[sqlx(transparent)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ActivityName(String);
 impl ActivityName {
     pub fn parse(str: String) -> Result<ActivityName> {

@@ -1,4 +1,9 @@
-use gv_core::{actions::Action, delta_executor::AnyDeltaExecutor, error::Result, mutators};
+use gv_core::{
+    actions::Action,
+    delta_executor::AnyDeltaExecutor,
+    error::{DbErr, Result},
+    mutators,
+};
 
 use sqlx::PgPool;
 use tracing::instrument;
@@ -17,7 +22,7 @@ impl PostgresServer {
     #[instrument(skip(self), level = "info", err(level = "warn"))]
     pub async fn run_action(&self, action: Action) -> Result<()> {
         // Begin Postgres transaction.
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin().await.db_err()?;
         let mut executor = PostgresQueryExecutor::new(&mut tx);
 
         // Create mutation.
@@ -52,7 +57,8 @@ impl PostgresServer {
         // Defer FK constraint checking until commit so delta order doesn't matter.
         sqlx::query("SET CONSTRAINTS ALL DEFERRED")
             .execute(&mut *tx)
-            .await?;
+            .await
+            .db_err()?;
 
         let mut delta_executor = PostgresDeltaExecutor::new(&mut *tx);
         // Apply deltas.
@@ -62,7 +68,7 @@ impl PostgresServer {
         }
 
         // Commit the transaction.
-        tx.commit().await?;
+        tx.commit().await.db_err()?;
 
         // TODO: send mutation to service (or add to a pending_mutations queue).
         // sync_service.append_applied_mutation(mx);

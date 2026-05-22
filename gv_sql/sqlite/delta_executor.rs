@@ -1,7 +1,7 @@
 use gv_core::{
     delta::{AnyDelta, Delta},
     delta_executor::{AnyDeltaExecutor, DeltaExecutor},
-    error::Result,
+    error::{DbErr, Result},
     models::{
         activity::Activity,
         actor::Actor,
@@ -42,14 +42,14 @@ impl DeltaExecutor<Actor> for SqliteDeltaExecutor<'_> {
                     .bind(new.actor_kind.to_string())
                     .bind(new.created_at.to_rfc3339())
                     .execute(&mut *self.conn)
-                    .await?;
+                    .await.db_err()?;
             }
             Delta::Update { .. } => {} // No-op
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM actors WHERE id = ?")
                     .bind(old.actor_id)
                     .execute(&mut *self.conn)
-                    .await?;
+                    .await.db_err()?;
             }
         };
         Ok(())
@@ -66,7 +66,7 @@ impl DeltaExecutor<User> for SqliteDeltaExecutor<'_> {
                     .bind(row.username)
                     .bind(row.email)
                     .execute(&mut *self.conn)
-                    .await?;
+                    .await.db_err()?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(
@@ -81,14 +81,14 @@ impl DeltaExecutor<User> for SqliteDeltaExecutor<'_> {
                 .bind(row.email)
                 .bind(row.actor_id)
                 .execute(&mut *self.conn)
-                .await?;
+                .await.db_err()?;
             }
             Delta::Delete { old } => {
                 let row = crate::rows::UserRow::from(old);
                 sqlx::query("DELETE FROM users WHERE actor_id = ?")
                     .bind(row.actor_id)
                     .execute(&mut *self.conn)
-                    .await?;
+                    .await.db_err()?;
             }
         };
         Ok(())
@@ -107,7 +107,7 @@ impl DeltaExecutor<Activity> for SqliteDeltaExecutor<'_> {
                     .bind(row.name)
                     .bind(row.description)
                     .execute(&mut *self.conn)
-                    .await?;
+                    .await.db_err()?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
@@ -119,14 +119,14 @@ impl DeltaExecutor<Activity> for SqliteDeltaExecutor<'_> {
                     .bind(row.description)
                     .bind(row.id)
                     .execute(&mut *self.conn)
-                    .await?;
+                    .await.db_err()?;
             }
             Delta::Delete { old } => {
                 let row = crate::rows::ActivityRow::from(old);
                 sqlx::query("DELETE FROM activities WHERE id = ?")
                     .bind(row.id)
                     .execute(&mut *self.conn)
-                    .await?;
+                    .await.db_err()?;
             }
         };
         Ok(())
@@ -171,7 +171,7 @@ impl DeltaExecutor<Entry> for SqliteDeltaExecutor<'_> {
                 .bind(row.end_time)
                 .bind(row.duration_ms)
                 .execute(&mut *self.conn)
-                .await?;
+                .await.db_err()?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
@@ -204,13 +204,13 @@ impl DeltaExecutor<Entry> for SqliteDeltaExecutor<'_> {
                 .bind(row.duration_ms)
                 .bind(row.id)
                 .execute(&mut *self.conn)
-                .await?;
+                .await.db_err()?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM entries WHERE id = ?")
                     .bind(crate::columns::UuidColumn(old.id))
                     .execute(&mut *self.conn)
-                    .await?;
+                    .await.db_err()?;
             }
         };
         Ok(())
@@ -231,7 +231,7 @@ impl DeltaExecutor<Attribute> for SqliteDeltaExecutor<'_> {
                 .bind(row.data_type)
                 .bind(row.config)
                 .execute(&mut *self.conn)
-                .await?;
+                .await.db_err()?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
@@ -245,13 +245,13 @@ impl DeltaExecutor<Attribute> for SqliteDeltaExecutor<'_> {
                 .bind(row.config)
                 .bind(row.id)
                 .execute(&mut *self.conn)
-                .await?;
+                .await.db_err()?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM attributes WHERE id = ?")
                     .bind(crate::columns::UuidColumn(old.id))
                     .execute(&mut *self.conn)
-                    .await?;
+                    .await.db_err()?;
             }
         };
         Ok(())
@@ -276,7 +276,7 @@ impl DeltaExecutor<Value> for SqliteDeltaExecutor<'_> {
                 .bind(row.index_float)
                 .bind(row.index_string)
                 .execute(&mut *self.conn)
-                .await?;
+                .await.db_err()?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(
@@ -299,14 +299,14 @@ impl DeltaExecutor<Value> for SqliteDeltaExecutor<'_> {
                 .bind(row.entry_id)
                 .bind(row.attribute_id)
                 .execute(&mut *self.conn)
-                .await?;
+                .await.db_err()?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM attribute_values WHERE entry_id = ? AND attribute_id = ?")
                     .bind(crate::columns::UuidColumn(old.entry_id))
                     .bind(crate::columns::UuidColumn(old.attribute_id))
                     .execute(&mut *self.conn)
-                    .await?;
+                    .await.db_err()?;
             }
         };
         Ok(())

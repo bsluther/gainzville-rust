@@ -1,10 +1,9 @@
 use crate::error::{DomainError, ValidationError};
-use sqlx::{Decode, Postgres, Sqlite, Type};
 
 // NOTE: Mostly AI generated.
 
 /// A very naive type representing an email. Not production ready, but good enough for now.
-#[derive(Debug, Clone, sqlx::FromRow, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Email(String);
 impl Email {
     pub fn parse(email: String) -> Result<Self, DomainError> {
@@ -57,33 +56,7 @@ impl Email {
     }
 }
 
-impl Type<Postgres> for Email {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as Type<Postgres>>::type_info()
-    }
-}
-
-impl<'r> Decode<'r, Postgres> for Email {
-    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s: String = Decode::<Postgres>::decode(value)?;
-        Email::parse(s).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-    }
-}
-
-impl Type<Sqlite> for Email {
-    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
-        <String as Type<Sqlite>>::type_info()
-    }
-}
-
-impl<'r> Decode<'r, Sqlite> for Email {
-    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s: String = Decode::<Sqlite>::decode(value)?;
-        Email::parse(s).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Username(String);
 
 impl Username {
@@ -109,35 +82,5 @@ impl Username {
 
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-}
-
-impl Type<Postgres> for Username {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as Type<Postgres>>::type_info()
-    }
-}
-
-impl<'r> Decode<'r, Postgres> for Username {
-    fn decode(
-        value: sqlx::postgres::PgValueRef<'r>,
-    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
-        let s: String = Decode::<Postgres>::decode(value)?;
-        Username::parse(s).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-    }
-}
-
-impl Type<Sqlite> for Username {
-    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
-        <String as Type<Sqlite>>::type_info()
-    }
-}
-
-impl<'r> Decode<'r, Sqlite> for Username {
-    fn decode(
-        value: sqlx::sqlite::SqliteValueRef<'r>,
-    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
-        let s: String = Decode::<Sqlite>::decode(value)?;
-        Username::parse(s).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 }

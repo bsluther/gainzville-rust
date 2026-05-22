@@ -4,7 +4,7 @@ use std::{
 };
 
 use gv_core::{
-    error::Result,
+    error::{DbErr, Result},
     queries::{AnyQuery, AnyQueryResponse, Query},
     query_executor::QueryExecutor,
 };
@@ -48,7 +48,7 @@ impl QueryStore {
     where
         for<'c> SqliteQueryExecutor<'c>: QueryExecutor<Q>,
     {
-        let mut conn = self.pool.acquire().await?;
+        let mut conn = self.pool.acquire().await.db_err()?;
         SqliteQueryExecutor::new(&mut conn).execute(query).await
     }
 
