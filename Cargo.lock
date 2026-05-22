@@ -1900,7 +1900,9 @@ dependencies = [
 name = "gv_ffi"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
+ "fractional_index",
  "generation",
  "gv_client",
  "gv_core",

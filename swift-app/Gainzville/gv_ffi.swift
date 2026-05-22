@@ -4578,6 +4578,270 @@ fileprivate struct FfiConverterSequenceTypeFfiMassUnit: FfiConverterRustBuffer {
     }
 }
 
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias ActivityName = String
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeActivityName: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ActivityName {
+        return try FfiConverterString.read(from: &buf)
+    }
+
+    public static func write(_ value: ActivityName, into buf: inout [UInt8]) {
+        return FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> ActivityName {
+        return try FfiConverterString.lift(value)
+    }
+
+    public static func lower(_ value: ActivityName) -> RustBuffer {
+        return FfiConverterString.lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActivityName_lift(_ value: RustBuffer) throws -> ActivityName {
+    return try FfiConverterTypeActivityName.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActivityName_lower(_ value: ActivityName) -> RustBuffer {
+    return FfiConverterTypeActivityName.lower(value)
+}
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias Email = String
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEmail: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Email {
+        return try FfiConverterString.read(from: &buf)
+    }
+
+    public static func write(_ value: Email, into buf: inout [UInt8]) {
+        return FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> Email {
+        return try FfiConverterString.lift(value)
+    }
+
+    public static func lower(_ value: Email) -> RustBuffer {
+        return FfiConverterString.lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEmail_lift(_ value: RustBuffer) throws -> Email {
+    return try FfiConverterTypeEmail.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEmail_lower(_ value: Email) -> RustBuffer {
+    return FfiConverterTypeEmail.lower(value)
+}
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias FractionalIndex = String
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFractionalIndex: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FractionalIndex {
+        return try FfiConverterString.read(from: &buf)
+    }
+
+    public static func write(_ value: FractionalIndex, into buf: inout [UInt8]) {
+        return FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> FractionalIndex {
+        return try FfiConverterString.lift(value)
+    }
+
+    public static func lower(_ value: FractionalIndex) -> RustBuffer {
+        return FfiConverterString.lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFractionalIndex_lift(_ value: RustBuffer) throws -> FractionalIndex {
+    return try FfiConverterTypeFractionalIndex.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFractionalIndex_lower(_ value: FractionalIndex) -> RustBuffer {
+    return FfiConverterTypeFractionalIndex.lower(value)
+}
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias Username = String
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUsername: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Username {
+        return try FfiConverterString.read(from: &buf)
+    }
+
+    public static func write(_ value: Username, into buf: inout [UInt8]) {
+        return FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> Username {
+        return try FfiConverterString.lift(value)
+    }
+
+    public static func lower(_ value: Username) -> RustBuffer {
+        return FfiConverterString.lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUsername_lift(_ value: RustBuffer) throws -> Username {
+    return try FfiConverterTypeUsername.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUsername_lower(_ value: Username) -> RustBuffer {
+    return FfiConverterTypeUsername.lower(value)
+}
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias UtcDateTime = Int64
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUtcDateTime: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UtcDateTime {
+        return try FfiConverterInt64.read(from: &buf)
+    }
+
+    public static func write(_ value: UtcDateTime, into buf: inout [UInt8]) {
+        return FfiConverterInt64.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: Int64) throws -> UtcDateTime {
+        return try FfiConverterInt64.lift(value)
+    }
+
+    public static func lower(_ value: UtcDateTime) -> Int64 {
+        return FfiConverterInt64.lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUtcDateTime_lift(_ value: Int64) throws -> UtcDateTime {
+    return try FfiConverterTypeUtcDateTime.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUtcDateTime_lower(_ value: UtcDateTime) -> Int64 {
+    return FfiConverterTypeUtcDateTime.lower(value)
+}
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
+public typealias Uuid = String
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUuid: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Uuid {
+        return try FfiConverterString.read(from: &buf)
+    }
+
+    public static func write(_ value: Uuid, into buf: inout [UInt8]) {
+        return FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> Uuid {
+        return try FfiConverterString.lift(value)
+    }
+
+    public static func lower(_ value: Uuid) -> RustBuffer {
+        return FfiConverterString.lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUuid_lift(_ value: RustBuffer) throws -> Uuid {
+    return try FfiConverterTypeUuid.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUuid_lower(_ value: Uuid) -> RustBuffer {
+    return FfiConverterTypeUuid.lower(value)
+}
+
+
 private enum InitializationResult {
     case ok
     case contractVersionMismatch

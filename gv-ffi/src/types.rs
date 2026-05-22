@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use fractional_index::FractionalIndex;
 use gv_core::{
     models::{
         activity::{Activity, ActivityName},
@@ -38,6 +39,57 @@ impl From<gv_core::error::DomainError> for FfiError {
     }
 }
 
+// --- Leaf custom_type! declarations ---
+//
+// Every Rust type that crosses the FFI boundary as a leaf value goes through
+// a `custom_type!` declaration here. `remote,` opts in to the foreign-crate
+// path (Uuid lives in the `uuid` crate, not gv-ffi). Fallible `try_lift`s
+// return `anyhow::Error`, which uniffi surfaces to Swift as a thrown error
+// when the consuming function returns `Result`.
+//
+// Generic types like `DateTime<Utc>` can't be parsed by the macro directly
+// (`Custom types must only have one component`) — bind them to a type alias
+// first. The alias is just a name; uniffi registers the underlying type so
+// any field typed as `DateTime<Utc>` picks up the conversion.
+
+uniffi::custom_type!(Uuid, String, {
+    remote,
+    lower: |u| u.to_string(),
+    try_lift: |s| Uuid::parse_str(&s).map_err(Into::into),
+});
+
+type UtcDateTime = DateTime<Utc>;
+uniffi::custom_type!(UtcDateTime, i64, {
+    remote,
+    lower: |dt| dt.timestamp_millis(),
+    try_lift: |ms| DateTime::<Utc>::from_timestamp_millis(ms)
+        .ok_or_else(|| anyhow::anyhow!("invalid timestamp milliseconds: {ms}")),
+});
+
+uniffi::custom_type!(FractionalIndex, String, {
+    remote,
+    lower: |fi| fi.to_string(),
+    try_lift: |s| FractionalIndex::from_string(&s).map_err(Into::into),
+});
+
+uniffi::custom_type!(Email, String, {
+    remote,
+    lower: |e| e.as_str().to_string(),
+    try_lift: |s| Email::parse(s).map_err(Into::into),
+});
+
+uniffi::custom_type!(Username, String, {
+    remote,
+    lower: |u| u.as_str().to_string(),
+    try_lift: |s| Username::parse(s).map_err(Into::into),
+});
+
+uniffi::custom_type!(ActivityName, String, {
+    remote,
+    lower: |n| n.to_string(),
+    try_lift: |s| ActivityName::parse(s).map_err(Into::into),
+});
+
 // --- Helpers ---
 
 pub(crate) fn parse_uuid(s: &str) -> Result<Uuid, FfiError> {
@@ -62,15 +114,26 @@ pub(crate) fn ffi_action_to_core(
         FfiAction::CreateScalarActivity(a) => {
             let activity = ffi_activity_to_core(a.activity)?;
             let template = ffi_entry_to_core(a.template)?;
-            Ok(gv_core::actions::CreateScalarActivity { actor_id, activity, template }.into())
+            Ok(gv_core::actions::CreateScalarActivity {
+                actor_id,
+                activity,
+                template,
+            }
+            .into())
         }
         FfiAction::CreateSequenceActivity(a) => {
             let activity = ffi_activity_to_core(a.activity)?;
-            let template = a.template
+            let template = a
+                .template
                 .into_iter()
                 .map(ffi_entry_to_core)
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(gv_core::actions::CreateSequenceActivity { actor_id, activity, template }.into())
+            Ok(gv_core::actions::CreateSequenceActivity {
+                actor_id,
+                activity,
+                template,
+            }
+            .into())
         }
 
         FfiAction::MoveEntry(a) => {
@@ -656,7 +719,11 @@ impl From<EntryJoin> for FfiEntryJoin {
         FfiEntryJoin {
             entry: ej.entry.into(),
             activity: ej.activity.map(FfiActivity::from),
-            attributes: ej.attributes.into_iter().map(FfiAttributePair::from).collect(),
+            attributes: ej
+                .attributes
+                .into_iter()
+                .map(FfiAttributePair::from)
+                .collect(),
             display_name: ej.display_name,
         }
     }
@@ -974,7 +1041,11 @@ pub(crate) fn ffi_activity_to_core(
         owner_id: parse_uuid(&a.owner_id)?,
         name: parse_activity_name(&a.name)?,
         description: a.description,
-        source_activity_id: a.source_activity_id.as_deref().map(parse_uuid).transpose()?,
+        source_activity_id: a
+            .source_activity_id
+            .as_deref()
+            .map(parse_uuid)
+            .transpose()?,
     })
 }
 
