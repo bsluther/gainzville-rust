@@ -7,7 +7,7 @@ edition = "2024"
 path = "lib.rs"
 
 [features]
-default = []
+default = ["sqlite", "postgres"]
 sqlite = ["sqlx/sqlite"]
 postgres = ["sqlx/postgres"]
 

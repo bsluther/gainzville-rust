@@ -1935,6 +1935,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "gv_sql"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "fractional_index",
+ "gv_core",
+ "sqlx",
+ "thiserror 2.0.17",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "h2"
 version = "0.3.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
