@@ -5,3 +5,4 @@
 //! Keeps `gv_core` DB-agnostic.
 
 pub mod columns;
+pub mod rows;

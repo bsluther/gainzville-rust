@@ -34,6 +34,19 @@ impl EntryJoin {
         self.entry.is_sequence
     }
 
+    /// Stitch an already-parsed entry, optional activity, and attribute
+    /// pairs into an `EntryJoin`. Computes `display_name` via the
+    /// canonical fallback rule.
+    pub fn new(entry: Entry, activity: Option<Activity>, attributes: Vec<AttributePair>) -> Self {
+        let display_name = compute_display_name(&entry, activity.as_ref());
+        EntryJoin {
+            entry,
+            activity,
+            attributes,
+            display_name,
+        }
+    }
+
     pub fn from_row(row: EntryJoinRow, attributes: Vec<AttributePair>) -> Result<Self> {
         let duration_ms: Option<u32> =
             row.duration_ms
