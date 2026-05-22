@@ -3,8 +3,9 @@ use uuid::Uuid;
 
 use crate::{
     actions::{
-        Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
-        DeleteEntryRecursive, MoveEntry, UpdateAttributeValue, UpdateEntryCompletion, ValueField,
+        Action, CreateAttribute, CreateEntry, CreateScalarActivity, CreateSequenceActivity,
+        CreateUser, CreateValue, DeleteEntryRecursive, MoveEntry, UpdateAttributeValue,
+        UpdateEntryCompletion, ValueField,
     },
     delta::{AnyDelta, Delta},
     error::{DomainError, Result},
@@ -91,7 +92,7 @@ pub async fn create_user(
 
 pub async fn create_activity(
     _executor: &mut impl AnyQueryExecutor,
-    action: CreateActivity,
+    action: CreateScalarActivity,
 ) -> Result<Mutation> {
     let activity = action.activity.clone();
     // Check if actor has permission to create activities for owner.
@@ -110,6 +111,36 @@ pub async fn create_activity(
         timestamp: Utc::now(),
         action: Action::CreateActivity(action.clone()),
         changes: vec![insert_activity.into()],
+    })
+}
+
+pub async fn create_sequence_activity(
+    _executor: &mut impl AnyQueryExecutor,
+    action: CreateSequenceActivity,
+) -> Result<Mutation> {
+    let activity = action.activity.clone();
+    if action.actor_id != activity.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "actor '{}' is not authorized to create activities for owner '{}'",
+            action.actor_id, activity.owner_id
+        )));
+    }
+
+    let insert_activity = Delta::Insert { new: activity };
+    let insert_templates: Vec<AnyDelta> = action
+        .template
+        .iter()
+        .map(|e| Delta::Insert { new: e.clone() }.into())
+        .collect();
+
+    let mut changes: Vec<AnyDelta> = vec![insert_activity.into()];
+    changes.extend(insert_templates);
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: Action::CreateSequenceActivity(action.clone()),
+        changes,
     })
 }
 

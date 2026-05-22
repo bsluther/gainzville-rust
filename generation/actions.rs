@@ -3,7 +3,10 @@ use uuid::Uuid;
 
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick};
 use gv_core::{
-    actions::{Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue, MoveEntry, UpdateEntryCompletion},
+    actions::{
+        Action, CreateAttribute, CreateEntry, CreateScalarActivity, CreateUser, CreateValue,
+        MoveEntry, UpdateEntryCompletion,
+    },
     models::{
         activity::Activity,
         attribute::{Attribute, Value},
@@ -17,7 +20,12 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
     fn arbitrary_from<R: Rng, C: GenerationContext>(
         rng: &mut R,
         context: &C,
-        (actor_ids, activities, entries, attributes): (&[Uuid], &[Activity], &[Entry], &[Attribute]),
+        (actor_ids, activities, entries, attributes): (
+            &[Uuid],
+            &[Activity],
+            &[Entry],
+            &[Attribute],
+        ),
     ) -> Self {
         // Actions that are always available: CreateUser, CreateActivity, CreateEntry, CreateAttribute
         // Actions that require non-empty entries: MoveEntry, UpdateEntryCompletion
@@ -33,7 +41,7 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
         let choice = pick(&choices, rng).unwrap();
         match choice {
             0 => CreateUser::arbitrary(rng, context).into(),
-            1 => CreateActivity::arbitrary_from(rng, context, actor_ids).into(),
+            1 => CreateScalarActivity::arbitrary_from(rng, context, actor_ids).into(),
             2 => CreateEntry::arbitrary_from(rng, context, (actor_ids, activities, entries)).into(),
             3 => CreateAttribute::arbitrary_from(rng, context, actor_ids).into(),
             4 => MoveEntry::arbitrary_from(rng, context, entries).into(),
@@ -55,7 +63,7 @@ impl Arbitrary for CreateUser {
     }
 }
 
-impl ArbitraryFrom<&[Uuid]> for CreateActivity {
+impl ArbitraryFrom<&[Uuid]> for CreateScalarActivity {
     /// Generate an arbitrary activity owned by one of the provided uuids.
     fn arbitrary_from<R: rand::Rng, C: super::GenerationContext>(
         rng: &mut R,

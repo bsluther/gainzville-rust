@@ -2,7 +2,7 @@ use std::env;
 
 use generation::{ArbitraryFrom, SimulationContext};
 use gv_core::{
-    actions::{CreateActivity, CreateEntry},
+    actions::{CreateEntry, CreateScalarActivity},
     models::{activity::Activity, entry::Entry},
     queries::AllActorIds,
     query_executor::QueryExecutor,
@@ -24,7 +24,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = SimulationContext::default();
     let actor_ids = {
         let mut connection = server.pool.acquire().await?;
-        PostgresQueryExecutor::new(&mut *connection).execute(AllActorIds {}).await?
+        PostgresQueryExecutor::new(&mut *connection)
+            .execute(AllActorIds {})
+            .await?
     };
 
     let activities = (0..100)
@@ -37,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     for activity in activities {
-        let create_activity: CreateActivity = activity.into();
+        let create_activity: CreateScalarActivity = activity.into();
         let _tx = server.run_action(create_activity.into()).await?;
     }
 

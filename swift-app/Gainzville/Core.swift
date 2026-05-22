@@ -62,10 +62,30 @@ class ActivitiesViewModel: ObservableObject {
 
     func createActivity(name: String, description: String?) {
         guard let core else { return }
-        try? core.runAction(action: .createActivity(FfiCreateActivity(
-            id: UUID().uuidString,
+        let actorId = "eee9e6ae-6531-4580-8356-427604a0dc02"
+        let activityId = UUID().uuidString
+        let activity = FfiActivity(
+            id: activityId,
+            ownerId: actorId,
             name: name,
-            description: description
+            description: description,
+            sourceActivityId: nil
+        )
+        let template = FfiEntry(
+            id: UUID().uuidString,
+            activityId: activityId,
+            ownerId: actorId,
+            name: nil,
+            position: nil,
+            isTemplate: true,
+            displayAsSets: false,
+            isSequence: false,
+            isComplete: false,
+            temporal: .none
+        )
+        try? core.runAction(action: .createScalarActivity(FfiCreateScalarActivity(
+            activity: activity,
+            template: template
         )))
         // No manual refresh needed — runAction refreshes the cache and fires
         // on_data_changed, which triggers refresh via AppListener.

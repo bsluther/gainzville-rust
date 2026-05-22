@@ -2,6 +2,7 @@ use crate::error::{Result, ValidationError};
 use sqlx::prelude::FromRow;
 use uuid::Uuid;
 
+// TODO: Activities can't currently be sequences! Need to add a field to the activity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, FromRow)]
 pub struct Activity {
     pub id: Uuid,

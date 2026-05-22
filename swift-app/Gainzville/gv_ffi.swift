@@ -1419,64 +1419,6 @@ public func FfiConverterTypeFfiAttribute_lower(_ value: FfiAttribute) -> RustBuf
 }
 
 
-public struct FfiCreateActivity: Equatable, Hashable {
-    public var id: String
-    public var name: String
-    public var description: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(id: String, name: String, description: String?) {
-        self.id = id
-        self.name = name
-        self.description = description
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FfiCreateActivity: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFfiCreateActivity: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiCreateActivity {
-        return
-            try FfiCreateActivity(
-                id: FfiConverterString.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf), 
-                description: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FfiCreateActivity, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.id, into: &buf)
-        FfiConverterString.write(value.name, into: &buf)
-        FfiConverterOptionString.write(value.description, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiCreateActivity_lift(_ buf: RustBuffer) throws -> FfiCreateActivity {
-    return try FfiConverterTypeFfiCreateActivity.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiCreateActivity_lower(_ value: FfiCreateActivity) -> RustBuffer {
-    return FfiConverterTypeFfiCreateActivity.lower(value)
-}
-
-
 public struct FfiCreateEntry: Equatable, Hashable {
     public var id: String
     public var activityId: String?
@@ -1556,6 +1498,114 @@ public func FfiConverterTypeFfiCreateEntry_lift(_ buf: RustBuffer) throws -> Ffi
 #endif
 public func FfiConverterTypeFfiCreateEntry_lower(_ value: FfiCreateEntry) -> RustBuffer {
     return FfiConverterTypeFfiCreateEntry.lower(value)
+}
+
+
+public struct FfiCreateScalarActivity: Equatable, Hashable {
+    public var activity: FfiActivity
+    public var template: FfiEntry
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(activity: FfiActivity, template: FfiEntry) {
+        self.activity = activity
+        self.template = template
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiCreateScalarActivity: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiCreateScalarActivity: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiCreateScalarActivity {
+        return
+            try FfiCreateScalarActivity(
+                activity: FfiConverterTypeFfiActivity.read(from: &buf), 
+                template: FfiConverterTypeFfiEntry.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiCreateScalarActivity, into buf: inout [UInt8]) {
+        FfiConverterTypeFfiActivity.write(value.activity, into: &buf)
+        FfiConverterTypeFfiEntry.write(value.template, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiCreateScalarActivity_lift(_ buf: RustBuffer) throws -> FfiCreateScalarActivity {
+    return try FfiConverterTypeFfiCreateScalarActivity.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiCreateScalarActivity_lower(_ value: FfiCreateScalarActivity) -> RustBuffer {
+    return FfiConverterTypeFfiCreateScalarActivity.lower(value)
+}
+
+
+public struct FfiCreateSequenceActivity: Equatable, Hashable {
+    public var activity: FfiActivity
+    public var template: [FfiEntry]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(activity: FfiActivity, template: [FfiEntry]) {
+        self.activity = activity
+        self.template = template
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiCreateSequenceActivity: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiCreateSequenceActivity: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiCreateSequenceActivity {
+        return
+            try FfiCreateSequenceActivity(
+                activity: FfiConverterTypeFfiActivity.read(from: &buf), 
+                template: FfiConverterSequenceTypeFfiEntry.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiCreateSequenceActivity, into buf: inout [UInt8]) {
+        FfiConverterTypeFfiActivity.write(value.activity, into: &buf)
+        FfiConverterSequenceTypeFfiEntry.write(value.template, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiCreateSequenceActivity_lift(_ buf: RustBuffer) throws -> FfiCreateSequenceActivity {
+    return try FfiConverterTypeFfiCreateSequenceActivity.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiCreateSequenceActivity_lower(_ value: FfiCreateSequenceActivity) -> RustBuffer {
+    return FfiConverterTypeFfiCreateSequenceActivity.lower(value)
 }
 
 
@@ -2596,7 +2646,9 @@ public func FfiConverterTypeFfiValue_lower(_ value: FfiValue) -> RustBuffer {
 
 public enum FfiAction: Equatable, Hashable {
     
-    case createActivity(FfiCreateActivity
+    case createScalarActivity(FfiCreateScalarActivity
+    )
+    case createSequenceActivity(FfiCreateSequenceActivity
     )
     case moveEntry(FfiMoveEntry
     )
@@ -2629,22 +2681,25 @@ public struct FfiConverterTypeFfiAction: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .createActivity(try FfiConverterTypeFfiCreateActivity.read(from: &buf)
+        case 1: return .createScalarActivity(try FfiConverterTypeFfiCreateScalarActivity.read(from: &buf)
         )
         
-        case 2: return .moveEntry(try FfiConverterTypeFfiMoveEntry.read(from: &buf)
+        case 2: return .createSequenceActivity(try FfiConverterTypeFfiCreateSequenceActivity.read(from: &buf)
         )
         
-        case 3: return .createEntry(try FfiConverterTypeFfiCreateEntry.read(from: &buf)
+        case 3: return .moveEntry(try FfiConverterTypeFfiMoveEntry.read(from: &buf)
         )
         
-        case 4: return .updateEntryCompletion(try FfiConverterTypeFfiUpdateEntryCompletion.read(from: &buf)
+        case 4: return .createEntry(try FfiConverterTypeFfiCreateEntry.read(from: &buf)
         )
         
-        case 5: return .deleteEntryRecursive(try FfiConverterTypeFfiDeleteEntryRecursive.read(from: &buf)
+        case 5: return .updateEntryCompletion(try FfiConverterTypeFfiUpdateEntryCompletion.read(from: &buf)
         )
         
-        case 6: return .updateAttributeValue(try FfiConverterTypeFfiUpdateAttributeValue.read(from: &buf)
+        case 6: return .deleteEntryRecursive(try FfiConverterTypeFfiDeleteEntryRecursive.read(from: &buf)
+        )
+        
+        case 7: return .updateAttributeValue(try FfiConverterTypeFfiUpdateAttributeValue.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -2655,33 +2710,38 @@ public struct FfiConverterTypeFfiAction: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .createActivity(v1):
+        case let .createScalarActivity(v1):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeFfiCreateActivity.write(v1, into: &buf)
+            FfiConverterTypeFfiCreateScalarActivity.write(v1, into: &buf)
+            
+        
+        case let .createSequenceActivity(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeFfiCreateSequenceActivity.write(v1, into: &buf)
             
         
         case let .moveEntry(v1):
-            writeInt(&buf, Int32(2))
+            writeInt(&buf, Int32(3))
             FfiConverterTypeFfiMoveEntry.write(v1, into: &buf)
             
         
         case let .createEntry(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeFfiCreateEntry.write(v1, into: &buf)
             
         
         case let .updateEntryCompletion(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeFfiUpdateEntryCompletion.write(v1, into: &buf)
             
         
         case let .deleteEntryRecursive(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeFfiDeleteEntryRecursive.write(v1, into: &buf)
             
         
         case let .updateAttributeValue(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeFfiUpdateAttributeValue.write(v1, into: &buf)
             
         }

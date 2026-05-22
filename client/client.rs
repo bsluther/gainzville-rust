@@ -4,7 +4,7 @@ use futures_core::Stream;
 use gv_core::delta_executor::AnyDeltaExecutor;
 use gv_core::error::DomainError;
 use gv_core::{
-    actions::{Action, CreateActivity},
+    actions::{Action, CreateScalarActivity},
     error::Result,
     models::{
         activity::{Activity, ActivityName},
@@ -114,6 +114,9 @@ impl SqliteClient {
             Action::UpdateAttributeValue(action) => {
                 mutators::update_attribute_value(&mut executor, action).await?
             }
+            Action::CreateSequenceActivity(action) => {
+                mutators::create_sequence_activity(&mut executor, action).await?
+            }
         };
 
         // TODO: write this mutation into the local mutation log.
@@ -197,8 +200,8 @@ impl SqliteClient {
                     description: Some(format!("Created by background ticker (tick #{counter})")),
                     source_activity_id: None,
                 };
-                let action: Action = CreateActivity { actor_id, activity }.into();
-                let _ = client.run_action(action).await;
+                let create_scalar_activity: CreateScalarActivity = activity.into();
+                let _ = client.run_action(create_scalar_activity.into()).await;
             }
         });
     }
@@ -350,7 +353,7 @@ pub mod tests {
             description: None,
             source_activity_id: None,
         };
-        let create_activity: CreateActivity = activity.into();
+        let create_activity: CreateScalarActivity = activity.into();
         let action: Action = create_activity.into();
 
         sqlite_client.run_action(action).await.unwrap();
