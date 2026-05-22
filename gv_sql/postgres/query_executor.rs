@@ -297,10 +297,10 @@ impl QueryExecutor<FindAttributeById> for PostgresQueryExecutor<'_> {
         &mut self,
         query: FindAttributeById,
     ) -> Result<<FindAttributeById as Query>::Response> {
-        sqlx::query_as::<_, AttributeRow>(
+        sqlx::query_as::<_, crate::rows::AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes WHERE id = $1",
         )
-        .bind(query.attribute_id)
+        .bind(crate::columns::UuidColumn(query.attribute_id))
         .fetch_optional(&mut *self.conn)
         .await?
         .map(|row| row.to_attribute())
@@ -313,7 +313,7 @@ impl QueryExecutor<AllAttributes> for PostgresQueryExecutor<'_> {
         &mut self,
         _query: AllAttributes,
     ) -> Result<<AllAttributes as Query>::Response> {
-        sqlx::query_as::<_, AttributeRow>(
+        sqlx::query_as::<_, crate::rows::AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes",
         )
         .fetch_all(&mut *self.conn)
@@ -329,10 +329,10 @@ impl QueryExecutor<FindAttributesByOwner> for PostgresQueryExecutor<'_> {
         &mut self,
         query: FindAttributesByOwner,
     ) -> Result<<FindAttributesByOwner as Query>::Response> {
-        sqlx::query_as::<_, AttributeRow>(
+        sqlx::query_as::<_, crate::rows::AttributeRow>(
             "SELECT id, owner_id, name, data_type, config FROM attributes WHERE owner_id = $1",
         )
-        .bind(query.owner_id)
+        .bind(crate::columns::UuidColumn(query.owner_id))
         .fetch_all(&mut *self.conn)
         .await?
         .into_iter()

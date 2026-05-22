@@ -219,7 +219,7 @@ impl DeltaExecutor<Attribute> for SqliteDeltaExecutor<'_> {
     async fn apply_delta(&mut self, delta: Delta<Attribute>) -> Result<()> {
         match delta {
             Delta::Insert { new } => {
-                let row = AttributeRow::from_attribute(&new)?;
+                let row = crate::rows::AttributeRow::from_attribute(&new)?;
                 sqlx::query(
                     "INSERT INTO attributes (id, owner_id, name, data_type, config) VALUES (?, ?, ?, ?, ?)",
                 )
@@ -233,7 +233,7 @@ impl DeltaExecutor<Attribute> for SqliteDeltaExecutor<'_> {
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
-                let row = AttributeRow::from_attribute(&new)?;
+                let row = crate::rows::AttributeRow::from_attribute(&new)?;
                 sqlx::query(
                     "UPDATE attributes SET owner_id = ?, name = ?, data_type = ?, config = ? WHERE id = ?",
                 )
@@ -247,7 +247,7 @@ impl DeltaExecutor<Attribute> for SqliteDeltaExecutor<'_> {
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM attributes WHERE id = ?")
-                    .bind(old.id)
+                    .bind(crate::columns::UuidColumn(old.id))
                     .execute(&mut *self.conn)
                     .await?;
             }

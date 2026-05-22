@@ -276,7 +276,7 @@ impl DeltaExecutor<Attribute> for PostgresDeltaExecutor<'_> {
     async fn apply_delta(&mut self, delta: Delta<Attribute>) -> Result<()> {
         match delta {
             Delta::Insert { new } => {
-                let row = AttributeRow::from_attribute(&new)?;
+                let row = crate::rows::AttributeRow::from_attribute(&new)?;
                 sqlx::query(
                     r#"
                     INSERT INTO attributes (id, owner_id, name, data_type, config)
@@ -293,7 +293,7 @@ impl DeltaExecutor<Attribute> for PostgresDeltaExecutor<'_> {
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
-                let row = AttributeRow::from_attribute(&new)?;
+                let row = crate::rows::AttributeRow::from_attribute(&new)?;
                 sqlx::query(
                     r#"
                     UPDATE attributes
@@ -311,7 +311,7 @@ impl DeltaExecutor<Attribute> for PostgresDeltaExecutor<'_> {
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM attributes WHERE id = $1")
-                    .bind(old.id)
+                    .bind(crate::columns::UuidColumn(old.id))
                     .execute(&mut *self.conn)
                     .await?;
             }
