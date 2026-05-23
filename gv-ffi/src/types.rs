@@ -95,17 +95,6 @@ uniffi::custom_type!(ActivityName, String, {
     try_lift: |s| ActivityName::parse(s).map_err(Into::into),
 });
 
-// --- Helpers ---
-
-pub(crate) fn parse_uuid(s: &str) -> Result<Uuid, FfiError> {
-    Uuid::parse_str(s).map_err(|e| FfiError::Generic(format!("invalid UUID '{}': {}", s, e)))
-}
-
-pub(crate) fn parse_timestamp_ms(ms: i64) -> Result<DateTime<Utc>, FfiError> {
-    DateTime::<Utc>::from_timestamp_millis(ms)
-        .ok_or_else(|| FfiError::Generic(format!("invalid timestamp milliseconds: {ms}")))
-}
-
 // --- User ---
 
 #[uniffi::remote(Record)]

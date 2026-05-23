@@ -1,5 +1,6 @@
 use std::sync::{Arc, LazyLock, Once};
 
+use chrono::{DateTime, Utc};
 use gv_client::{client::SqliteClient, query_store::QuerySubscription};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -13,7 +14,7 @@ use gv_core::{
     std_lib::StandardLibrary,
 };
 
-use crate::types::{FfiError, parse_timestamp_ms, parse_uuid};
+use crate::types::FfiError;
 
 static LOGGING: Once = Once::new();
 
@@ -63,16 +64,15 @@ impl GainzvilleCore {
     /// Initialise the database at `db_path` and return a ready-to-use core.
     ///
     /// - `db_path`: SQLite connection string, e.g. `"sqlite:///path/to/db.sqlite"`.
-    /// - `actor_id`: UUID string identifying the current user's actor.
+    /// - `actor_id`: UUID identifying the current user's actor.
     /// - `listener`: Swift-side callback object for change notifications.
     #[uniffi::constructor]
     pub fn new(
         db_path: String,
-        actor_id: String,
+        actor_id: Uuid,
         listener: Arc<dyn CoreListener>,
     ) -> Result<Arc<Self>, FfiError> {
         init_logging();
-        let actor_id = parse_uuid(&actor_id)?;
         let client = RUNTIME
             .block_on(SqliteClient::init(&db_path))
             .map_err(FfiError::from)?;
@@ -153,52 +153,37 @@ impl GainzvilleCore {
             .unwrap_or_default()
     }
 
-    /// Root entries whose canonical instant falls within `[from, to)` (Unix ms), sorted by time.
-    pub fn forest_roots_in(&self, from: i64, to: i64) -> Vec<Entry> {
-        let Ok(from_dt) = parse_timestamp_ms(from) else { return vec![] };
-        let Ok(to_dt) = parse_timestamp_ms(to) else { return vec![] };
+    /// Root entries whose canonical instant falls within `[from, to)`, sorted by time.
+    pub fn forest_roots_in(&self, from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<Entry> {
         self.forest_snapshot()
-            .map(|f| {
-                f.roots_in(from_dt..to_dt)
-                    .into_iter()
-                    .cloned()
-                    .collect()
-            })
+            .map(|f| f.roots_in(from..to).into_iter().cloned().collect())
             .unwrap_or_default()
     }
 
     /// Direct children of `parent_id`, sorted by fractional index.
-    pub fn forest_children(&self, parent_id: String) -> Vec<Entry> {
-        let Ok(id) = parse_uuid(&parent_id) else { return vec![] };
+    pub fn forest_children(&self, parent_id: Uuid) -> Vec<Entry> {
         self.forest_snapshot()
-            .map(|f| f.children(id).into_iter().cloned().collect())
+            .map(|f| f.children(parent_id).into_iter().cloned().collect())
             .unwrap_or_default()
     }
 
     /// Ancestors of `entry_id` from immediate parent up to the root.
-    pub fn forest_ancestors(&self, entry_id: String) -> Vec<Entry> {
-        let Ok(id) = parse_uuid(&entry_id) else { return vec![] };
+    pub fn forest_ancestors(&self, entry_id: Uuid) -> Vec<Entry> {
         self.forest_snapshot()
-            .map(|f| f.ancestors(id).into_iter().cloned().collect())
+            .map(|f| f.ancestors(entry_id).into_iter().cloned().collect())
             .unwrap_or_default()
     }
 
     /// Position immediately after the last child of `parent_id`.
     /// Returns `None` if the parent is not found in the current snapshot.
     /// Caller must ensure `parent_id` refers to a sequence entry.
-    pub fn forest_position_after_children(&self, parent_id: String) -> Option<Position> {
-        let Ok(id) = parse_uuid(&parent_id) else { return None };
+    pub fn forest_position_after_children(&self, parent_id: Uuid) -> Option<Position> {
         self.forest_snapshot()
-            .and_then(|f| f.position_after_children(id))
+            .and_then(|f| f.position_after_children(parent_id))
     }
 
     /// Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
-    pub fn forest_would_create_cycle(&self, entry_id: String, proposed_parent_id: String) -> bool {
-        let (Ok(entry_id), Ok(proposed_parent_id)) =
-            (parse_uuid(&entry_id), parse_uuid(&proposed_parent_id))
-        else {
-            return false;
-        };
+    pub fn forest_would_create_cycle(&self, entry_id: Uuid, proposed_parent_id: Uuid) -> bool {
         self.forest_snapshot()
             .map(|f| f.would_create_cycle(entry_id, proposed_parent_id))
             .unwrap_or(false)
@@ -210,32 +195,23 @@ impl GainzvilleCore {
     /// Caller must ensure `parent_id` refers to a sequence entry.
     pub fn forest_position_between(
         &self,
-        parent_id: String,
-        pred_id: Option<String>,
-        succ_id: Option<String>,
+        parent_id: Uuid,
+        pred_id: Option<Uuid>,
+        succ_id: Option<Uuid>,
     ) -> Option<Position> {
-        let Ok(parent_id) = parse_uuid(&parent_id) else { return None };
-        let pred_id = match pred_id.as_deref().map(parse_uuid) {
-            Some(Ok(id)) => Some(id),
-            Some(Err(_)) => return None,
-            None => None,
-        };
-        let succ_id = match succ_id.as_deref().map(parse_uuid) {
-            Some(Ok(id)) => Some(id),
-            Some(Err(_)) => return None,
-            None => None,
-        };
         self.forest_snapshot()
             .map(|f| f.position_between(parent_id, pred_id, succ_id))
     }
 
-    /// Suggested start time (Unix ms) for a new root-level entry on the given day.
-    /// `day_start` is the start of the day in Unix ms. Returns now if today,
-    /// one minute after the last existing root entry otherwise, or noon as a fallback.
-    pub fn forest_suggested_root_day_insertion_time(&self, day_start: i64) -> i64 {
-        let Ok(day_start_dt) = parse_timestamp_ms(day_start) else { return day_start };
+    /// Suggested start time for a new root-level entry on the given day.
+    /// Returns now if today, one minute after the last existing root entry
+    /// otherwise, or noon as a fallback.
+    pub fn forest_suggested_root_day_insertion_time(
+        &self,
+        day_start: DateTime<Utc>,
+    ) -> DateTime<Utc> {
         let forest = self.forest_snapshot().unwrap_or_else(|| Forest::from(vec![]));
-        forest.suggested_root_day_insertion_time(day_start_dt).timestamp_millis()
+        forest.suggested_root_day_insertion_time(day_start)
     }
 
     // -------------------------------------------------------------------------
