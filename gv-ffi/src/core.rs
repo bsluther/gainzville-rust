@@ -8,14 +8,14 @@ use generation::{ArbitraryFrom, Opts, SimulationContext};
 use gv_core::{
     actions::{CreateAttribute, CreateEntry, CreateValue},
     forest::Forest,
-    models::entry::Entry,
+    models::entry::{Entry, Position},
     queries::{AllActivities, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse},
     std_lib::StandardLibrary,
 };
 
 use crate::types::{
-    FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiEntry, FfiError, FfiPosition,
-    ffi_action_to_core, parse_timestamp_ms, parse_uuid,
+    FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiEntry, FfiError, ffi_action_to_core,
+    parse_timestamp_ms, parse_uuid,
 };
 
 static LOGGING: Once = Once::new();
@@ -194,11 +194,10 @@ impl GainzvilleCore {
     /// Position immediately after the last child of `parent_id`.
     /// Returns `None` if the parent is not found in the current snapshot.
     /// Caller must ensure `parent_id` refers to a sequence entry.
-    pub fn forest_position_after_children(&self, parent_id: String) -> Option<FfiPosition> {
+    pub fn forest_position_after_children(&self, parent_id: String) -> Option<Position> {
         let Ok(id) = parse_uuid(&parent_id) else { return None };
         self.forest_snapshot()
             .and_then(|f| f.position_after_children(id))
-            .map(FfiPosition::from)
     }
 
     /// Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
@@ -222,7 +221,7 @@ impl GainzvilleCore {
         parent_id: String,
         pred_id: Option<String>,
         succ_id: Option<String>,
-    ) -> Option<FfiPosition> {
+    ) -> Option<Position> {
         let Ok(parent_id) = parse_uuid(&parent_id) else { return None };
         let pred_id = match pred_id.as_deref().map(parse_uuid) {
             Some(Ok(id)) => Some(id),
@@ -236,7 +235,6 @@ impl GainzvilleCore {
         };
         self.forest_snapshot()
             .map(|f| f.position_between(parent_id, pred_id, succ_id))
-            .map(FfiPosition::from)
     }
 
     /// Suggested start time (Unix ms) for a new root-level entry on the given day.

@@ -138,32 +138,28 @@ pub(crate) fn ffi_action_to_core(
 
         FfiAction::MoveEntry(a) => {
             let entry_id = parse_uuid(&a.entry_id)?;
-            let position = a.position.map(ffi_position_to_core).transpose()?;
-            let temporal = ffi_temporal_to_core(a.temporal)?;
             Ok(gv_core::actions::MoveEntry {
                 actor_id,
                 entry_id,
-                position,
-                temporal,
+                position: a.position,
+                temporal: a.temporal,
             }
             .into())
         }
         FfiAction::CreateEntry(a) => {
             let id = parse_uuid(&a.id)?;
             let activity_id = a.activity_id.as_deref().map(parse_uuid).transpose()?;
-            let position = a.position.map(ffi_position_to_core).transpose()?;
-            let temporal = ffi_temporal_to_core(a.temporal)?;
             let entry = gv_core::models::entry::Entry {
                 id,
                 activity_id,
                 owner_id: actor_id,
                 name: a.name,
-                position,
+                position: a.position,
                 is_template: a.is_template,
                 display_as_sets: a.display_as_sets,
                 is_sequence: a.is_sequence,
                 is_complete: a.is_complete,
-                temporal,
+                temporal: a.temporal,
             };
             Ok(gv_core::actions::CreateEntry { actor_id, entry }.into())
         }
@@ -229,58 +225,21 @@ impl From<Activity> for FfiActivity {
 
 // --- Entry ---
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiPosition {
-    pub parent_id: String,
-    pub frac_index: String,
+#[uniffi::remote(Record)]
+pub struct Position {
+    pub parent_id: Uuid,
+    pub frac_index: FractionalIndex,
 }
 
-impl From<Position> for FfiPosition {
-    fn from(p: Position) -> Self {
-        FfiPosition {
-            parent_id: p.parent_id.to_string(),
-            frac_index: p.frac_index.to_string(),
-        }
-    }
-}
-
-/// Timestamps are Unix milliseconds (UTC).
-#[derive(uniffi::Enum, Debug, Clone)]
-pub enum FfiTemporal {
+#[uniffi::remote(Enum)]
+pub enum Temporal {
     None,
-    Start { start: i64 },
-    End { end: i64 },
+    Start { start: DateTime<Utc> },
+    End { end: DateTime<Utc> },
     Duration { duration: u32 },
-    StartAndEnd { start: i64, end: i64 },
-    StartAndDuration { start: i64, duration_ms: u32 },
-    DurationAndEnd { duration_ms: u32, end: i64 },
-}
-
-impl From<Temporal> for FfiTemporal {
-    fn from(t: Temporal) -> Self {
-        match t {
-            Temporal::None => FfiTemporal::None,
-            Temporal::Start { start } => FfiTemporal::Start {
-                start: start.timestamp_millis(),
-            },
-            Temporal::End { end } => FfiTemporal::End {
-                end: end.timestamp_millis(),
-            },
-            Temporal::Duration { duration } => FfiTemporal::Duration { duration },
-            Temporal::StartAndEnd { start, end } => FfiTemporal::StartAndEnd {
-                start: start.timestamp_millis(),
-                end: end.timestamp_millis(),
-            },
-            Temporal::StartAndDuration { start, duration_ms } => FfiTemporal::StartAndDuration {
-                start: start.timestamp_millis(),
-                duration_ms,
-            },
-            Temporal::DurationAndEnd { duration_ms, end } => FfiTemporal::DurationAndEnd {
-                duration_ms,
-                end: end.timestamp_millis(),
-            },
-        }
-    }
+    StartAndEnd { start: DateTime<Utc>, end: DateTime<Utc> },
+    StartAndDuration { start: DateTime<Utc>, duration_ms: u32 },
+    DurationAndEnd { duration_ms: u32, end: DateTime<Utc> },
 }
 
 #[derive(uniffi::Record, Debug, Clone)]
@@ -289,12 +248,12 @@ pub struct FfiEntry {
     pub activity_id: Option<String>,
     pub owner_id: String,
     pub name: Option<String>,
-    pub position: Option<FfiPosition>,
+    pub position: Option<Position>,
     pub is_template: bool,
     pub display_as_sets: bool,
     pub is_sequence: bool,
     pub is_complete: bool,
-    pub temporal: FfiTemporal,
+    pub temporal: Temporal,
 }
 
 impl From<Entry> for FfiEntry {
@@ -304,12 +263,12 @@ impl From<Entry> for FfiEntry {
             activity_id: e.activity_id.map(|id| id.to_string()),
             owner_id: e.owner_id.to_string(),
             name: e.name,
-            position: e.position.map(FfiPosition::from),
+            position: e.position,
             is_template: e.is_template,
             display_as_sets: e.display_as_sets,
             is_sequence: e.is_sequence,
             is_complete: e.is_complete,
-            temporal: FfiTemporal::from(e.temporal),
+            temporal: e.temporal,
         }
     }
 }
@@ -974,48 +933,21 @@ impl From<AnyQueryResponse> for FfiAnyQueryResponse {
 
 // --- Actions ---
 
-pub(crate) fn ffi_temporal_to_core(t: FfiTemporal) -> Result<Temporal, FfiError> {
-    Ok(match t {
-        FfiTemporal::None => Temporal::None,
-        FfiTemporal::Start { start } => Temporal::Start {
-            start: parse_timestamp_ms(start)?,
-        },
-        FfiTemporal::End { end } => Temporal::End {
-            end: parse_timestamp_ms(end)?,
-        },
-        FfiTemporal::Duration { duration } => Temporal::Duration { duration },
-        FfiTemporal::StartAndEnd { start, end } => Temporal::StartAndEnd {
-            start: parse_timestamp_ms(start)?,
-            end: parse_timestamp_ms(end)?,
-        },
-        FfiTemporal::StartAndDuration { start, duration_ms } => Temporal::StartAndDuration {
-            start: parse_timestamp_ms(start)?,
-            duration_ms,
-        },
-        FfiTemporal::DurationAndEnd { duration_ms, end } => Temporal::DurationAndEnd {
-            duration_ms,
-            end: parse_timestamp_ms(end)?,
-        },
-    })
-}
-
 pub(crate) fn ffi_entry_to_core(e: FfiEntry) -> Result<gv_core::models::entry::Entry, FfiError> {
     let id = parse_uuid(&e.id)?;
     let activity_id = e.activity_id.as_deref().map(parse_uuid).transpose()?;
     let owner_id = parse_uuid(&e.owner_id)?;
-    let position = e.position.map(ffi_position_to_core).transpose()?;
-    let temporal = ffi_temporal_to_core(e.temporal)?;
     Ok(gv_core::models::entry::Entry {
         id,
         activity_id,
         owner_id,
         name: e.name,
-        position,
+        position: e.position,
         is_template: e.is_template,
         display_as_sets: e.display_as_sets,
         is_sequence: e.is_sequence,
         is_complete: e.is_complete,
-        temporal,
+        temporal: e.temporal,
     })
 }
 
@@ -1035,13 +967,6 @@ pub(crate) fn ffi_activity_to_core(
     })
 }
 
-pub(crate) fn ffi_position_to_core(p: FfiPosition) -> Result<Position, FfiError> {
-    let parent_id = parse_uuid(&p.parent_id)?;
-    Position::parse(Some(parent_id), Some(p.frac_index))
-        .map_err(FfiError::from)?
-        .ok_or_else(|| FfiError::Generic("position unexpectedly None after parse".to_string()))
-}
-
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiCreateScalarActivity {
     pub activity: FfiActivity,
@@ -1057,8 +982,8 @@ pub struct FfiCreateSequenceActivity {
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiMoveEntry {
     pub entry_id: String,
-    pub position: Option<FfiPosition>,
-    pub temporal: FfiTemporal,
+    pub position: Option<Position>,
+    pub temporal: Temporal,
 }
 
 #[derive(uniffi::Record, Debug, Clone)]
@@ -1066,12 +991,12 @@ pub struct FfiCreateEntry {
     pub id: String,
     pub activity_id: Option<String>,
     pub name: Option<String>,
-    pub position: Option<FfiPosition>,
+    pub position: Option<Position>,
     pub is_template: bool,
     pub display_as_sets: bool,
     pub is_sequence: bool,
     pub is_complete: bool,
-    pub temporal: FfiTemporal,
+    pub temporal: Temporal,
 }
 
 #[derive(uniffi::Record, Debug, Clone)]

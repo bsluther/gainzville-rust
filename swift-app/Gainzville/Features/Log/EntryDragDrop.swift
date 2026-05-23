@@ -81,7 +81,7 @@ struct EntryDragPreview: View {
 // MARK: - Drop target
 
 struct DropTarget: View, DropDelegate {
-    let position: FfiPosition
+    let position: Position
     let predId: String?
     let succId: String?
     @EnvironmentObject private var forestVM: ForestViewModel

@@ -191,12 +191,12 @@ private struct ChildrenSection: View {
     // shift positions after a drop + forest refresh.
     private struct Slot: Identifiable {
         let id: String
-        let position: FfiPosition?
+        let position: Position?
         let predId: String?
         let succId: String?
         let child: FfiEntry?
 
-        static func dropTarget(position: FfiPosition, predId: String?, succId: String?) -> Slot {
+        static func dropTarget(position: Position, predId: String?, succId: String?) -> Slot {
             Slot(id: "drop-\(predId ?? "start")-\(succId ?? "end")", position: position, predId: predId, succId: succId, child: nil)
         }
 

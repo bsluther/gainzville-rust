@@ -126,12 +126,12 @@ class ForestViewModel: ObservableObject {
         return core?.forestWouldCreateCycle(entryId: entryId, proposedParentId: proposedParentId) ?? false
     }
 
-    func positionBetween(parentId: String, predId: String?, succId: String?) -> FfiPosition? {
+    func positionBetween(parentId: String, predId: String?, succId: String?) -> Position? {
         _ = roots
         return core?.forestPositionBetween(parentId: parentId, predId: predId, succId: succId)
     }
 
-    func moveEntry(_ entry: FfiEntry, to position: FfiPosition) {
+    func moveEntry(_ entry: FfiEntry, to position: Position) {
         guard let core else { return }
         try? core.runAction(action: .moveEntry(FfiMoveEntry(
             entryId: entry.id,
@@ -140,7 +140,7 @@ class ForestViewModel: ObservableObject {
         )))
     }
 
-    func updateEntryTemporal(entry: FfiEntry, temporal: FfiTemporal) {
+    func updateEntryTemporal(entry: FfiEntry, temporal: Temporal) {
         guard let core else { return }
         try? core.runAction(action: .moveEntry(FfiMoveEntry(
             entryId: entry.id,
@@ -154,7 +154,7 @@ class ForestViewModel: ObservableObject {
     func moveEntryToRoot(_ entry: FfiEntry, startTime: Date) {
         guard let core else { return }
         let ms = Int64(startTime.timeIntervalSince1970 * 1000)
-        let newTemporal: FfiTemporal = {
+        let newTemporal: Temporal = {
             switch entry.temporal {
             case .none, .start, .end, .startAndEnd:
                 return .start(start: ms)

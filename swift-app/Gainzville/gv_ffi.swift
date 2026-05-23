@@ -893,7 +893,7 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
      * Returns `None` if the parent is not found in the current snapshot.
      * Caller must ensure `parent_id` refers to a sequence entry.
      */
-    func forestPositionAfterChildren(parentId: String)  -> FfiPosition?
+    func forestPositionAfterChildren(parentId: String)  -> Position?
     
     /**
      * Position between two adjacent children of a sequence.
@@ -901,7 +901,7 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
      * pass `None` for the start or end of the child list.
      * Caller must ensure `parent_id` refers to a sequence entry.
      */
-    func forestPositionBetween(parentId: String, predId: String?, succId: String?)  -> FfiPosition?
+    func forestPositionBetween(parentId: String, predId: String?, succId: String?)  -> Position?
     
     /**
      * All root entries (no parent), sorted by canonical instant.
@@ -1101,8 +1101,8 @@ open func forestChildren(parentId: String) -> [FfiEntry]  {
      * Returns `None` if the parent is not found in the current snapshot.
      * Caller must ensure `parent_id` refers to a sequence entry.
      */
-open func forestPositionAfterChildren(parentId: String) -> FfiPosition?  {
-    return try!  FfiConverterOptionTypeFfiPosition.lift(try! rustCall() {
+open func forestPositionAfterChildren(parentId: String) -> Position?  {
+    return try!  FfiConverterOptionTypePosition.lift(try! rustCall() {
     uniffi_gv_ffi_fn_method_gainzvillecore_forest_position_after_children(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(parentId),$0
@@ -1116,8 +1116,8 @@ open func forestPositionAfterChildren(parentId: String) -> FfiPosition?  {
      * pass `None` for the start or end of the child list.
      * Caller must ensure `parent_id` refers to a sequence entry.
      */
-open func forestPositionBetween(parentId: String, predId: String?, succId: String?) -> FfiPosition?  {
-    return try!  FfiConverterOptionTypeFfiPosition.lift(try! rustCall() {
+open func forestPositionBetween(parentId: String, predId: String?, succId: String?) -> Position?  {
+    return try!  FfiConverterOptionTypePosition.lift(try! rustCall() {
     uniffi_gv_ffi_fn_method_gainzvillecore_forest_position_between(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(parentId),
@@ -1423,16 +1423,16 @@ public struct FfiCreateEntry: Equatable, Hashable {
     public var id: String
     public var activityId: String?
     public var name: String?
-    public var position: FfiPosition?
+    public var position: Position?
     public var isTemplate: Bool
     public var displayAsSets: Bool
     public var isSequence: Bool
     public var isComplete: Bool
-    public var temporal: FfiTemporal
+    public var temporal: Temporal
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, activityId: String?, name: String?, position: FfiPosition?, isTemplate: Bool, displayAsSets: Bool, isSequence: Bool, isComplete: Bool, temporal: FfiTemporal) {
+    public init(id: String, activityId: String?, name: String?, position: Position?, isTemplate: Bool, displayAsSets: Bool, isSequence: Bool, isComplete: Bool, temporal: Temporal) {
         self.id = id
         self.activityId = activityId
         self.name = name
@@ -1463,12 +1463,12 @@ public struct FfiConverterTypeFfiCreateEntry: FfiConverterRustBuffer {
                 id: FfiConverterString.read(from: &buf), 
                 activityId: FfiConverterOptionString.read(from: &buf), 
                 name: FfiConverterOptionString.read(from: &buf), 
-                position: FfiConverterOptionTypeFfiPosition.read(from: &buf), 
+                position: FfiConverterOptionTypePosition.read(from: &buf), 
                 isTemplate: FfiConverterBool.read(from: &buf), 
                 displayAsSets: FfiConverterBool.read(from: &buf), 
                 isSequence: FfiConverterBool.read(from: &buf), 
                 isComplete: FfiConverterBool.read(from: &buf), 
-                temporal: FfiConverterTypeFfiTemporal.read(from: &buf)
+                temporal: FfiConverterTypeTemporal.read(from: &buf)
         )
     }
 
@@ -1476,12 +1476,12 @@ public struct FfiConverterTypeFfiCreateEntry: FfiConverterRustBuffer {
         FfiConverterString.write(value.id, into: &buf)
         FfiConverterOptionString.write(value.activityId, into: &buf)
         FfiConverterOptionString.write(value.name, into: &buf)
-        FfiConverterOptionTypeFfiPosition.write(value.position, into: &buf)
+        FfiConverterOptionTypePosition.write(value.position, into: &buf)
         FfiConverterBool.write(value.isTemplate, into: &buf)
         FfiConverterBool.write(value.displayAsSets, into: &buf)
         FfiConverterBool.write(value.isSequence, into: &buf)
         FfiConverterBool.write(value.isComplete, into: &buf)
-        FfiConverterTypeFfiTemporal.write(value.temporal, into: &buf)
+        FfiConverterTypeTemporal.write(value.temporal, into: &buf)
     }
 }
 
@@ -1664,16 +1664,16 @@ public struct FfiEntry: Equatable, Hashable {
     public var activityId: String?
     public var ownerId: String
     public var name: String?
-    public var position: FfiPosition?
+    public var position: Position?
     public var isTemplate: Bool
     public var displayAsSets: Bool
     public var isSequence: Bool
     public var isComplete: Bool
-    public var temporal: FfiTemporal
+    public var temporal: Temporal
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, activityId: String?, ownerId: String, name: String?, position: FfiPosition?, isTemplate: Bool, displayAsSets: Bool, isSequence: Bool, isComplete: Bool, temporal: FfiTemporal) {
+    public init(id: String, activityId: String?, ownerId: String, name: String?, position: Position?, isTemplate: Bool, displayAsSets: Bool, isSequence: Bool, isComplete: Bool, temporal: Temporal) {
         self.id = id
         self.activityId = activityId
         self.ownerId = ownerId
@@ -1706,12 +1706,12 @@ public struct FfiConverterTypeFfiEntry: FfiConverterRustBuffer {
                 activityId: FfiConverterOptionString.read(from: &buf), 
                 ownerId: FfiConverterString.read(from: &buf), 
                 name: FfiConverterOptionString.read(from: &buf), 
-                position: FfiConverterOptionTypeFfiPosition.read(from: &buf), 
+                position: FfiConverterOptionTypePosition.read(from: &buf), 
                 isTemplate: FfiConverterBool.read(from: &buf), 
                 displayAsSets: FfiConverterBool.read(from: &buf), 
                 isSequence: FfiConverterBool.read(from: &buf), 
                 isComplete: FfiConverterBool.read(from: &buf), 
-                temporal: FfiConverterTypeFfiTemporal.read(from: &buf)
+                temporal: FfiConverterTypeTemporal.read(from: &buf)
         )
     }
 
@@ -1720,12 +1720,12 @@ public struct FfiConverterTypeFfiEntry: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.activityId, into: &buf)
         FfiConverterString.write(value.ownerId, into: &buf)
         FfiConverterOptionString.write(value.name, into: &buf)
-        FfiConverterOptionTypeFfiPosition.write(value.position, into: &buf)
+        FfiConverterOptionTypePosition.write(value.position, into: &buf)
         FfiConverterBool.write(value.isTemplate, into: &buf)
         FfiConverterBool.write(value.displayAsSets, into: &buf)
         FfiConverterBool.write(value.isSequence, into: &buf)
         FfiConverterBool.write(value.isComplete, into: &buf)
-        FfiConverterTypeFfiTemporal.write(value.temporal, into: &buf)
+        FfiConverterTypeTemporal.write(value.temporal, into: &buf)
     }
 }
 
@@ -1991,12 +1991,12 @@ public func FfiConverterTypeFfiMassMeasurement_lower(_ value: FfiMassMeasurement
 
 public struct FfiMoveEntry: Equatable, Hashable {
     public var entryId: String
-    public var position: FfiPosition?
-    public var temporal: FfiTemporal
+    public var position: Position?
+    public var temporal: Temporal
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(entryId: String, position: FfiPosition?, temporal: FfiTemporal) {
+    public init(entryId: String, position: Position?, temporal: Temporal) {
         self.entryId = entryId
         self.position = position
         self.temporal = temporal
@@ -2019,15 +2019,15 @@ public struct FfiConverterTypeFfiMoveEntry: FfiConverterRustBuffer {
         return
             try FfiMoveEntry(
                 entryId: FfiConverterString.read(from: &buf), 
-                position: FfiConverterOptionTypeFfiPosition.read(from: &buf), 
-                temporal: FfiConverterTypeFfiTemporal.read(from: &buf)
+                position: FfiConverterOptionTypePosition.read(from: &buf), 
+                temporal: FfiConverterTypeTemporal.read(from: &buf)
         )
     }
 
     public static func write(_ value: FfiMoveEntry, into buf: inout [UInt8]) {
         FfiConverterString.write(value.entryId, into: &buf)
-        FfiConverterOptionTypeFfiPosition.write(value.position, into: &buf)
-        FfiConverterTypeFfiTemporal.write(value.temporal, into: &buf)
+        FfiConverterOptionTypePosition.write(value.position, into: &buf)
+        FfiConverterTypeTemporal.write(value.temporal, into: &buf)
     }
 }
 
@@ -2184,60 +2184,6 @@ public func FfiConverterTypeFfiNumericConfig_lift(_ buf: RustBuffer) throws -> F
 #endif
 public func FfiConverterTypeFfiNumericConfig_lower(_ value: FfiNumericConfig) -> RustBuffer {
     return FfiConverterTypeFfiNumericConfig.lower(value)
-}
-
-
-public struct FfiPosition: Equatable, Hashable {
-    public var parentId: String
-    public var fracIndex: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(parentId: String, fracIndex: String) {
-        self.parentId = parentId
-        self.fracIndex = fracIndex
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FfiPosition: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFfiPosition: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiPosition {
-        return
-            try FfiPosition(
-                parentId: FfiConverterString.read(from: &buf), 
-                fracIndex: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FfiPosition, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.parentId, into: &buf)
-        FfiConverterString.write(value.fracIndex, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiPosition_lift(_ buf: RustBuffer) throws -> FfiPosition {
-    return try FfiConverterTypeFfiPosition.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiPosition_lower(_ value: FfiPosition) -> RustBuffer {
-    return FfiConverterTypeFfiPosition.lower(value)
 }
 
 
@@ -2567,6 +2513,60 @@ public func FfiConverterTypeFfiValue_lift(_ buf: RustBuffer) throws -> FfiValue 
 #endif
 public func FfiConverterTypeFfiValue_lower(_ value: FfiValue) -> RustBuffer {
     return FfiConverterTypeFfiValue.lower(value)
+}
+
+
+public struct Position: Equatable, Hashable {
+    public var parentId: Uuid
+    public var fracIndex: FractionalIndex
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(parentId: Uuid, fracIndex: FractionalIndex) {
+        self.parentId = parentId
+        self.fracIndex = fracIndex
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Position: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePosition: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Position {
+        return
+            try Position(
+                parentId: FfiConverterTypeUuid.read(from: &buf), 
+                fracIndex: FfiConverterTypeFractionalIndex.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Position, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.parentId, into: &buf)
+        FfiConverterTypeFractionalIndex.write(value.fracIndex, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePosition_lift(_ buf: RustBuffer) throws -> Position {
+    return try FfiConverterTypePosition.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePosition_lower(_ value: Position) -> RustBuffer {
+    return FfiConverterTypePosition.lower(value)
 }
 
 
@@ -3848,132 +3848,6 @@ public func FfiConverterTypeFfiSelectValue_lower(_ value: FfiSelectValue) -> Rus
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
- * Timestamps are Unix milliseconds (UTC).
- */
-
-public enum FfiTemporal: Equatable, Hashable {
-    
-    case none
-    case start(start: Int64
-    )
-    case end(end: Int64
-    )
-    case duration(duration: UInt32
-    )
-    case startAndEnd(start: Int64, end: Int64
-    )
-    case startAndDuration(start: Int64, durationMs: UInt32
-    )
-    case durationAndEnd(durationMs: UInt32, end: Int64
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension FfiTemporal: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFfiTemporal: FfiConverterRustBuffer {
-    typealias SwiftType = FfiTemporal
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiTemporal {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .none
-        
-        case 2: return .start(start: try FfiConverterInt64.read(from: &buf)
-        )
-        
-        case 3: return .end(end: try FfiConverterInt64.read(from: &buf)
-        )
-        
-        case 4: return .duration(duration: try FfiConverterUInt32.read(from: &buf)
-        )
-        
-        case 5: return .startAndEnd(start: try FfiConverterInt64.read(from: &buf), end: try FfiConverterInt64.read(from: &buf)
-        )
-        
-        case 6: return .startAndDuration(start: try FfiConverterInt64.read(from: &buf), durationMs: try FfiConverterUInt32.read(from: &buf)
-        )
-        
-        case 7: return .durationAndEnd(durationMs: try FfiConverterUInt32.read(from: &buf), end: try FfiConverterInt64.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: FfiTemporal, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .none:
-            writeInt(&buf, Int32(1))
-        
-        
-        case let .start(start):
-            writeInt(&buf, Int32(2))
-            FfiConverterInt64.write(start, into: &buf)
-            
-        
-        case let .end(end):
-            writeInt(&buf, Int32(3))
-            FfiConverterInt64.write(end, into: &buf)
-            
-        
-        case let .duration(duration):
-            writeInt(&buf, Int32(4))
-            FfiConverterUInt32.write(duration, into: &buf)
-            
-        
-        case let .startAndEnd(start,end):
-            writeInt(&buf, Int32(5))
-            FfiConverterInt64.write(start, into: &buf)
-            FfiConverterInt64.write(end, into: &buf)
-            
-        
-        case let .startAndDuration(start,durationMs):
-            writeInt(&buf, Int32(6))
-            FfiConverterInt64.write(start, into: &buf)
-            FfiConverterUInt32.write(durationMs, into: &buf)
-            
-        
-        case let .durationAndEnd(durationMs,end):
-            writeInt(&buf, Int32(7))
-            FfiConverterUInt32.write(durationMs, into: &buf)
-            FfiConverterInt64.write(end, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiTemporal_lift(_ buf: RustBuffer) throws -> FfiTemporal {
-    return try FfiConverterTypeFfiTemporal.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiTemporal_lower(_ value: FfiTemporal) -> RustBuffer {
-    return FfiConverterTypeFfiTemporal.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-/**
  * Identifies which side of a Value (plan or actual) is being written.
  * Mirrors `gv_core::actions::ValueField`.
  */
@@ -4039,6 +3913,129 @@ public func FfiConverterTypeFfiValueField_lift(_ buf: RustBuffer) throws -> FfiV
 #endif
 public func FfiConverterTypeFfiValueField_lower(_ value: FfiValueField) -> RustBuffer {
     return FfiConverterTypeFfiValueField.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum Temporal: Equatable, Hashable {
+    
+    case none
+    case start(start: UtcDateTime
+    )
+    case end(end: UtcDateTime
+    )
+    case duration(duration: UInt32
+    )
+    case startAndEnd(start: UtcDateTime, end: UtcDateTime
+    )
+    case startAndDuration(start: UtcDateTime, durationMs: UInt32
+    )
+    case durationAndEnd(durationMs: UInt32, end: UtcDateTime
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension Temporal: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTemporal: FfiConverterRustBuffer {
+    typealias SwiftType = Temporal
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Temporal {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .none
+        
+        case 2: return .start(start: try FfiConverterTypeUtcDateTime.read(from: &buf)
+        )
+        
+        case 3: return .end(end: try FfiConverterTypeUtcDateTime.read(from: &buf)
+        )
+        
+        case 4: return .duration(duration: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        case 5: return .startAndEnd(start: try FfiConverterTypeUtcDateTime.read(from: &buf), end: try FfiConverterTypeUtcDateTime.read(from: &buf)
+        )
+        
+        case 6: return .startAndDuration(start: try FfiConverterTypeUtcDateTime.read(from: &buf), durationMs: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        case 7: return .durationAndEnd(durationMs: try FfiConverterUInt32.read(from: &buf), end: try FfiConverterTypeUtcDateTime.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Temporal, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .none:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .start(start):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeUtcDateTime.write(start, into: &buf)
+            
+        
+        case let .end(end):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeUtcDateTime.write(end, into: &buf)
+            
+        
+        case let .duration(duration):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt32.write(duration, into: &buf)
+            
+        
+        case let .startAndEnd(start,end):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeUtcDateTime.write(start, into: &buf)
+            FfiConverterTypeUtcDateTime.write(end, into: &buf)
+            
+        
+        case let .startAndDuration(start,durationMs):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeUtcDateTime.write(start, into: &buf)
+            FfiConverterUInt32.write(durationMs, into: &buf)
+            
+        
+        case let .durationAndEnd(durationMs,end):
+            writeInt(&buf, Int32(7))
+            FfiConverterUInt32.write(durationMs, into: &buf)
+            FfiConverterTypeUtcDateTime.write(end, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTemporal_lift(_ buf: RustBuffer) throws -> Temporal {
+    return try FfiConverterTypeTemporal.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTemporal_lower(_ value: Temporal) -> RustBuffer {
+    return FfiConverterTypeTemporal.lower(value)
 }
 
 
@@ -4189,30 +4186,6 @@ fileprivate struct FfiConverterOptionTypeFfiEntryJoin: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeFfiPosition: FfiConverterRustBuffer {
-    typealias SwiftType = FfiPosition?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeFfiPosition.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeFfiPosition.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeFfiValue: FfiConverterRustBuffer {
     typealias SwiftType = FfiValue?
 
@@ -4229,6 +4202,30 @@ fileprivate struct FfiConverterOptionTypeFfiValue: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFfiValue.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypePosition: FfiConverterRustBuffer {
+    typealias SwiftType = Position?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePosition.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePosition.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -4875,10 +4872,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_children() != 57041) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_after_children() != 31762) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_after_children() != 4743) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_between() != 365) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_between() != 15894) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots() != 31525) {

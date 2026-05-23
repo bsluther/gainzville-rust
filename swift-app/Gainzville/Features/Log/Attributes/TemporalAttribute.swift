@@ -42,7 +42,7 @@ struct TemporalAttribute: View {
     @State private var pendingField: TemporalField?
     @EnvironmentObject private var focusModel: AttributeFocusModel
 
-    private var temporal: FfiTemporal { entry.temporal }
+    private var temporal: Temporal { entry.temporal }
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
@@ -148,7 +148,7 @@ struct TemporalAttribute: View {
         }
     }
 
-    private func buildFfiTemporal() -> FfiTemporal {
+    private func buildTemporal() -> Temporal {
         switch (editStart, editEnd, editDurationMs) {
         case (nil, nil, nil):                       return .none
         case (.some(let s), nil, nil):              return .start(start: dateToMs(s))
@@ -165,12 +165,12 @@ struct TemporalAttribute: View {
         debounceTask?.cancel()
         debounceTask = nil
         // Skip write if the edit state matches what's already stored.
-        guard buildFfiTemporal() != entry.temporal else { return }
+        guard buildTemporal() != entry.temporal else { return }
         debounceTask = Task {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                forestVM.updateEntryTemporal(entry: entry, temporal: buildFfiTemporal())
+                forestVM.updateEntryTemporal(entry: entry, temporal: buildTemporal())
             }
         }
     }
@@ -178,7 +178,7 @@ struct TemporalAttribute: View {
     private func flushNow() {
         debounceTask?.cancel()
         debounceTask = nil
-        let newTemporal = buildFfiTemporal()
+        let newTemporal = buildTemporal()
         guard newTemporal != entry.temporal else { return }
         forestVM.updateEntryTemporal(entry: entry, temporal: newTemporal)
     }
@@ -543,7 +543,7 @@ private func formatDuration(_ ms: UInt32) -> String {
     return parts.joined(separator: " ")
 }
 
-private func temporalSummary(_ temporal: FfiTemporal) -> String {
+private func temporalSummary(_ temporal: Temporal) -> String {
     switch temporal {
     case .none: return ""
     case .start(let ms): return formatTime(from: msToDate(ms))
