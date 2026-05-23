@@ -14,8 +14,8 @@ use gv_core::{
 };
 
 use crate::types::{
-    FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiEntry, FfiError, ffi_action_to_core,
-    parse_timestamp_ms, parse_uuid,
+    FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiError, ffi_action_to_core, parse_timestamp_ms,
+    parse_uuid,
 };
 
 static LOGGING: Once = Once::new();
@@ -155,39 +155,39 @@ impl GainzvilleCore {
     }
 
     /// All root entries (no parent), sorted by canonical instant.
-    pub fn forest_roots(&self) -> Vec<FfiEntry> {
+    pub fn forest_roots(&self) -> Vec<Entry> {
         self.forest_snapshot()
-            .map(|f| f.roots().into_iter().map(|e| FfiEntry::from(e.clone())).collect())
+            .map(|f| f.roots().into_iter().cloned().collect())
             .unwrap_or_default()
     }
 
     /// Root entries whose canonical instant falls within `[from, to)` (Unix ms), sorted by time.
-    pub fn forest_roots_in(&self, from: i64, to: i64) -> Vec<FfiEntry> {
+    pub fn forest_roots_in(&self, from: i64, to: i64) -> Vec<Entry> {
         let Ok(from_dt) = parse_timestamp_ms(from) else { return vec![] };
         let Ok(to_dt) = parse_timestamp_ms(to) else { return vec![] };
         self.forest_snapshot()
             .map(|f| {
                 f.roots_in(from_dt..to_dt)
                     .into_iter()
-                    .map(|e| FfiEntry::from(e.clone()))
+                    .cloned()
                     .collect()
             })
             .unwrap_or_default()
     }
 
     /// Direct children of `parent_id`, sorted by fractional index.
-    pub fn forest_children(&self, parent_id: String) -> Vec<FfiEntry> {
+    pub fn forest_children(&self, parent_id: String) -> Vec<Entry> {
         let Ok(id) = parse_uuid(&parent_id) else { return vec![] };
         self.forest_snapshot()
-            .map(|f| f.children(id).into_iter().map(|e| FfiEntry::from(e.clone())).collect())
+            .map(|f| f.children(id).into_iter().cloned().collect())
             .unwrap_or_default()
     }
 
     /// Ancestors of `entry_id` from immediate parent up to the root.
-    pub fn forest_ancestors(&self, entry_id: String) -> Vec<FfiEntry> {
+    pub fn forest_ancestors(&self, entry_id: String) -> Vec<Entry> {
         let Ok(id) = parse_uuid(&entry_id) else { return vec![] };
         self.forest_snapshot()
-            .map(|f| f.ancestors(id).into_iter().map(|e| FfiEntry::from(e.clone())).collect())
+            .map(|f| f.ancestors(id).into_iter().cloned().collect())
             .unwrap_or_default()
     }
 

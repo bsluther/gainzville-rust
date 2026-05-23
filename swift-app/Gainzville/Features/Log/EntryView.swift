@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-// We take the full FfiEntry rather than just an id even though `vm.entryJoin`
+// We take the full Entry rather than just an id even though `vm.entryJoin`
 // will provide its own copy of the entry. The forest gives us the entry as
 // the unit of iteration, and rendering needs structural/temporal fields
 // (position, temporal, isSequence, etc.) immediately on first render —
@@ -10,11 +10,11 @@ import UniformTypeIdentifiers
 // and EntryJoin then supplies the joined data (activity, attributes) that
 // the forest doesn't carry.
 struct EntryView: View {
-    let entry: FfiEntry
+    let entry: Entry
     // Only root EntryViews receive this from LogView; child EntryViews omit it
     // so EntryDropDelegate falls into its forbidding mode and blocks the
     // day-root drop indicator from activating over their bodies.
-    var onDayRootDrop: ((FfiEntry) -> Void)? = nil
+    var onDayRootDrop: ((Entry) -> Void)? = nil
     @EnvironmentObject var forestVM: ForestViewModel
     @EnvironmentObject var coreEnv: CoreEnv
     @EnvironmentObject var dataChange: DataChange
@@ -24,7 +24,7 @@ struct EntryView: View {
     @State private var isExpanded = false
 
     // Single source of truth lives in core (`EntryJoin::display_name`),
-    // surfaced via `FfiEntryJoin.displayName`. Empty string covers the
+    // surfaced via `EntryJoin.displayName`. Empty string covers the
     // single render frame between view appear and the subscription
     // populating the cache; SwiftUI swaps in the real value immediately.
     var displayName: String {
@@ -94,7 +94,7 @@ extension View {
 // MARK: - Header
 
 private struct EntryHeader: View {
-    let entry: FfiEntry
+    let entry: Entry
     let displayName: String
     let activityName: String?
     let isExpanded: Bool
@@ -146,7 +146,7 @@ private struct EntryHeader: View {
 // MARK: - Body (shown when expanded)
 
 private struct EntryBody: View {
-    let entry: FfiEntry
+    let entry: Entry
     let attributes: [FfiAttributePair]
 
     var body: some View {
@@ -166,7 +166,7 @@ private struct EntryBody: View {
 // MARK: - Children
 
 private struct ChildrenSection: View {
-    let parent: FfiEntry
+    let parent: Entry
     @EnvironmentObject private var forestVM: ForestViewModel
 
     var body: some View {
@@ -194,18 +194,18 @@ private struct ChildrenSection: View {
         let position: Position?
         let predId: String?
         let succId: String?
-        let child: FfiEntry?
+        let child: Entry?
 
         static func dropTarget(position: Position, predId: String?, succId: String?) -> Slot {
             Slot(id: "drop-\(predId ?? "start")-\(succId ?? "end")", position: position, predId: predId, succId: succId, child: nil)
         }
 
-        static func childSlot(_ entry: FfiEntry) -> Slot {
+        static func childSlot(_ entry: Entry) -> Slot {
             Slot(id: "child-\(entry.id)", position: nil, predId: nil, succId: nil, child: entry)
         }
     }
 
-    private func buildSlots(parentId: String, children: [FfiEntry]) -> [Slot] {
+    private func buildSlots(parentId: String, children: [Entry]) -> [Slot] {
         var slots: [Slot] = []
         let count = children.count
         for i in 0...count {
@@ -225,7 +225,7 @@ private struct ChildrenSection: View {
 // MARK: - Footer
 
 private struct EntryFooter: View {
-    let entry: FfiEntry
+    let entry: Entry
     @EnvironmentObject private var forestVM: ForestViewModel
     @State private var isCreatePresented = false
 
@@ -294,7 +294,7 @@ private struct FillCheckbox: View {
 // MARK: - Context menu
 
 private struct EntryMenuContent: View {
-    let entry: FfiEntry
+    let entry: Entry
     let entryName: String
     let activityName: String?
     @Binding var isPresented: Bool
@@ -374,7 +374,7 @@ private struct EntryMenuContent: View {
 // MARK: - Attributes
 
 private struct AttributesSection: View {
-    let entry: FfiEntry
+    let entry: Entry
     let attributes: [FfiAttributePair]
 
     var body: some View {

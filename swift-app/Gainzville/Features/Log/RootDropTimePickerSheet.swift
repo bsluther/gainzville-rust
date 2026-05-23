@@ -3,7 +3,7 @@ import SwiftUI
 /// A pending drop onto the day's root, awaiting the user's choice of start time.
 struct PendingRootDrop: Identifiable {
     let id = UUID()
-    let entry: FfiEntry
+    let entry: Entry
     let day: LogDay
 }
 

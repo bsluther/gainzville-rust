@@ -107,24 +107,18 @@ pub(crate) fn ffi_action_to_core(
 ) -> Result<gv_core::actions::Action, FfiError> {
     match action {
         FfiAction::CreateScalarActivity(a) => {
-            let template = ffi_entry_to_core(a.template)?;
             Ok(gv_core::actions::CreateScalarActivity {
                 actor_id,
                 activity: a.activity,
-                template,
+                template: a.template,
             }
             .into())
         }
         FfiAction::CreateSequenceActivity(a) => {
-            let template = a
-                .template
-                .into_iter()
-                .map(ffi_entry_to_core)
-                .collect::<Result<Vec<_>, _>>()?;
             Ok(gv_core::actions::CreateSequenceActivity {
                 actor_id,
                 activity: a.activity,
-                template,
+                template: a.template,
             }
             .into())
         }
@@ -223,11 +217,11 @@ pub enum Temporal {
     DurationAndEnd { duration_ms: u32, end: DateTime<Utc> },
 }
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiEntry {
-    pub id: String,
-    pub activity_id: Option<String>,
-    pub owner_id: String,
+#[uniffi::remote(Record)]
+pub struct Entry {
+    pub id: Uuid,
+    pub activity_id: Option<Uuid>,
+    pub owner_id: Uuid,
     pub name: Option<String>,
     pub position: Option<Position>,
     pub is_template: bool,
@@ -235,23 +229,6 @@ pub struct FfiEntry {
     pub is_sequence: bool,
     pub is_complete: bool,
     pub temporal: Temporal,
-}
-
-impl From<Entry> for FfiEntry {
-    fn from(e: Entry) -> Self {
-        FfiEntry {
-            id: e.id.to_string(),
-            activity_id: e.activity_id.map(|id| id.to_string()),
-            owner_id: e.owner_id.to_string(),
-            name: e.name,
-            position: e.position,
-            is_template: e.is_template,
-            display_as_sets: e.display_as_sets,
-            is_sequence: e.is_sequence,
-            is_complete: e.is_complete,
-            temporal: e.temporal,
-        }
-    }
 }
 
 // --- Attribute ---
@@ -638,7 +615,7 @@ impl From<AttributePair> for FfiAttributePair {
 
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiEntryJoin {
-    pub entry: FfiEntry,
+    pub entry: Entry,
     pub activity: Option<Activity>,
     pub attributes: Vec<FfiAttributePair>,
     pub display_name: String,
@@ -647,7 +624,7 @@ pub struct FfiEntryJoin {
 impl From<EntryJoin> for FfiEntryJoin {
     fn from(ej: EntryJoin) -> Self {
         FfiEntryJoin {
-            entry: ej.entry.into(),
+            entry: ej.entry,
             activity: ej.activity,
             attributes: ej
                 .attributes
@@ -826,12 +803,12 @@ pub enum FfiAnyQueryResponse {
     FindActivityById(Option<Activity>),
     AllActivities(Vec<Activity>),
     // Entry
-    AllEntries(Vec<FfiEntry>),
-    EntriesRootedInTimeInterval(Vec<FfiEntry>),
+    AllEntries(Vec<Entry>),
+    EntriesRootedInTimeInterval(Vec<Entry>),
     FindAncestors(Vec<String>),
-    FindEntryById(Option<FfiEntry>),
+    FindEntryById(Option<Entry>),
     FindEntryJoinById(Option<FfiEntryJoin>),
-    FindDescendants(Vec<FfiEntry>),
+    FindDescendants(Vec<Entry>),
     // Attribute
     FindAttributeById(Option<FfiAttribute>),
     AllAttributes(Vec<FfiAttribute>),
@@ -857,26 +834,18 @@ impl From<AnyQueryResponse> for FfiAnyQueryResponse {
             AnyQueryResponse::FindActivityById(v) => FfiAnyQueryResponse::FindActivityById(v),
             AnyQueryResponse::AllActivities(v) => FfiAnyQueryResponse::AllActivities(v),
             // Entry
-            AnyQueryResponse::AllEntries(v) => {
-                FfiAnyQueryResponse::AllEntries(v.into_iter().map(FfiEntry::from).collect())
-            }
+            AnyQueryResponse::AllEntries(v) => FfiAnyQueryResponse::AllEntries(v),
             AnyQueryResponse::EntriesRootedInTimeInterval(v) => {
-                FfiAnyQueryResponse::EntriesRootedInTimeInterval(
-                    v.into_iter().map(FfiEntry::from).collect(),
-                )
+                FfiAnyQueryResponse::EntriesRootedInTimeInterval(v)
             }
             AnyQueryResponse::FindAncestors(v) => {
                 FfiAnyQueryResponse::FindAncestors(v.into_iter().map(|id| id.to_string()).collect())
             }
-            AnyQueryResponse::FindEntryById(v) => {
-                FfiAnyQueryResponse::FindEntryById(v.map(FfiEntry::from))
-            }
+            AnyQueryResponse::FindEntryById(v) => FfiAnyQueryResponse::FindEntryById(v),
             AnyQueryResponse::FindEntryJoinById(v) => {
                 FfiAnyQueryResponse::FindEntryJoinById(v.map(FfiEntryJoin::from))
             }
-            AnyQueryResponse::FindDescendants(v) => {
-                FfiAnyQueryResponse::FindDescendants(v.into_iter().map(FfiEntry::from).collect())
-            }
+            AnyQueryResponse::FindDescendants(v) => FfiAnyQueryResponse::FindDescendants(v),
             // Attribute
             AnyQueryResponse::FindAttributeById(v) => {
                 FfiAnyQueryResponse::FindAttributeById(v.map(FfiAttribute::from))
@@ -910,34 +879,16 @@ impl From<AnyQueryResponse> for FfiAnyQueryResponse {
 
 // --- Actions ---
 
-pub(crate) fn ffi_entry_to_core(e: FfiEntry) -> Result<gv_core::models::entry::Entry, FfiError> {
-    let id = parse_uuid(&e.id)?;
-    let activity_id = e.activity_id.as_deref().map(parse_uuid).transpose()?;
-    let owner_id = parse_uuid(&e.owner_id)?;
-    Ok(gv_core::models::entry::Entry {
-        id,
-        activity_id,
-        owner_id,
-        name: e.name,
-        position: e.position,
-        is_template: e.is_template,
-        display_as_sets: e.display_as_sets,
-        is_sequence: e.is_sequence,
-        is_complete: e.is_complete,
-        temporal: e.temporal,
-    })
-}
-
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiCreateScalarActivity {
     pub activity: Activity,
-    pub template: FfiEntry,
+    pub template: Entry,
 }
 
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiCreateSequenceActivity {
     pub activity: Activity,
-    pub template: Vec<FfiEntry>,
+    pub template: Vec<Entry>,
 }
 
 #[derive(uniffi::Record, Debug, Clone)]

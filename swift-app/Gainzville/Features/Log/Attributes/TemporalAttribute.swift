@@ -30,7 +30,7 @@ import SwiftUI
 private enum TemporalField { case start, end, duration }
 
 struct TemporalAttribute: View {
-    let entry: FfiEntry
+    let entry: Entry
 
     @EnvironmentObject private var forestVM: ForestViewModel
     @State private var isExpanded = false

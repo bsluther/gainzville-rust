@@ -5,7 +5,7 @@ import SwiftUI
 // presents the option list as a sheet on iOS / popover on macOS. Picking an
 // option commits `Exact(option)` immediately — no debounce.
 struct SelectAttribute: View {
-    let entry: FfiEntry
+    let entry: Entry
     let pair: FfiSelectAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
     @State private var isPresenting = false

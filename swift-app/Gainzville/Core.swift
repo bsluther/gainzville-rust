@@ -71,7 +71,7 @@ class ActivitiesViewModel: ObservableObject {
             name: name,
             description: description
         )
-        let template = FfiEntry(
+        let template = Entry(
             id: UUID().uuidString,
             activityId: activityId,
             ownerId: actorId,
@@ -96,7 +96,7 @@ class ActivitiesViewModel: ObservableObject {
 // Exposes root entries as a @Published property; children are read synchronously on demand.
 @MainActor
 class ForestViewModel: ObservableObject {
-    @Published var roots: [FfiEntry] = []
+    @Published var roots: [Entry] = []
     private var subscription: FfiQuerySubscription?
     private var core: GainzvilleCore?
 
@@ -112,12 +112,12 @@ class ForestViewModel: ObservableObject {
 
     // Synchronous reads from the forest cache — always fresh on each render.
 
-    func rootsIn(logDay: LogDay) -> [FfiEntry] {
+    func rootsIn(logDay: LogDay) -> [Entry] {
         _ = roots  // establish SwiftUI dependency so callers re-render when data changes
         return core?.forestRootsIn(from: logDay.fromMs, to: logDay.toMs) ?? []
     }
 
-    func children(of parentId: String) -> [FfiEntry] {
+    func children(of parentId: String) -> [Entry] {
         core?.forestChildren(parentId: parentId) ?? []
     }
 
@@ -131,7 +131,7 @@ class ForestViewModel: ObservableObject {
         return core?.forestPositionBetween(parentId: parentId, predId: predId, succId: succId)
     }
 
-    func moveEntry(_ entry: FfiEntry, to position: Position) {
+    func moveEntry(_ entry: Entry, to position: Position) {
         guard let core else { return }
         try? core.runAction(action: .moveEntry(FfiMoveEntry(
             entryId: entry.id,
@@ -140,7 +140,7 @@ class ForestViewModel: ObservableObject {
         )))
     }
 
-    func updateEntryTemporal(entry: FfiEntry, temporal: Temporal) {
+    func updateEntryTemporal(entry: Entry, temporal: Temporal) {
         guard let core else { return }
         try? core.runAction(action: .moveEntry(FfiMoveEntry(
             entryId: entry.id,
@@ -151,7 +151,7 @@ class ForestViewModel: ObservableObject {
 
     /// Move an entry to root on the given day with a chosen start time.
     /// Preserves duration if set; replaces any prior start and drops any prior end.
-    func moveEntryToRoot(_ entry: FfiEntry, startTime: Date) {
+    func moveEntryToRoot(_ entry: Entry, startTime: Date) {
         guard let core else { return }
         let ms = Int64(startTime.timeIntervalSince1970 * 1000)
         let newTemporal: Temporal = {
@@ -215,7 +215,7 @@ class ForestViewModel: ObservableObject {
         )))
     }
 
-    func createChildEntry(in parent: FfiEntry, activityId: String?, name: String?, isSequence: Bool) {
+    func createChildEntry(in parent: Entry, activityId: String?, name: String?, isSequence: Bool) {
         guard let core else { return }
         guard let position = core.forestPositionAfterChildren(parentId: parent.id) else { return }
         try? core.runAction(action: .createEntry(FfiCreateEntry(
@@ -231,7 +231,7 @@ class ForestViewModel: ObservableObject {
         )))
     }
 
-    func updateEntryCompletion(entry: FfiEntry, isComplete: Bool) {
+    func updateEntryCompletion(entry: Entry, isComplete: Bool) {
         guard let core else { return }
         try? core.runAction(action: .updateEntryCompletion(FfiUpdateEntryCompletion(
             entryId: entry.id,
@@ -239,7 +239,7 @@ class ForestViewModel: ObservableObject {
         )))
     }
 
-    func deleteEntry(entry: FfiEntry) {
+    func deleteEntry(entry: Entry) {
         guard let core else { return }
         try? core.runAction(action: .deleteEntryRecursive(FfiDeleteEntryRecursive(
             entryId: entry.id
@@ -249,7 +249,7 @@ class ForestViewModel: ObservableObject {
 
 // Per-entry view model: subscribes once to `findEntryJoinById` for its
 // entry id, re-reads from the cache on every DataChange tick, and
-// publishes the latest FfiEntryJoin. Dropping this VM (when the
+// publishes the latest EntryJoin. Dropping this VM (when the
 // EntryView leaves the hierarchy) drops the FfiQuerySubscription,
 // which auto-removes the query from the Rust cache.
 @MainActor

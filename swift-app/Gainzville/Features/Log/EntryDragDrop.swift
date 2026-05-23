@@ -13,7 +13,7 @@
 //
 // ## Data flow
 // - Drag source: EntryHeader applies .onDrag, which fires synchronously at drag start and
-//   stores the dragged FfiEntry in DragState.
+//   stores the dragged Entry in DragState.
 // - Three delegates compete via SwiftUI's deepest-hit dispatch:
 //     • DropTarget (deepest, in ChildrenSection slots) — precise sequence insertion.
 //     • EntryDropDelegate (per EntryView) — forwards to day-root for root scalars; .forbidden
@@ -52,7 +52,7 @@ class DragState: ObservableObject {
     // Not @Published — set during the .onDrag closure (view evaluation context),
     // where publishing is disallowed. DropTarget re-reads on isTargeted changes, so
     // reactivity isn't needed.
-    var draggedEntry: FfiEntry? = nil
+    var draggedEntry: Entry? = nil
 
     // Whether the current drag is targeting a day-root drop zone (empty area in
     // the log, or a root scalar entry). Both DayRootDropDelegate and the root-scalar
@@ -141,7 +141,7 @@ struct DropTarget: View, DropDelegate {
 /// forwards to day-root semantics (root scalars) or returns .forbidden.
 struct DayRootDropDelegate: DropDelegate {
     let dragState: DragState
-    let onDrop: (FfiEntry) -> Void
+    let onDrop: (Entry) -> Void
 
     func validateDrop(info: DropInfo) -> Bool {
         // Reject if the dragged entry is already at root — moving root→root is a no-op.
@@ -185,9 +185,9 @@ struct DayRootDropDelegate: DropDelegate {
 ///   is inside the entry's body. Sequence-level DropTargets are deeper still and
 ///   continue to handle in-sequence drops normally.
 struct EntryDropDelegate: DropDelegate {
-    let entry: FfiEntry
+    let entry: Entry
     let dragState: DragState
-    let onDayRootDrop: ((FfiEntry) -> Void)?
+    let onDayRootDrop: ((Entry) -> Void)?
 
     private var actsAsDayRoot: Bool {
         onDayRootDrop != nil && entry.position == nil && !entry.isSequence

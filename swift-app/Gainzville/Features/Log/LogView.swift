@@ -109,7 +109,7 @@ struct LogView: View {
         .gvKeyboardDoneButton()
     }
 
-    private func handleDayRootDrop(_ entry: FfiEntry) {
+    private func handleDayRootDrop(_ entry: Entry) {
         pendingRootDrop = PendingRootDrop(entry: entry, day: logDayStore.logDay)
     }
 }

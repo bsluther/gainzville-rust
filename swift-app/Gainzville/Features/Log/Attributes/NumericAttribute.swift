@@ -5,7 +5,7 @@ import SwiftUI
 // allow partial input like "3."), validated and clamped at commit time, and
 // dispatched as `UpdateAttributeValue` after a 1s pause or on focus loss.
 struct NumericAttribute: View {
-    let entry: FfiEntry
+    let entry: Entry
     let pair: FfiNumericAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
 

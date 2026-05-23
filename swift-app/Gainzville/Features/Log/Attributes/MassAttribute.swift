@@ -9,7 +9,7 @@ import SwiftUI
 // plan/actual measurement units and the attribute's `defaultUnits`, with
 // `[Pound]` as the ultimate fallback.
 struct MassAttribute: View {
-    let entry: FfiEntry
+    let entry: Entry
     let pair: FfiMassAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
 
