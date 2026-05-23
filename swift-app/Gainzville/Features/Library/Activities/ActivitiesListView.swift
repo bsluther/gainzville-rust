@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ActivitiesListView: View {
-    let activities: [FfiActivity]
+    let activities: [Activity]
     @EnvironmentObject var activitiesVM: ActivitiesViewModel
     @State private var showingCreate = false
 

@@ -96,11 +96,6 @@ pub(crate) fn parse_uuid(s: &str) -> Result<Uuid, FfiError> {
     Uuid::parse_str(s).map_err(|e| FfiError::Generic(format!("invalid UUID '{}': {}", s, e)))
 }
 
-pub(crate) fn parse_activity_name(s: &str) -> Result<ActivityName, FfiError> {
-    ActivityName::parse(s.to_string())
-        .map_err(|e| FfiError::Generic(format!("invalid activity name '{}': {}", s, e)))
-}
-
 pub(crate) fn parse_timestamp_ms(ms: i64) -> Result<DateTime<Utc>, FfiError> {
     DateTime::<Utc>::from_timestamp_millis(ms)
         .ok_or_else(|| FfiError::Generic(format!("invalid timestamp milliseconds: {ms}")))
@@ -112,17 +107,15 @@ pub(crate) fn ffi_action_to_core(
 ) -> Result<gv_core::actions::Action, FfiError> {
     match action {
         FfiAction::CreateScalarActivity(a) => {
-            let activity = ffi_activity_to_core(a.activity)?;
             let template = ffi_entry_to_core(a.template)?;
             Ok(gv_core::actions::CreateScalarActivity {
                 actor_id,
-                activity,
+                activity: a.activity,
                 template,
             }
             .into())
         }
         FfiAction::CreateSequenceActivity(a) => {
-            let activity = ffi_activity_to_core(a.activity)?;
             let template = a
                 .template
                 .into_iter()
@@ -130,7 +123,7 @@ pub(crate) fn ffi_action_to_core(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(gv_core::actions::CreateSequenceActivity {
                 actor_id,
-                activity,
+                activity: a.activity,
                 template,
             }
             .into())
@@ -202,25 +195,13 @@ pub struct User {
 
 // --- Activity ---
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiActivity {
-    pub id: String,
-    pub owner_id: String,
-    pub name: String,
+#[uniffi::remote(Record)]
+pub struct Activity {
+    pub id: Uuid,
+    pub owner_id: Uuid,
+    pub source_activity_id: Option<Uuid>,
+    pub name: ActivityName,
     pub description: Option<String>,
-    pub source_activity_id: Option<String>,
-}
-
-impl From<Activity> for FfiActivity {
-    fn from(a: Activity) -> Self {
-        FfiActivity {
-            id: a.id.to_string(),
-            owner_id: a.owner_id.to_string(),
-            name: a.name.to_string(),
-            description: a.description,
-            source_activity_id: a.source_activity_id.map(|id| id.to_string()),
-        }
-    }
 }
 
 // --- Entry ---
@@ -658,7 +639,7 @@ impl From<AttributePair> for FfiAttributePair {
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiEntryJoin {
     pub entry: FfiEntry,
-    pub activity: Option<FfiActivity>,
+    pub activity: Option<Activity>,
     pub attributes: Vec<FfiAttributePair>,
     pub display_name: String,
 }
@@ -667,7 +648,7 @@ impl From<EntryJoin> for FfiEntryJoin {
     fn from(ej: EntryJoin) -> Self {
         FfiEntryJoin {
             entry: ej.entry.into(),
-            activity: ej.activity.map(FfiActivity::from),
+            activity: ej.activity,
             attributes: ej
                 .attributes
                 .into_iter()
@@ -842,8 +823,8 @@ pub enum FfiAnyQueryResponse {
     FindUserByUsername(Option<User>),
     AllActorIds(Vec<String>),
     // Activity
-    FindActivityById(Option<FfiActivity>),
-    AllActivities(Vec<FfiActivity>),
+    FindActivityById(Option<Activity>),
+    AllActivities(Vec<Activity>),
     // Entry
     AllEntries(Vec<FfiEntry>),
     EntriesRootedInTimeInterval(Vec<FfiEntry>),
@@ -873,12 +854,8 @@ impl From<AnyQueryResponse> for FfiAnyQueryResponse {
                 FfiAnyQueryResponse::AllActorIds(v.into_iter().map(|id| id.to_string()).collect())
             }
             // Activity
-            AnyQueryResponse::FindActivityById(v) => {
-                FfiAnyQueryResponse::FindActivityById(v.map(FfiActivity::from))
-            }
-            AnyQueryResponse::AllActivities(v) => {
-                FfiAnyQueryResponse::AllActivities(v.into_iter().map(FfiActivity::from).collect())
-            }
+            AnyQueryResponse::FindActivityById(v) => FfiAnyQueryResponse::FindActivityById(v),
+            AnyQueryResponse::AllActivities(v) => FfiAnyQueryResponse::AllActivities(v),
             // Entry
             AnyQueryResponse::AllEntries(v) => {
                 FfiAnyQueryResponse::AllEntries(v.into_iter().map(FfiEntry::from).collect())
@@ -951,31 +928,15 @@ pub(crate) fn ffi_entry_to_core(e: FfiEntry) -> Result<gv_core::models::entry::E
     })
 }
 
-pub(crate) fn ffi_activity_to_core(
-    a: FfiActivity,
-) -> Result<gv_core::models::activity::Activity, FfiError> {
-    Ok(gv_core::models::activity::Activity {
-        id: parse_uuid(&a.id)?,
-        owner_id: parse_uuid(&a.owner_id)?,
-        name: parse_activity_name(&a.name)?,
-        description: a.description,
-        source_activity_id: a
-            .source_activity_id
-            .as_deref()
-            .map(parse_uuid)
-            .transpose()?,
-    })
-}
-
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiCreateScalarActivity {
-    pub activity: FfiActivity,
+    pub activity: Activity,
     pub template: FfiEntry,
 }
 
 #[derive(uniffi::Record, Debug, Clone)]
 pub struct FfiCreateSequenceActivity {
-    pub activity: FfiActivity,
+    pub activity: Activity,
     pub template: Vec<FfiEntry>,
 }
 

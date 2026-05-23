@@ -44,7 +44,7 @@ final class DataChange: ObservableObject {
 // stays live for the app's lifetime. Dropping `subscription` auto-unsubscribes.
 @MainActor
 class ActivitiesViewModel: ObservableObject {
-    @Published var activities: [FfiActivity] = []
+    @Published var activities: [Activity] = []
     private var subscription: FfiQuerySubscription?
     private var core: GainzvilleCore?
 
@@ -64,12 +64,12 @@ class ActivitiesViewModel: ObservableObject {
         guard let core else { return }
         let actorId = "eee9e6ae-6531-4580-8356-427604a0dc02"
         let activityId = UUID().uuidString
-        let activity = FfiActivity(
+        let activity = Activity(
             id: activityId,
             ownerId: actorId,
+            sourceActivityId: nil,
             name: name,
-            description: description,
-            sourceActivityId: nil
+            description: description
         )
         let template = FfiEntry(
             id: UUID().uuidString,

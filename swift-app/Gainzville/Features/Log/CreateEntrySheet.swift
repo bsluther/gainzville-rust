@@ -15,7 +15,7 @@ struct CreateEntrySheet: View {
     @State private var scratchName = ""
     @State private var scratchIsSequence = false
 
-    private var filteredActivities: [FfiActivity] {
+    private var filteredActivities: [Activity] {
         guard !searchText.isEmpty else { return activitiesVM.activities }
         let q = searchText.lowercased()
         return activitiesVM.activities.filter { $0.name.lowercased().contains(q) }

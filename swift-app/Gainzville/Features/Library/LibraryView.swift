@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Navigation destination types within the Library section.
 enum LibraryDestination: Hashable {
-    case activity(FfiActivity)
+    case activity(Activity)
     case attribute(FfiAttribute)
 }
 

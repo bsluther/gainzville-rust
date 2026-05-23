@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ActivityDetailView: View {
-    let activity: FfiActivity
+    let activity: Activity
 
     var body: some View {
         ScrollView {
