@@ -6,14 +6,14 @@ use uuid::Uuid;
 
 use generation::{ArbitraryFrom, Opts, SimulationContext};
 use gv_core::{
-    actions::{CreateAttribute, CreateEntry, CreateValue},
+    actions::{Action, CreateAttribute, CreateEntry, CreateValue},
     forest::Forest,
     models::entry::{Entry, Position},
     queries::{AllActivities, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse},
     std_lib::StandardLibrary,
 };
 
-use crate::types::{FfiAction, FfiError, ffi_action_to_core, parse_timestamp_ms, parse_uuid};
+use crate::types::{FfiError, parse_timestamp_ms, parse_uuid};
 
 static LOGGING: Once = Once::new();
 
@@ -91,10 +91,9 @@ impl GainzvilleCore {
 
     /// Execute a write action. Returns once the write has committed; the cache
     /// refresh and `on_data_changed()` callback happen asynchronously afterward.
-    pub fn run_action(&self, action: FfiAction) -> Result<(), FfiError> {
-        let core_action = ffi_action_to_core(action, self.actor_id)?;
+    pub fn run_action(&self, action: Action) -> Result<(), FfiError> {
         RUNTIME
-            .block_on(self.client.run_action(core_action))
+            .block_on(self.client.run_action(action))
             .map_err(FfiError::from)
     }
 

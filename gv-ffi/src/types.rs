@@ -1,6 +1,11 @@
 use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
 use gv_core::{
+    actions::{
+        Action, CreateAttribute, CreateEntry, CreateScalarActivity, CreateSequenceActivity,
+        CreateUser, CreateValue, DeleteEntryRecursive, MoveEntry, UpdateAttributeValue,
+        UpdateEntryCompletion, ValueField,
+    },
     models::{
         activity::{Activity, ActivityName},
         attribute::{
@@ -99,83 +104,6 @@ pub(crate) fn parse_uuid(s: &str) -> Result<Uuid, FfiError> {
 pub(crate) fn parse_timestamp_ms(ms: i64) -> Result<DateTime<Utc>, FfiError> {
     DateTime::<Utc>::from_timestamp_millis(ms)
         .ok_or_else(|| FfiError::Generic(format!("invalid timestamp milliseconds: {ms}")))
-}
-
-pub(crate) fn ffi_action_to_core(
-    action: FfiAction,
-    actor_id: Uuid,
-) -> Result<gv_core::actions::Action, FfiError> {
-    match action {
-        FfiAction::CreateScalarActivity(a) => {
-            Ok(gv_core::actions::CreateScalarActivity {
-                actor_id,
-                activity: a.activity,
-                template: a.template,
-            }
-            .into())
-        }
-        FfiAction::CreateSequenceActivity(a) => {
-            Ok(gv_core::actions::CreateSequenceActivity {
-                actor_id,
-                activity: a.activity,
-                template: a.template,
-            }
-            .into())
-        }
-
-        FfiAction::MoveEntry(a) => {
-            let entry_id = parse_uuid(&a.entry_id)?;
-            Ok(gv_core::actions::MoveEntry {
-                actor_id,
-                entry_id,
-                position: a.position,
-                temporal: a.temporal,
-            }
-            .into())
-        }
-        FfiAction::CreateEntry(a) => {
-            let id = parse_uuid(&a.id)?;
-            let activity_id = a.activity_id.as_deref().map(parse_uuid).transpose()?;
-            let entry = gv_core::models::entry::Entry {
-                id,
-                activity_id,
-                owner_id: actor_id,
-                name: a.name,
-                position: a.position,
-                is_template: a.is_template,
-                display_as_sets: a.display_as_sets,
-                is_sequence: a.is_sequence,
-                is_complete: a.is_complete,
-                temporal: a.temporal,
-            };
-            Ok(gv_core::actions::CreateEntry { actor_id, entry }.into())
-        }
-        FfiAction::UpdateEntryCompletion(a) => {
-            let entry_id = parse_uuid(&a.entry_id)?;
-            Ok(gv_core::actions::UpdateEntryCompletion {
-                actor_id,
-                entry_id,
-                is_complete: a.is_complete,
-            }
-            .into())
-        }
-        FfiAction::DeleteEntryRecursive(a) => {
-            let entry_id = parse_uuid(&a.entry_id)?;
-            Ok(gv_core::actions::DeleteEntryRecursive { actor_id, entry_id }.into())
-        }
-        FfiAction::UpdateAttributeValue(a) => {
-            let entry_id = parse_uuid(&a.entry_id)?;
-            let attribute_id = parse_uuid(&a.attribute_id)?;
-            Ok(gv_core::actions::UpdateAttributeValue {
-                actor_id,
-                entry_id,
-                attribute_id,
-                field: a.field.into(),
-                value: a.value,
-            }
-            .into())
-        }
-    }
 }
 
 // --- User ---
@@ -525,86 +453,89 @@ pub enum AnyQueryResponse {
 
 // --- Actions ---
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiCreateScalarActivity {
+#[uniffi::remote(Record)]
+pub struct CreateUser {
+    pub user: User,
+}
+
+#[uniffi::remote(Record)]
+pub struct CreateScalarActivity {
+    pub actor_id: Uuid,
     pub activity: Activity,
     pub template: Entry,
 }
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiCreateSequenceActivity {
+#[uniffi::remote(Record)]
+pub struct CreateSequenceActivity {
+    pub actor_id: Uuid,
     pub activity: Activity,
     pub template: Vec<Entry>,
 }
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiMoveEntry {
-    pub entry_id: String,
+#[uniffi::remote(Record)]
+pub struct CreateEntry {
+    pub actor_id: Uuid,
+    pub entry: Entry,
+}
+
+#[uniffi::remote(Record)]
+pub struct MoveEntry {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
     pub position: Option<Position>,
     pub temporal: Temporal,
 }
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiCreateEntry {
-    pub id: String,
-    pub activity_id: Option<String>,
-    pub name: Option<String>,
-    pub position: Option<Position>,
-    pub is_template: bool,
-    pub display_as_sets: bool,
-    pub is_sequence: bool,
+#[uniffi::remote(Record)]
+pub struct DeleteEntryRecursive {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct CreateAttribute {
+    pub actor_id: Uuid,
+    pub attribute: Attribute,
+}
+
+#[uniffi::remote(Record)]
+pub struct CreateValue {
+    pub actor_id: Uuid,
+    pub value: Value,
+}
+
+#[uniffi::remote(Record)]
+pub struct UpdateEntryCompletion {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
     pub is_complete: bool,
-    pub temporal: Temporal,
 }
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiUpdateEntryCompletion {
-    pub entry_id: String,
-    pub is_complete: bool,
-}
-
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiDeleteEntryRecursive {
-    pub entry_id: String,
-}
-
-/// Identifies which side of a Value (plan or actual) is being written.
-/// Mirrors `gv_core::actions::ValueField`.
-#[derive(uniffi::Enum, Debug, Clone)]
-pub enum FfiValueField {
+#[uniffi::remote(Enum)]
+pub enum ValueField {
     Plan,
     Actual,
 }
 
-impl From<FfiValueField> for gv_core::actions::ValueField {
-    fn from(f: FfiValueField) -> Self {
-        match f {
-            FfiValueField::Plan => gv_core::actions::ValueField::Plan,
-            FfiValueField::Actual => gv_core::actions::ValueField::Actual,
-        }
-    }
-}
-
-/// Update an existing entry-attribute Value. The Value row must already exist;
-/// today the Swift app only edits attribute pairs returned by
-/// `FindAttributePairsForEntry` (which all have a Value row, per
-/// attributes-design.md states 2 and 3). Add a `FfiCreateValue` action when
-/// the entry-attribute add UI lands.
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiUpdateAttributeValue {
-    pub entry_id: String,
-    pub attribute_id: String,
-    pub field: FfiValueField,
+#[uniffi::remote(Record)]
+pub struct UpdateAttributeValue {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub attribute_id: Uuid,
+    pub field: ValueField,
     pub value: AttributeValue,
 }
 
-#[derive(uniffi::Enum, Debug, Clone)]
-pub enum FfiAction {
-    CreateScalarActivity(FfiCreateScalarActivity),
-    CreateSequenceActivity(FfiCreateSequenceActivity),
-    MoveEntry(FfiMoveEntry),
-    CreateEntry(FfiCreateEntry),
-    UpdateEntryCompletion(FfiUpdateEntryCompletion),
-    DeleteEntryRecursive(FfiDeleteEntryRecursive),
-    UpdateAttributeValue(FfiUpdateAttributeValue),
+#[uniffi::remote(Enum)]
+pub enum Action {
+    CreateUser(CreateUser),
+    CreateActivity(CreateScalarActivity),
+    CreateAttribute(CreateAttribute),
+    CreateValue(CreateValue),
+    CreateEntry(CreateEntry),
+    DeleteEntryRecursive(DeleteEntryRecursive),
+    MoveEntry(MoveEntry),
+    UpdateEntryCompletion(UpdateEntryCompletion),
+    UpdateAttributeValue(UpdateAttributeValue),
+    CreateSequenceActivity(CreateSequenceActivity),
 }

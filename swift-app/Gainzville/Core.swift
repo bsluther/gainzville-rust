@@ -7,6 +7,12 @@
 
 import Foundation
 import SwiftUI
+
+/// Until the client tracks the current actor, every action and ownership
+/// field hard-codes the system actor (`gv_core::SYSTEM_ACTOR_ID`). When
+/// real auth lands this becomes a property on `GainzvilleCore` or a
+/// session object.
+let SYSTEM_ACTOR_ID: String = "eee9e6ae-6531-4580-8356-427604a0dc02"
 internal import Combine
 
 // Bridges CoreListener callbacks from Rust to the main thread.
@@ -62,11 +68,10 @@ class ActivitiesViewModel: ObservableObject {
 
     func createActivity(name: String, description: String?) {
         guard let core else { return }
-        let actorId = "eee9e6ae-6531-4580-8356-427604a0dc02"
         let activityId = UUID().uuidString
         let activity = Activity(
             id: activityId,
-            ownerId: actorId,
+            ownerId: SYSTEM_ACTOR_ID,
             sourceActivityId: nil,
             name: name,
             description: description
@@ -74,7 +79,7 @@ class ActivitiesViewModel: ObservableObject {
         let template = Entry(
             id: UUID().uuidString,
             activityId: activityId,
-            ownerId: actorId,
+            ownerId: SYSTEM_ACTOR_ID,
             name: nil,
             position: nil,
             isTemplate: true,
@@ -83,7 +88,8 @@ class ActivitiesViewModel: ObservableObject {
             isComplete: false,
             temporal: .none
         )
-        try? core.runAction(action: .createScalarActivity(FfiCreateScalarActivity(
+        try? core.runAction(action: .createActivity(CreateScalarActivity(
+            actorId: SYSTEM_ACTOR_ID,
             activity: activity,
             template: template
         )))
@@ -133,7 +139,8 @@ class ForestViewModel: ObservableObject {
 
     func moveEntry(_ entry: Entry, to position: Position) {
         guard let core else { return }
-        try? core.runAction(action: .moveEntry(FfiMoveEntry(
+        try? core.runAction(action: .moveEntry(MoveEntry(
+            actorId: SYSTEM_ACTOR_ID,
             entryId: entry.id,
             position: position,
             temporal: entry.temporal
@@ -142,7 +149,8 @@ class ForestViewModel: ObservableObject {
 
     func updateEntryTemporal(entry: Entry, temporal: Temporal) {
         guard let core else { return }
-        try? core.runAction(action: .moveEntry(FfiMoveEntry(
+        try? core.runAction(action: .moveEntry(MoveEntry(
+            actorId: SYSTEM_ACTOR_ID,
             entryId: entry.id,
             position: entry.position,
             temporal: temporal
@@ -164,7 +172,8 @@ class ForestViewModel: ObservableObject {
                 return .startAndDuration(start: ms, durationMs: d)
             }
         }()
-        try? core.runAction(action: .moveEntry(FfiMoveEntry(
+        try? core.runAction(action: .moveEntry(MoveEntry(
+            actorId: SYSTEM_ACTOR_ID,
             entryId: entry.id,
             position: nil,
             temporal: newTemporal
@@ -187,11 +196,12 @@ class ForestViewModel: ObservableObject {
     func updateAttributeValue(
         entryId: String,
         attributeId: String,
-        field: FfiValueField,
+        field: ValueField,
         value: AttributeValue
     ) {
         guard let core else { return }
-        try? core.runAction(action: .updateAttributeValue(FfiUpdateAttributeValue(
+        try? core.runAction(action: .updateAttributeValue(UpdateAttributeValue(
+            actorId: SYSTEM_ACTOR_ID,
             entryId: entryId,
             attributeId: attributeId,
             field: field,
@@ -202,38 +212,47 @@ class ForestViewModel: ObservableObject {
     func createRootEntry(activityId: String?, name: String?, isSequence: Bool, for logDay: LogDay) {
         guard let core else { return }
         let suggestedMs = core.forestSuggestedRootDayInsertionTime(dayStart: logDay.fromMs)
-        try? core.runAction(action: .createEntry(FfiCreateEntry(
-            id: UUID().uuidString,
-            activityId: activityId,
-            name: name,
-            position: nil,
-            isTemplate: false,
-            displayAsSets: false,
-            isSequence: isSequence,
-            isComplete: false,
-            temporal: .start(start: suggestedMs)
+        try? core.runAction(action: .createEntry(CreateEntry(
+            actorId: SYSTEM_ACTOR_ID,
+            entry: Entry(
+                id: UUID().uuidString,
+                activityId: activityId,
+                ownerId: SYSTEM_ACTOR_ID,
+                name: name,
+                position: nil,
+                isTemplate: false,
+                displayAsSets: false,
+                isSequence: isSequence,
+                isComplete: false,
+                temporal: .start(start: suggestedMs)
+            )
         )))
     }
 
     func createChildEntry(in parent: Entry, activityId: String?, name: String?, isSequence: Bool) {
         guard let core else { return }
         guard let position = core.forestPositionAfterChildren(parentId: parent.id) else { return }
-        try? core.runAction(action: .createEntry(FfiCreateEntry(
-            id: UUID().uuidString,
-            activityId: activityId,
-            name: name,
-            position: position,
-            isTemplate: false,
-            displayAsSets: false,
-            isSequence: isSequence,
-            isComplete: false,
-            temporal: .none
+        try? core.runAction(action: .createEntry(CreateEntry(
+            actorId: SYSTEM_ACTOR_ID,
+            entry: Entry(
+                id: UUID().uuidString,
+                activityId: activityId,
+                ownerId: SYSTEM_ACTOR_ID,
+                name: name,
+                position: position,
+                isTemplate: false,
+                displayAsSets: false,
+                isSequence: isSequence,
+                isComplete: false,
+                temporal: .none
+            )
         )))
     }
 
     func updateEntryCompletion(entry: Entry, isComplete: Bool) {
         guard let core else { return }
-        try? core.runAction(action: .updateEntryCompletion(FfiUpdateEntryCompletion(
+        try? core.runAction(action: .updateEntryCompletion(UpdateEntryCompletion(
+            actorId: SYSTEM_ACTOR_ID,
             entryId: entry.id,
             isComplete: isComplete
         )))
@@ -241,7 +260,8 @@ class ForestViewModel: ObservableObject {
 
     func deleteEntry(entry: Entry) {
         guard let core else { return }
-        try? core.runAction(action: .deleteEntryRecursive(FfiDeleteEntryRecursive(
+        try? core.runAction(action: .deleteEntryRecursive(DeleteEntryRecursive(
+            actorId: SYSTEM_ACTOR_ID,
             entryId: entry.id
         )))
     }
