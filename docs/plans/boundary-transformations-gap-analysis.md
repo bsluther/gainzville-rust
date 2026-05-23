@@ -1,7 +1,7 @@
 # Boundary Transformations — Gap Analysis
 
 *Stage 2 output for the refactor proposed in [boundary-transformations-assessment.md](./boundary-transformations-assessment.md).*
-*Status: Stage 3 (Phases A–C) shipped on main. Next: Stage 4 (FFI refactor). See "Notes from Stage 3 execution" near the bottom for handoff details.*
+*Status: Stage 3 (Phases A–C) and Stage 4 (Phases D-A through D-C) shipped on main. The refactor is complete: `gv_core` has zero `sqlx` and zero `uniffi` dependency, and every domain type that crosses either boundary does so as a pure mirror via `[uniffi::remote(...)]` + leaf `custom_type!`. See "Notes from Stage 4 execution" near the bottom for handoff details.*
 
 ## How to read this document
 
@@ -775,3 +775,78 @@ Stage 4 handoff:
   `gv_sql/tests/columns_sqlite.rs` now uses `try_get` (the strict
   variant `#[derive(FromRow)]` generates) so this class of bug is
   caught at the leaf level next time.
+
+## Notes from Stage 4 execution — what's worth remembering
+
+Stage 4 shipped as 8 commits on main, all tests green,
+`cargo tree -p gv_core | grep -i uniffi` returns 0, `gv-ffi/src/types.rs`
+shrank from 1070 lines to 541. Findings worth carrying forward:
+
+- **`custom_type!` on foreign-crate types needs the `remote,` keyword
+  inside the macro body.** This is one line in the uniffi docs that's
+  easy to miss: the macro errors with `type parameter "UT" must be used
+  as the type parameter for some local type` when you omit it for any
+  type defined outside your crate (`uuid::Uuid`, `chrono::DateTime<Utc>`,
+  `gv_core::validation::Email`, etc.).
+
+- **Generic types like `DateTime<Utc>` can't be parsed by the
+  `custom_type!` macro directly** — the macro errors with `Custom types
+  must only have one component`. The workaround is a type alias:
+  ```rust
+  type UtcDateTime = DateTime<Utc>;
+  uniffi::custom_type!(UtcDateTime, i64, { remote, ... });
+  ```
+  The alias is just a name; uniffi registers the underlying type so any
+  field typed as `DateTime<Utc>` picks up the conversion.
+
+- **`[uniffi::remote(Enum)]` supports struct-shaped variants** (e.g.
+  `Temporal::Start { start: DateTime<Utc> }`) on uniffi 0.31. The spike
+  confirmed this empirically before committing to the full refactor.
+
+- **`[uniffi::remote(Record)]` supports unit structs** (the
+  `define_query!` macro in `core::queries` produces `pub struct
+  AllActivities;`). On the Swift side this becomes a record with no
+  fields, constructed as `AllActivities()`.
+
+- **Per-variant relabeling cost.** Several core enums use tuple-style
+  variants (`NumericValue::Exact(f64)`, `MassValue::Exact(Vec<...>)`)
+  while the Ffi mirrors had renamed them to struct-style
+  (`Exact { value }`, `Exact { measurements }`). [Remote] inherits
+  core's shape, so Swift callsites lose the field labels:
+  `.exact(value: x)` → `.exact(x)`. Three Swift attribute editors
+  needed updates; mechanical.
+
+- **`actor_id` migration.** Per the Stage 4 plan, Swift now passes
+  `actor_id` per action call rather than `GainzvilleCore.run_action`
+  injecting it. A top-level Swift constant
+  `let SYSTEM_ACTOR_ID: String = "eee9e6ae-…"` in `Core.swift` matches
+  `gv_core::SYSTEM_ACTOR_ID` and is threaded through every callsite. When
+  real auth lands, this becomes a property on `GainzvilleCore` or a
+  session object and the constant is replaced — focused change, easy
+  to do.
+
+- **Variant name asymmetry preserved as-is.** Core's `Action` enum has
+  `Action::CreateActivity(CreateScalarActivity)` — the variant name
+  differs from the inner struct name. The Ffi side had been renaming
+  the variant to `CreateScalarActivity` to match the struct;
+  `[Remote(Enum)]` exposes core's shape directly, so Swift's call
+  changes from `.createScalarActivity(...)` to
+  `.createActivity(CreateScalarActivity(...))`. Verbose, but mirrors
+  core honestly.
+
+- **The "swap one type per commit" pattern produced 8 reviewable
+  commits.** Two clusters were too tangled to split (Position+Temporal
+  swapped together; the full Attribute/Value/Pair/EntryJoin lattice in
+  one commit). The pattern still worked because each commit ends with
+  a green Rust build + green Swift build, even when it spans a dozen
+  Swift files.
+
+- **`gv-ffi/src/types.rs` final shape.** Two non-trivial survivors:
+  `FfiError(Generic(String))` flattening every `DomainError` to a
+  string, and helper `parse_uuid` / `parse_timestamp_ms` used by
+  `gv-ffi/src/core.rs` for forest helpers that take/return raw String
+  IDs. The four FFI-only types that deliberately keep their names —
+  `FfiError`, `GainzvilleCore`, `FfiQuerySubscription`, `CoreListener`
+  — are the only `Ffi*` identifiers that remain in either the Rust
+  crate or the Swift app. Renaming them to drop the prefix is a
+  cosmetic follow-up, not part of this refactor.
