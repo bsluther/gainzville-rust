@@ -13,10 +13,7 @@ use gv_core::{
     std_lib::StandardLibrary,
 };
 
-use crate::types::{
-    FfiAction, FfiAnyQuery, FfiAnyQueryResponse, FfiError, ffi_action_to_core, parse_timestamp_ms,
-    parse_uuid,
-};
+use crate::types::{FfiAction, FfiError, ffi_action_to_core, parse_timestamp_ms, parse_uuid};
 
 static LOGGING: Once = Once::new();
 
@@ -106,23 +103,19 @@ impl GainzvilleCore {
     /// (Swift releasing the reference) auto-removes the query from the cache.
     pub fn subscribe_query(
         &self,
-        query: FfiAnyQuery,
+        query: AnyQuery,
     ) -> Result<Arc<FfiQuerySubscription>, FfiError> {
-        let core_query = AnyQuery::try_from(query)?;
         let subscription = RUNTIME
-            .block_on(self.client.subscribe_query(core_query))
+            .block_on(self.client.subscribe_query(query))
             .map_err(FfiError::from)?;
         Ok(Arc::new(FfiQuerySubscription(subscription)))
     }
 
     /// Read the current cached result for a query. Returns `None` if the query
-    /// is not subscribed or if the query parameters are invalid. Swift calls
-    /// this synchronously from the main thread after receiving `on_data_changed()`.
-    pub fn read_query(&self, query: FfiAnyQuery) -> Option<FfiAnyQueryResponse> {
-        let core_query = AnyQuery::try_from(query).ok()?;
-        self.client
-            .read_cached_query(core_query)
-            .map(FfiAnyQueryResponse::from)
+    /// is not subscribed. Swift calls this synchronously from the main thread
+    /// after receiving `on_data_changed()`.
+    pub fn read_query(&self, query: AnyQuery) -> Option<AnyQueryResponse> {
+        self.client.read_cached_query(query)
     }
 
     /// Spawn a background task that creates a new activity every 10 seconds.

@@ -378,174 +378,137 @@ pub struct EntryJoin {
 
 // --- Queries ---
 
-#[derive(uniffi::Enum, Clone)]
-pub enum FfiAnyQuery {
+#[uniffi::remote(Record)]
+pub struct IsEmailRegistered {
+    pub email: Email,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindUserById {
+    pub actor_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindUserByUsername {
+    pub username: Username,
+}
+
+#[uniffi::remote(Record)]
+pub struct AllActorIds;
+
+#[uniffi::remote(Record)]
+pub struct FindActivityById {
+    pub id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct AllActivities;
+
+#[uniffi::remote(Record)]
+pub struct AllEntries;
+
+#[uniffi::remote(Record)]
+pub struct EntriesRootedInTimeInterval {
+    pub from: DateTime<Utc>,
+    pub to: DateTime<Utc>,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindAncestors {
+    pub entry_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindEntryById {
+    pub entry_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindEntryJoinById {
+    pub entry_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindDescendants {
+    pub entry_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindAttributeById {
+    pub attribute_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct AllAttributes;
+
+#[uniffi::remote(Record)]
+pub struct FindAttributesByOwner {
+    pub owner_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindValueByKey {
+    pub entry_id: Uuid,
+    pub attribute_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindValuesForEntry {
+    pub entry_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindValuesForEntries {
+    pub entry_ids: Vec<Uuid>,
+}
+
+#[uniffi::remote(Record)]
+pub struct FindAttributePairsForEntry {
+    pub entry_id: Uuid,
+}
+
+#[uniffi::remote(Enum)]
+pub enum AnyQuery {
     // Auth
-    IsEmailRegistered {
-        email: String,
-    },
-    FindUserById {
-        actor_id: String,
-    },
-    FindUserByUsername {
-        username: String,
-    },
-    AllActorIds,
+    IsEmailRegistered(IsEmailRegistered),
+    FindUserById(FindUserById),
+    FindUserByUsername(FindUserByUsername),
+    AllActorIds(AllActorIds),
     // Activity
-    FindActivityById {
-        id: String,
-    },
-    AllActivities,
+    FindActivityById(FindActivityById),
+    AllActivities(AllActivities),
     // Entry
-    AllEntries,
-    EntriesRootedInTimeInterval {
-        from: i64,
-        to: i64,
-    },
-    FindAncestors {
-        entry_id: String,
-    },
-    FindEntryById {
-        entry_id: String,
-    },
-    FindEntryJoinById {
-        entry_id: String,
-    },
-    FindDescendants {
-        entry_id: String,
-    },
+    AllEntries(AllEntries),
+    EntriesRootedInTimeInterval(EntriesRootedInTimeInterval),
+    FindAncestors(FindAncestors),
+    FindEntryById(FindEntryById),
+    FindEntryJoinById(FindEntryJoinById),
+    FindDescendants(FindDescendants),
     // Attribute
-    FindAttributeById {
-        attribute_id: String,
-    },
-    AllAttributes,
-    FindAttributesByOwner {
-        owner_id: String,
-    },
+    FindAttributeById(FindAttributeById),
+    AllAttributes(AllAttributes),
+    FindAttributesByOwner(FindAttributesByOwner),
     // Value
-    FindValueByKey {
-        entry_id: String,
-        attribute_id: String,
-    },
-    FindValuesForEntry {
-        entry_id: String,
-    },
-    FindValuesForEntries {
-        entry_ids: Vec<String>,
-    },
-    FindAttributePairsForEntry {
-        entry_id: String,
-    },
+    FindValueByKey(FindValueByKey),
+    FindValuesForEntry(FindValuesForEntry),
+    FindValuesForEntries(FindValuesForEntries),
+    FindAttributePairsForEntry(FindAttributePairsForEntry),
 }
 
-impl TryFrom<FfiAnyQuery> for AnyQuery {
-    type Error = FfiError;
-
-    fn try_from(q: FfiAnyQuery) -> Result<AnyQuery, FfiError> {
-        match q {
-            // Auth
-            FfiAnyQuery::IsEmailRegistered { email } => {
-                Ok(AnyQuery::IsEmailRegistered(IsEmailRegistered {
-                    email: Email::parse(email).map_err(FfiError::from)?,
-                }))
-            }
-            FfiAnyQuery::FindUserById { actor_id } => Ok(AnyQuery::FindUserById(FindUserById {
-                actor_id: parse_uuid(&actor_id)?,
-            })),
-            FfiAnyQuery::FindUserByUsername { username } => {
-                Ok(AnyQuery::FindUserByUsername(FindUserByUsername {
-                    username: Username::parse(username).map_err(FfiError::from)?,
-                }))
-            }
-            FfiAnyQuery::AllActorIds => Ok(AnyQuery::AllActorIds(AllActorIds {})),
-            // Activity
-            FfiAnyQuery::FindActivityById { id } => {
-                Ok(AnyQuery::FindActivityById(FindActivityById {
-                    id: parse_uuid(&id)?,
-                }))
-            }
-            FfiAnyQuery::AllActivities => Ok(AnyQuery::AllActivities(AllActivities {})),
-            // Entry
-            FfiAnyQuery::AllEntries => Ok(AnyQuery::AllEntries(AllEntries {})),
-            FfiAnyQuery::EntriesRootedInTimeInterval { from, to } => Ok(
-                AnyQuery::EntriesRootedInTimeInterval(EntriesRootedInTimeInterval {
-                    from: parse_timestamp_ms(from)?,
-                    to: parse_timestamp_ms(to)?,
-                }),
-            ),
-            FfiAnyQuery::FindAncestors { entry_id } => Ok(AnyQuery::FindAncestors(FindAncestors {
-                entry_id: parse_uuid(&entry_id)?,
-            })),
-            FfiAnyQuery::FindEntryById { entry_id } => Ok(AnyQuery::FindEntryById(FindEntryById {
-                entry_id: parse_uuid(&entry_id)?,
-            })),
-            FfiAnyQuery::FindEntryJoinById { entry_id } => {
-                Ok(AnyQuery::FindEntryJoinById(FindEntryJoinById {
-                    entry_id: parse_uuid(&entry_id)?,
-                }))
-            }
-            FfiAnyQuery::FindDescendants { entry_id } => {
-                Ok(AnyQuery::FindDescendants(FindDescendants {
-                    entry_id: parse_uuid(&entry_id)?,
-                }))
-            }
-            // Attribute
-            FfiAnyQuery::FindAttributeById { attribute_id } => {
-                Ok(AnyQuery::FindAttributeById(FindAttributeById {
-                    attribute_id: parse_uuid(&attribute_id)?,
-                }))
-            }
-            FfiAnyQuery::AllAttributes => Ok(AnyQuery::AllAttributes(AllAttributes {})),
-            FfiAnyQuery::FindAttributesByOwner { owner_id } => {
-                Ok(AnyQuery::FindAttributesByOwner(FindAttributesByOwner {
-                    owner_id: parse_uuid(&owner_id)?,
-                }))
-            }
-            // Value
-            FfiAnyQuery::FindValueByKey {
-                entry_id,
-                attribute_id,
-            } => Ok(AnyQuery::FindValueByKey(FindValueByKey {
-                entry_id: parse_uuid(&entry_id)?,
-                attribute_id: parse_uuid(&attribute_id)?,
-            })),
-            FfiAnyQuery::FindValuesForEntry { entry_id } => {
-                Ok(AnyQuery::FindValuesForEntry(FindValuesForEntry {
-                    entry_id: parse_uuid(&entry_id)?,
-                }))
-            }
-            FfiAnyQuery::FindValuesForEntries { entry_ids } => {
-                let ids = entry_ids
-                    .iter()
-                    .map(|id| parse_uuid(id))
-                    .collect::<Result<Vec<Uuid>, FfiError>>()?;
-                Ok(AnyQuery::FindValuesForEntries(FindValuesForEntries {
-                    entry_ids: ids,
-                }))
-            }
-            FfiAnyQuery::FindAttributePairsForEntry { entry_id } => Ok(
-                AnyQuery::FindAttributePairsForEntry(FindAttributePairsForEntry {
-                    entry_id: parse_uuid(&entry_id)?,
-                }),
-            ),
-        }
-    }
-}
-
-#[derive(uniffi::Enum)]
-pub enum FfiAnyQueryResponse {
+#[uniffi::remote(Enum)]
+pub enum AnyQueryResponse {
     // Auth
     IsEmailRegistered(bool),
     FindUserById(Option<User>),
     FindUserByUsername(Option<User>),
-    AllActorIds(Vec<String>),
+    AllActorIds(Vec<Uuid>),
     // Activity
     FindActivityById(Option<Activity>),
     AllActivities(Vec<Activity>),
     // Entry
     AllEntries(Vec<Entry>),
     EntriesRootedInTimeInterval(Vec<Entry>),
-    FindAncestors(Vec<String>),
+    FindAncestors(Vec<Uuid>),
     FindEntryById(Option<Entry>),
     FindEntryJoinById(Option<EntryJoin>),
     FindDescendants(Vec<Entry>),
@@ -558,49 +521,6 @@ pub enum FfiAnyQueryResponse {
     FindValuesForEntry(Vec<Value>),
     FindValuesForEntries(Vec<Value>),
     FindAttributePairsForEntry(Vec<AttributePair>),
-}
-
-impl From<AnyQueryResponse> for FfiAnyQueryResponse {
-    fn from(r: AnyQueryResponse) -> Self {
-        match r {
-            // Auth
-            AnyQueryResponse::IsEmailRegistered(v) => FfiAnyQueryResponse::IsEmailRegistered(v),
-            AnyQueryResponse::FindUserById(v) => FfiAnyQueryResponse::FindUserById(v),
-            AnyQueryResponse::FindUserByUsername(v) => FfiAnyQueryResponse::FindUserByUsername(v),
-            AnyQueryResponse::AllActorIds(v) => {
-                FfiAnyQueryResponse::AllActorIds(v.into_iter().map(|id| id.to_string()).collect())
-            }
-            // Activity
-            AnyQueryResponse::FindActivityById(v) => FfiAnyQueryResponse::FindActivityById(v),
-            AnyQueryResponse::AllActivities(v) => FfiAnyQueryResponse::AllActivities(v),
-            // Entry
-            AnyQueryResponse::AllEntries(v) => FfiAnyQueryResponse::AllEntries(v),
-            AnyQueryResponse::EntriesRootedInTimeInterval(v) => {
-                FfiAnyQueryResponse::EntriesRootedInTimeInterval(v)
-            }
-            AnyQueryResponse::FindAncestors(v) => {
-                FfiAnyQueryResponse::FindAncestors(v.into_iter().map(|id| id.to_string()).collect())
-            }
-            AnyQueryResponse::FindEntryById(v) => FfiAnyQueryResponse::FindEntryById(v),
-            AnyQueryResponse::FindEntryJoinById(v) => FfiAnyQueryResponse::FindEntryJoinById(v),
-            AnyQueryResponse::FindDescendants(v) => FfiAnyQueryResponse::FindDescendants(v),
-            // Attribute
-            AnyQueryResponse::FindAttributeById(v) => FfiAnyQueryResponse::FindAttributeById(v),
-            AnyQueryResponse::AllAttributes(v) => FfiAnyQueryResponse::AllAttributes(v),
-            AnyQueryResponse::FindAttributesByOwner(v) => {
-                FfiAnyQueryResponse::FindAttributesByOwner(v)
-            }
-            // Value
-            AnyQueryResponse::FindValueByKey(v) => FfiAnyQueryResponse::FindValueByKey(v),
-            AnyQueryResponse::FindValuesForEntry(v) => FfiAnyQueryResponse::FindValuesForEntry(v),
-            AnyQueryResponse::FindValuesForEntries(v) => {
-                FfiAnyQueryResponse::FindValuesForEntries(v)
-            }
-            AnyQueryResponse::FindAttributePairsForEntry(v) => {
-                FfiAnyQueryResponse::FindAttributePairsForEntry(v)
-            }
-        }
-    }
 }
 
 // --- Actions ---

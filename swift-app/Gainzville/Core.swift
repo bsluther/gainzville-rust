@@ -50,12 +50,12 @@ class ActivitiesViewModel: ObservableObject {
 
     func subscribe(to core: GainzvilleCore) {
         self.core = core
-        subscription = try? core.subscribeQuery(query: .allActivities)
+        subscription = try? core.subscribeQuery(query: .allActivities(AllActivities()))
         refresh(from: core)
     }
 
     func refresh(from core: GainzvilleCore) {
-        if case .allActivities(let list) = core.readQuery(query: .allActivities) {
+        if case .allActivities(let list) = core.readQuery(query: .allActivities(AllActivities())) {
             activities = list
         }
     }
@@ -264,7 +264,7 @@ class EntryViewModel: ObservableObject {
         guard self.entryId == nil else { return }
         self.core = core
         self.entryId = entryId
-        subscription = try? core.subscribeQuery(query: .findEntryJoinById(entryId: entryId))
+        subscription = try? core.subscribeQuery(query: .findEntryJoinById(FindEntryJoinById(entryId: entryId)))
         refresh()
         cancellable = dataChange.didChange.sink { [weak self] in
             self?.refresh()
@@ -273,7 +273,7 @@ class EntryViewModel: ObservableObject {
 
     private func refresh() {
         guard let core, let entryId else { return }
-        if case .findEntryJoinById(let join) = core.readQuery(query: .findEntryJoinById(entryId: entryId)) {
+        if case .findEntryJoinById(let join) = core.readQuery(query: .findEntryJoinById(FindEntryJoinById(entryId: entryId))) {
             entryJoin = join
         }
     }
@@ -285,12 +285,12 @@ class AttributesViewModel: ObservableObject {
     private var subscription: FfiQuerySubscription?
 
     func subscribe(to core: GainzvilleCore) {
-        subscription = try? core.subscribeQuery(query: .allAttributes)
+        subscription = try? core.subscribeQuery(query: .allAttributes(AllAttributes()))
         refresh(from: core)
     }
 
     func refresh(from core: GainzvilleCore) {
-        if case .allAttributes(let list) = core.readQuery(query: .allAttributes) {
+        if case .allAttributes(let list) = core.readQuery(query: .allAttributes(AllAttributes())) {
             attributes = list
         }
     }

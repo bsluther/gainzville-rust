@@ -927,10 +927,10 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     
     /**
      * Read the current cached result for a query. Returns `None` if the query
-     * is not subscribed or if the query parameters are invalid. Swift calls
-     * this synchronously from the main thread after receiving `on_data_changed()`.
+     * is not subscribed. Swift calls this synchronously from the main thread
+     * after receiving `on_data_changed()`.
      */
-    func readQuery(query: FfiAnyQuery)  -> FfiAnyQueryResponse?
+    func readQuery(query: AnyQuery)  -> AnyQueryResponse?
     
     /**
      * Execute a write action. Returns once the write has committed; the cache
@@ -957,7 +957,7 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
      * cache, and returns a `FfiQuerySubscription` handle. Dropping the handle
      * (Swift releasing the reference) auto-removes the query from the cache.
      */
-    func subscribeQuery(query: FfiAnyQuery) throws  -> FfiQuerySubscription
+    func subscribeQuery(query: AnyQuery) throws  -> FfiQuerySubscription
     
 }
 /**
@@ -1180,14 +1180,14 @@ open func forestWouldCreateCycle(entryId: String, proposedParentId: String) -> B
     
     /**
      * Read the current cached result for a query. Returns `None` if the query
-     * is not subscribed or if the query parameters are invalid. Swift calls
-     * this synchronously from the main thread after receiving `on_data_changed()`.
+     * is not subscribed. Swift calls this synchronously from the main thread
+     * after receiving `on_data_changed()`.
      */
-open func readQuery(query: FfiAnyQuery) -> FfiAnyQueryResponse?  {
-    return try!  FfiConverterOptionTypeFfiAnyQueryResponse.lift(try! rustCall() {
+open func readQuery(query: AnyQuery) -> AnyQueryResponse?  {
+    return try!  FfiConverterOptionTypeAnyQueryResponse.lift(try! rustCall() {
     uniffi_gv_ffi_fn_method_gainzvillecore_read_query(
             self.uniffiCloneHandle(),
-        FfiConverterTypeFfiAnyQuery_lower(query),$0
+        FfiConverterTypeAnyQuery_lower(query),$0
     )
 })
 }
@@ -1234,11 +1234,11 @@ open func subscribeForest()throws  -> FfiQuerySubscription  {
      * cache, and returns a `FfiQuerySubscription` handle. Dropping the handle
      * (Swift releasing the reference) auto-removes the query from the cache.
      */
-open func subscribeQuery(query: FfiAnyQuery)throws  -> FfiQuerySubscription  {
+open func subscribeQuery(query: AnyQuery)throws  -> FfiQuerySubscription  {
     return try  FfiConverterTypeFfiQuerySubscription_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
     uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_query(
             self.uniffiCloneHandle(),
-        FfiConverterTypeFfiAnyQuery_lower(query),$0
+        FfiConverterTypeAnyQuery_lower(query),$0
     )
 })
 }
@@ -1357,6 +1357,186 @@ public func FfiConverterTypeActivity_lower(_ value: Activity) -> RustBuffer {
 }
 
 
+public struct AllActivities: Equatable, Hashable {
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init() {
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllActivities: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllActivities: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllActivities {
+        return
+            AllActivities()
+    }
+
+    public static func write(_ value: AllActivities, into buf: inout [UInt8]) {
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllActivities_lift(_ buf: RustBuffer) throws -> AllActivities {
+    return try FfiConverterTypeAllActivities.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllActivities_lower(_ value: AllActivities) -> RustBuffer {
+    return FfiConverterTypeAllActivities.lower(value)
+}
+
+
+public struct AllActorIds: Equatable, Hashable {
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init() {
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllActorIds: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllActorIds: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllActorIds {
+        return
+            AllActorIds()
+    }
+
+    public static func write(_ value: AllActorIds, into buf: inout [UInt8]) {
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllActorIds_lift(_ buf: RustBuffer) throws -> AllActorIds {
+    return try FfiConverterTypeAllActorIds.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllActorIds_lower(_ value: AllActorIds) -> RustBuffer {
+    return FfiConverterTypeAllActorIds.lower(value)
+}
+
+
+public struct AllAttributes: Equatable, Hashable {
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init() {
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllAttributes: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllAttributes: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllAttributes {
+        return
+            AllAttributes()
+    }
+
+    public static func write(_ value: AllAttributes, into buf: inout [UInt8]) {
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllAttributes_lift(_ buf: RustBuffer) throws -> AllAttributes {
+    return try FfiConverterTypeAllAttributes.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllAttributes_lower(_ value: AllAttributes) -> RustBuffer {
+    return FfiConverterTypeAllAttributes.lower(value)
+}
+
+
+public struct AllEntries: Equatable, Hashable {
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init() {
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllEntries: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllEntries: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllEntries {
+        return
+            AllEntries()
+    }
+
+    public static func write(_ value: AllEntries, into buf: inout [UInt8]) {
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllEntries_lift(_ buf: RustBuffer) throws -> AllEntries {
+    return try FfiConverterTypeAllEntries.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllEntries_lower(_ value: AllEntries) -> RustBuffer {
+    return FfiConverterTypeAllEntries.lower(value)
+}
+
+
 public struct Attribute: Equatable, Hashable {
     public var id: Uuid
     public var ownerId: Uuid
@@ -1416,6 +1596,60 @@ public func FfiConverterTypeAttribute_lift(_ buf: RustBuffer) throws -> Attribut
 #endif
 public func FfiConverterTypeAttribute_lower(_ value: Attribute) -> RustBuffer {
     return FfiConverterTypeAttribute.lower(value)
+}
+
+
+public struct EntriesRootedInTimeInterval: Equatable, Hashable {
+    public var from: UtcDateTime
+    public var to: UtcDateTime
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(from: UtcDateTime, to: UtcDateTime) {
+        self.from = from
+        self.to = to
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension EntriesRootedInTimeInterval: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEntriesRootedInTimeInterval: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EntriesRootedInTimeInterval {
+        return
+            try EntriesRootedInTimeInterval(
+                from: FfiConverterTypeUtcDateTime.read(from: &buf), 
+                to: FfiConverterTypeUtcDateTime.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: EntriesRootedInTimeInterval, into buf: inout [UInt8]) {
+        FfiConverterTypeUtcDateTime.write(value.from, into: &buf)
+        FfiConverterTypeUtcDateTime.write(value.to, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEntriesRootedInTimeInterval_lift(_ buf: RustBuffer) throws -> EntriesRootedInTimeInterval {
+    return try FfiConverterTypeEntriesRootedInTimeInterval.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEntriesRootedInTimeInterval_lower(_ value: EntriesRootedInTimeInterval) -> RustBuffer {
+    return FfiConverterTypeEntriesRootedInTimeInterval.lower(value)
 }
 
 
@@ -1985,6 +2219,710 @@ public func FfiConverterTypeFfiUpdateEntryCompletion_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeFfiUpdateEntryCompletion_lower(_ value: FfiUpdateEntryCompletion) -> RustBuffer {
     return FfiConverterTypeFfiUpdateEntryCompletion.lower(value)
+}
+
+
+public struct FindActivityById: Equatable, Hashable {
+    public var id: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: Uuid) {
+        self.id = id
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindActivityById: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindActivityById: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindActivityById {
+        return
+            try FindActivityById(
+                id: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindActivityById, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.id, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindActivityById_lift(_ buf: RustBuffer) throws -> FindActivityById {
+    return try FfiConverterTypeFindActivityById.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindActivityById_lower(_ value: FindActivityById) -> RustBuffer {
+    return FfiConverterTypeFindActivityById.lower(value)
+}
+
+
+public struct FindAncestors: Equatable, Hashable {
+    public var entryId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: Uuid) {
+        self.entryId = entryId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindAncestors: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindAncestors: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindAncestors {
+        return
+            try FindAncestors(
+                entryId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindAncestors, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindAncestors_lift(_ buf: RustBuffer) throws -> FindAncestors {
+    return try FfiConverterTypeFindAncestors.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindAncestors_lower(_ value: FindAncestors) -> RustBuffer {
+    return FfiConverterTypeFindAncestors.lower(value)
+}
+
+
+public struct FindAttributeById: Equatable, Hashable {
+    public var attributeId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(attributeId: Uuid) {
+        self.attributeId = attributeId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindAttributeById: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindAttributeById: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindAttributeById {
+        return
+            try FindAttributeById(
+                attributeId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindAttributeById, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.attributeId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindAttributeById_lift(_ buf: RustBuffer) throws -> FindAttributeById {
+    return try FfiConverterTypeFindAttributeById.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindAttributeById_lower(_ value: FindAttributeById) -> RustBuffer {
+    return FfiConverterTypeFindAttributeById.lower(value)
+}
+
+
+public struct FindAttributePairsForEntry: Equatable, Hashable {
+    public var entryId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: Uuid) {
+        self.entryId = entryId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindAttributePairsForEntry: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindAttributePairsForEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindAttributePairsForEntry {
+        return
+            try FindAttributePairsForEntry(
+                entryId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindAttributePairsForEntry, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindAttributePairsForEntry_lift(_ buf: RustBuffer) throws -> FindAttributePairsForEntry {
+    return try FfiConverterTypeFindAttributePairsForEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindAttributePairsForEntry_lower(_ value: FindAttributePairsForEntry) -> RustBuffer {
+    return FfiConverterTypeFindAttributePairsForEntry.lower(value)
+}
+
+
+public struct FindAttributesByOwner: Equatable, Hashable {
+    public var ownerId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(ownerId: Uuid) {
+        self.ownerId = ownerId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindAttributesByOwner: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindAttributesByOwner: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindAttributesByOwner {
+        return
+            try FindAttributesByOwner(
+                ownerId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindAttributesByOwner, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.ownerId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindAttributesByOwner_lift(_ buf: RustBuffer) throws -> FindAttributesByOwner {
+    return try FfiConverterTypeFindAttributesByOwner.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindAttributesByOwner_lower(_ value: FindAttributesByOwner) -> RustBuffer {
+    return FfiConverterTypeFindAttributesByOwner.lower(value)
+}
+
+
+public struct FindDescendants: Equatable, Hashable {
+    public var entryId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: Uuid) {
+        self.entryId = entryId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindDescendants: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindDescendants: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindDescendants {
+        return
+            try FindDescendants(
+                entryId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindDescendants, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindDescendants_lift(_ buf: RustBuffer) throws -> FindDescendants {
+    return try FfiConverterTypeFindDescendants.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindDescendants_lower(_ value: FindDescendants) -> RustBuffer {
+    return FfiConverterTypeFindDescendants.lower(value)
+}
+
+
+public struct FindEntryById: Equatable, Hashable {
+    public var entryId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: Uuid) {
+        self.entryId = entryId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindEntryById: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindEntryById: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindEntryById {
+        return
+            try FindEntryById(
+                entryId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindEntryById, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindEntryById_lift(_ buf: RustBuffer) throws -> FindEntryById {
+    return try FfiConverterTypeFindEntryById.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindEntryById_lower(_ value: FindEntryById) -> RustBuffer {
+    return FfiConverterTypeFindEntryById.lower(value)
+}
+
+
+public struct FindEntryJoinById: Equatable, Hashable {
+    public var entryId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: Uuid) {
+        self.entryId = entryId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindEntryJoinById: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindEntryJoinById: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindEntryJoinById {
+        return
+            try FindEntryJoinById(
+                entryId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindEntryJoinById, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindEntryJoinById_lift(_ buf: RustBuffer) throws -> FindEntryJoinById {
+    return try FfiConverterTypeFindEntryJoinById.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindEntryJoinById_lower(_ value: FindEntryJoinById) -> RustBuffer {
+    return FfiConverterTypeFindEntryJoinById.lower(value)
+}
+
+
+public struct FindUserById: Equatable, Hashable {
+    public var actorId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(actorId: Uuid) {
+        self.actorId = actorId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindUserById: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindUserById: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindUserById {
+        return
+            try FindUserById(
+                actorId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindUserById, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.actorId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindUserById_lift(_ buf: RustBuffer) throws -> FindUserById {
+    return try FfiConverterTypeFindUserById.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindUserById_lower(_ value: FindUserById) -> RustBuffer {
+    return FfiConverterTypeFindUserById.lower(value)
+}
+
+
+public struct FindUserByUsername: Equatable, Hashable {
+    public var username: Username
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(username: Username) {
+        self.username = username
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindUserByUsername: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindUserByUsername: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindUserByUsername {
+        return
+            try FindUserByUsername(
+                username: FfiConverterTypeUsername.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindUserByUsername, into buf: inout [UInt8]) {
+        FfiConverterTypeUsername.write(value.username, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindUserByUsername_lift(_ buf: RustBuffer) throws -> FindUserByUsername {
+    return try FfiConverterTypeFindUserByUsername.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindUserByUsername_lower(_ value: FindUserByUsername) -> RustBuffer {
+    return FfiConverterTypeFindUserByUsername.lower(value)
+}
+
+
+public struct FindValueByKey: Equatable, Hashable {
+    public var entryId: Uuid
+    public var attributeId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: Uuid, attributeId: Uuid) {
+        self.entryId = entryId
+        self.attributeId = attributeId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindValueByKey: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindValueByKey: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindValueByKey {
+        return
+            try FindValueByKey(
+                entryId: FfiConverterTypeUuid.read(from: &buf), 
+                attributeId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindValueByKey, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+        FfiConverterTypeUuid.write(value.attributeId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindValueByKey_lift(_ buf: RustBuffer) throws -> FindValueByKey {
+    return try FfiConverterTypeFindValueByKey.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindValueByKey_lower(_ value: FindValueByKey) -> RustBuffer {
+    return FfiConverterTypeFindValueByKey.lower(value)
+}
+
+
+public struct FindValuesForEntries: Equatable, Hashable {
+    public var entryIds: [Uuid]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryIds: [Uuid]) {
+        self.entryIds = entryIds
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindValuesForEntries: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindValuesForEntries: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindValuesForEntries {
+        return
+            try FindValuesForEntries(
+                entryIds: FfiConverterSequenceTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindValuesForEntries, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeUuid.write(value.entryIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindValuesForEntries_lift(_ buf: RustBuffer) throws -> FindValuesForEntries {
+    return try FfiConverterTypeFindValuesForEntries.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindValuesForEntries_lower(_ value: FindValuesForEntries) -> RustBuffer {
+    return FfiConverterTypeFindValuesForEntries.lower(value)
+}
+
+
+public struct FindValuesForEntry: Equatable, Hashable {
+    public var entryId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: Uuid) {
+        self.entryId = entryId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindValuesForEntry: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindValuesForEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindValuesForEntry {
+        return
+            try FindValuesForEntry(
+                entryId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindValuesForEntry, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindValuesForEntry_lift(_ buf: RustBuffer) throws -> FindValuesForEntry {
+    return try FfiConverterTypeFindValuesForEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindValuesForEntry_lower(_ value: FindValuesForEntry) -> RustBuffer {
+    return FfiConverterTypeFindValuesForEntry.lower(value)
+}
+
+
+public struct IsEmailRegistered: Equatable, Hashable {
+    public var email: Email
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(email: Email) {
+        self.email = email
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension IsEmailRegistered: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIsEmailRegistered: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsEmailRegistered {
+        return
+            try IsEmailRegistered(
+                email: FfiConverterTypeEmail.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IsEmailRegistered, into buf: inout [UInt8]) {
+        FfiConverterTypeEmail.write(value.email, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsEmailRegistered_lift(_ buf: RustBuffer) throws -> IsEmailRegistered {
+    return try FfiConverterTypeIsEmailRegistered.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsEmailRegistered_lower(_ value: IsEmailRegistered) -> RustBuffer {
+    return FfiConverterTypeIsEmailRegistered.lower(value)
 }
 
 
@@ -2630,6 +3568,492 @@ public func FfiConverterTypeValue_lower(_ value: Value) -> RustBuffer {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum AnyQuery: Equatable, Hashable {
+    
+    case isEmailRegistered(IsEmailRegistered
+    )
+    case findUserById(FindUserById
+    )
+    case findUserByUsername(FindUserByUsername
+    )
+    case allActorIds(AllActorIds
+    )
+    case findActivityById(FindActivityById
+    )
+    case allActivities(AllActivities
+    )
+    case allEntries(AllEntries
+    )
+    case entriesRootedInTimeInterval(EntriesRootedInTimeInterval
+    )
+    case findAncestors(FindAncestors
+    )
+    case findEntryById(FindEntryById
+    )
+    case findEntryJoinById(FindEntryJoinById
+    )
+    case findDescendants(FindDescendants
+    )
+    case findAttributeById(FindAttributeById
+    )
+    case allAttributes(AllAttributes
+    )
+    case findAttributesByOwner(FindAttributesByOwner
+    )
+    case findValueByKey(FindValueByKey
+    )
+    case findValuesForEntry(FindValuesForEntry
+    )
+    case findValuesForEntries(FindValuesForEntries
+    )
+    case findAttributePairsForEntry(FindAttributePairsForEntry
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AnyQuery: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAnyQuery: FfiConverterRustBuffer {
+    typealias SwiftType = AnyQuery
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AnyQuery {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .isEmailRegistered(try FfiConverterTypeIsEmailRegistered.read(from: &buf)
+        )
+        
+        case 2: return .findUserById(try FfiConverterTypeFindUserById.read(from: &buf)
+        )
+        
+        case 3: return .findUserByUsername(try FfiConverterTypeFindUserByUsername.read(from: &buf)
+        )
+        
+        case 4: return .allActorIds(try FfiConverterTypeAllActorIds.read(from: &buf)
+        )
+        
+        case 5: return .findActivityById(try FfiConverterTypeFindActivityById.read(from: &buf)
+        )
+        
+        case 6: return .allActivities(try FfiConverterTypeAllActivities.read(from: &buf)
+        )
+        
+        case 7: return .allEntries(try FfiConverterTypeAllEntries.read(from: &buf)
+        )
+        
+        case 8: return .entriesRootedInTimeInterval(try FfiConverterTypeEntriesRootedInTimeInterval.read(from: &buf)
+        )
+        
+        case 9: return .findAncestors(try FfiConverterTypeFindAncestors.read(from: &buf)
+        )
+        
+        case 10: return .findEntryById(try FfiConverterTypeFindEntryById.read(from: &buf)
+        )
+        
+        case 11: return .findEntryJoinById(try FfiConverterTypeFindEntryJoinById.read(from: &buf)
+        )
+        
+        case 12: return .findDescendants(try FfiConverterTypeFindDescendants.read(from: &buf)
+        )
+        
+        case 13: return .findAttributeById(try FfiConverterTypeFindAttributeById.read(from: &buf)
+        )
+        
+        case 14: return .allAttributes(try FfiConverterTypeAllAttributes.read(from: &buf)
+        )
+        
+        case 15: return .findAttributesByOwner(try FfiConverterTypeFindAttributesByOwner.read(from: &buf)
+        )
+        
+        case 16: return .findValueByKey(try FfiConverterTypeFindValueByKey.read(from: &buf)
+        )
+        
+        case 17: return .findValuesForEntry(try FfiConverterTypeFindValuesForEntry.read(from: &buf)
+        )
+        
+        case 18: return .findValuesForEntries(try FfiConverterTypeFindValuesForEntries.read(from: &buf)
+        )
+        
+        case 19: return .findAttributePairsForEntry(try FfiConverterTypeFindAttributePairsForEntry.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AnyQuery, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .isEmailRegistered(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeIsEmailRegistered.write(v1, into: &buf)
+            
+        
+        case let .findUserById(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeFindUserById.write(v1, into: &buf)
+            
+        
+        case let .findUserByUsername(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeFindUserByUsername.write(v1, into: &buf)
+            
+        
+        case let .allActorIds(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeAllActorIds.write(v1, into: &buf)
+            
+        
+        case let .findActivityById(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeFindActivityById.write(v1, into: &buf)
+            
+        
+        case let .allActivities(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeAllActivities.write(v1, into: &buf)
+            
+        
+        case let .allEntries(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeAllEntries.write(v1, into: &buf)
+            
+        
+        case let .entriesRootedInTimeInterval(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeEntriesRootedInTimeInterval.write(v1, into: &buf)
+            
+        
+        case let .findAncestors(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterTypeFindAncestors.write(v1, into: &buf)
+            
+        
+        case let .findEntryById(v1):
+            writeInt(&buf, Int32(10))
+            FfiConverterTypeFindEntryById.write(v1, into: &buf)
+            
+        
+        case let .findEntryJoinById(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterTypeFindEntryJoinById.write(v1, into: &buf)
+            
+        
+        case let .findDescendants(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterTypeFindDescendants.write(v1, into: &buf)
+            
+        
+        case let .findAttributeById(v1):
+            writeInt(&buf, Int32(13))
+            FfiConverterTypeFindAttributeById.write(v1, into: &buf)
+            
+        
+        case let .allAttributes(v1):
+            writeInt(&buf, Int32(14))
+            FfiConverterTypeAllAttributes.write(v1, into: &buf)
+            
+        
+        case let .findAttributesByOwner(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterTypeFindAttributesByOwner.write(v1, into: &buf)
+            
+        
+        case let .findValueByKey(v1):
+            writeInt(&buf, Int32(16))
+            FfiConverterTypeFindValueByKey.write(v1, into: &buf)
+            
+        
+        case let .findValuesForEntry(v1):
+            writeInt(&buf, Int32(17))
+            FfiConverterTypeFindValuesForEntry.write(v1, into: &buf)
+            
+        
+        case let .findValuesForEntries(v1):
+            writeInt(&buf, Int32(18))
+            FfiConverterTypeFindValuesForEntries.write(v1, into: &buf)
+            
+        
+        case let .findAttributePairsForEntry(v1):
+            writeInt(&buf, Int32(19))
+            FfiConverterTypeFindAttributePairsForEntry.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAnyQuery_lift(_ buf: RustBuffer) throws -> AnyQuery {
+    return try FfiConverterTypeAnyQuery.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAnyQuery_lower(_ value: AnyQuery) -> RustBuffer {
+    return FfiConverterTypeAnyQuery.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum AnyQueryResponse: Equatable, Hashable {
+    
+    case isEmailRegistered(Bool
+    )
+    case findUserById(User?
+    )
+    case findUserByUsername(User?
+    )
+    case allActorIds([Uuid]
+    )
+    case findActivityById(Activity?
+    )
+    case allActivities([Activity]
+    )
+    case allEntries([Entry]
+    )
+    case entriesRootedInTimeInterval([Entry]
+    )
+    case findAncestors([Uuid]
+    )
+    case findEntryById(Entry?
+    )
+    case findEntryJoinById(EntryJoin?
+    )
+    case findDescendants([Entry]
+    )
+    case findAttributeById(Attribute?
+    )
+    case allAttributes([Attribute]
+    )
+    case findAttributesByOwner([Attribute]
+    )
+    case findValueByKey(Value?
+    )
+    case findValuesForEntry([Value]
+    )
+    case findValuesForEntries([Value]
+    )
+    case findAttributePairsForEntry([AttributePair]
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AnyQueryResponse: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAnyQueryResponse: FfiConverterRustBuffer {
+    typealias SwiftType = AnyQueryResponse
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AnyQueryResponse {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .isEmailRegistered(try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 2: return .findUserById(try FfiConverterOptionTypeUser.read(from: &buf)
+        )
+        
+        case 3: return .findUserByUsername(try FfiConverterOptionTypeUser.read(from: &buf)
+        )
+        
+        case 4: return .allActorIds(try FfiConverterSequenceTypeUuid.read(from: &buf)
+        )
+        
+        case 5: return .findActivityById(try FfiConverterOptionTypeActivity.read(from: &buf)
+        )
+        
+        case 6: return .allActivities(try FfiConverterSequenceTypeActivity.read(from: &buf)
+        )
+        
+        case 7: return .allEntries(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        )
+        
+        case 8: return .entriesRootedInTimeInterval(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        )
+        
+        case 9: return .findAncestors(try FfiConverterSequenceTypeUuid.read(from: &buf)
+        )
+        
+        case 10: return .findEntryById(try FfiConverterOptionTypeEntry.read(from: &buf)
+        )
+        
+        case 11: return .findEntryJoinById(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
+        )
+        
+        case 12: return .findDescendants(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        )
+        
+        case 13: return .findAttributeById(try FfiConverterOptionTypeAttribute.read(from: &buf)
+        )
+        
+        case 14: return .allAttributes(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        )
+        
+        case 15: return .findAttributesByOwner(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        )
+        
+        case 16: return .findValueByKey(try FfiConverterOptionTypeValue.read(from: &buf)
+        )
+        
+        case 17: return .findValuesForEntry(try FfiConverterSequenceTypeValue.read(from: &buf)
+        )
+        
+        case 18: return .findValuesForEntries(try FfiConverterSequenceTypeValue.read(from: &buf)
+        )
+        
+        case 19: return .findAttributePairsForEntry(try FfiConverterSequenceTypeAttributePair.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AnyQueryResponse, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .isEmailRegistered(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterBool.write(v1, into: &buf)
+            
+        
+        case let .findUserById(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterOptionTypeUser.write(v1, into: &buf)
+            
+        
+        case let .findUserByUsername(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterOptionTypeUser.write(v1, into: &buf)
+            
+        
+        case let .allActorIds(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterSequenceTypeUuid.write(v1, into: &buf)
+            
+        
+        case let .findActivityById(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterOptionTypeActivity.write(v1, into: &buf)
+            
+        
+        case let .allActivities(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterSequenceTypeActivity.write(v1, into: &buf)
+            
+        
+        case let .allEntries(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .entriesRootedInTimeInterval(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .findAncestors(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterSequenceTypeUuid.write(v1, into: &buf)
+            
+        
+        case let .findEntryById(v1):
+            writeInt(&buf, Int32(10))
+            FfiConverterOptionTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .findEntryJoinById(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterOptionTypeEntryJoin.write(v1, into: &buf)
+            
+        
+        case let .findDescendants(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .findAttributeById(v1):
+            writeInt(&buf, Int32(13))
+            FfiConverterOptionTypeAttribute.write(v1, into: &buf)
+            
+        
+        case let .allAttributes(v1):
+            writeInt(&buf, Int32(14))
+            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
+            
+        
+        case let .findAttributesByOwner(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
+            
+        
+        case let .findValueByKey(v1):
+            writeInt(&buf, Int32(16))
+            FfiConverterOptionTypeValue.write(v1, into: &buf)
+            
+        
+        case let .findValuesForEntry(v1):
+            writeInt(&buf, Int32(17))
+            FfiConverterSequenceTypeValue.write(v1, into: &buf)
+            
+        
+        case let .findValuesForEntries(v1):
+            writeInt(&buf, Int32(18))
+            FfiConverterSequenceTypeValue.write(v1, into: &buf)
+            
+        
+        case let .findAttributePairsForEntry(v1):
+            writeInt(&buf, Int32(19))
+            FfiConverterSequenceTypeAttributePair.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAnyQueryResponse_lift(_ buf: RustBuffer) throws -> AnyQueryResponse {
+    return try FfiConverterTypeAnyQueryResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAnyQueryResponse_lower(_ value: AnyQueryResponse) -> RustBuffer {
+    return FfiConverterTypeAnyQueryResponse.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum AttributeConfig: Equatable, Hashable {
     
     case numeric(NumericConfig
@@ -2996,482 +4420,6 @@ public func FfiConverterTypeFfiAction_lift(_ buf: RustBuffer) throws -> FfiActio
 #endif
 public func FfiConverterTypeFfiAction_lower(_ value: FfiAction) -> RustBuffer {
     return FfiConverterTypeFfiAction.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum FfiAnyQuery: Equatable, Hashable {
-    
-    case isEmailRegistered(email: String
-    )
-    case findUserById(actorId: String
-    )
-    case findUserByUsername(username: String
-    )
-    case allActorIds
-    case findActivityById(id: String
-    )
-    case allActivities
-    case allEntries
-    case entriesRootedInTimeInterval(from: Int64, to: Int64
-    )
-    case findAncestors(entryId: String
-    )
-    case findEntryById(entryId: String
-    )
-    case findEntryJoinById(entryId: String
-    )
-    case findDescendants(entryId: String
-    )
-    case findAttributeById(attributeId: String
-    )
-    case allAttributes
-    case findAttributesByOwner(ownerId: String
-    )
-    case findValueByKey(entryId: String, attributeId: String
-    )
-    case findValuesForEntry(entryId: String
-    )
-    case findValuesForEntries(entryIds: [String]
-    )
-    case findAttributePairsForEntry(entryId: String
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension FfiAnyQuery: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFfiAnyQuery: FfiConverterRustBuffer {
-    typealias SwiftType = FfiAnyQuery
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiAnyQuery {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .isEmailRegistered(email: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 2: return .findUserById(actorId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 3: return .findUserByUsername(username: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 4: return .allActorIds
-        
-        case 5: return .findActivityById(id: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 6: return .allActivities
-        
-        case 7: return .allEntries
-        
-        case 8: return .entriesRootedInTimeInterval(from: try FfiConverterInt64.read(from: &buf), to: try FfiConverterInt64.read(from: &buf)
-        )
-        
-        case 9: return .findAncestors(entryId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 10: return .findEntryById(entryId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 11: return .findEntryJoinById(entryId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 12: return .findDescendants(entryId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 13: return .findAttributeById(attributeId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 14: return .allAttributes
-        
-        case 15: return .findAttributesByOwner(ownerId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 16: return .findValueByKey(entryId: try FfiConverterString.read(from: &buf), attributeId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 17: return .findValuesForEntry(entryId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 18: return .findValuesForEntries(entryIds: try FfiConverterSequenceString.read(from: &buf)
-        )
-        
-        case 19: return .findAttributePairsForEntry(entryId: try FfiConverterString.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: FfiAnyQuery, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .isEmailRegistered(email):
-            writeInt(&buf, Int32(1))
-            FfiConverterString.write(email, into: &buf)
-            
-        
-        case let .findUserById(actorId):
-            writeInt(&buf, Int32(2))
-            FfiConverterString.write(actorId, into: &buf)
-            
-        
-        case let .findUserByUsername(username):
-            writeInt(&buf, Int32(3))
-            FfiConverterString.write(username, into: &buf)
-            
-        
-        case .allActorIds:
-            writeInt(&buf, Int32(4))
-        
-        
-        case let .findActivityById(id):
-            writeInt(&buf, Int32(5))
-            FfiConverterString.write(id, into: &buf)
-            
-        
-        case .allActivities:
-            writeInt(&buf, Int32(6))
-        
-        
-        case .allEntries:
-            writeInt(&buf, Int32(7))
-        
-        
-        case let .entriesRootedInTimeInterval(from,to):
-            writeInt(&buf, Int32(8))
-            FfiConverterInt64.write(from, into: &buf)
-            FfiConverterInt64.write(to, into: &buf)
-            
-        
-        case let .findAncestors(entryId):
-            writeInt(&buf, Int32(9))
-            FfiConverterString.write(entryId, into: &buf)
-            
-        
-        case let .findEntryById(entryId):
-            writeInt(&buf, Int32(10))
-            FfiConverterString.write(entryId, into: &buf)
-            
-        
-        case let .findEntryJoinById(entryId):
-            writeInt(&buf, Int32(11))
-            FfiConverterString.write(entryId, into: &buf)
-            
-        
-        case let .findDescendants(entryId):
-            writeInt(&buf, Int32(12))
-            FfiConverterString.write(entryId, into: &buf)
-            
-        
-        case let .findAttributeById(attributeId):
-            writeInt(&buf, Int32(13))
-            FfiConverterString.write(attributeId, into: &buf)
-            
-        
-        case .allAttributes:
-            writeInt(&buf, Int32(14))
-        
-        
-        case let .findAttributesByOwner(ownerId):
-            writeInt(&buf, Int32(15))
-            FfiConverterString.write(ownerId, into: &buf)
-            
-        
-        case let .findValueByKey(entryId,attributeId):
-            writeInt(&buf, Int32(16))
-            FfiConverterString.write(entryId, into: &buf)
-            FfiConverterString.write(attributeId, into: &buf)
-            
-        
-        case let .findValuesForEntry(entryId):
-            writeInt(&buf, Int32(17))
-            FfiConverterString.write(entryId, into: &buf)
-            
-        
-        case let .findValuesForEntries(entryIds):
-            writeInt(&buf, Int32(18))
-            FfiConverterSequenceString.write(entryIds, into: &buf)
-            
-        
-        case let .findAttributePairsForEntry(entryId):
-            writeInt(&buf, Int32(19))
-            FfiConverterString.write(entryId, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiAnyQuery_lift(_ buf: RustBuffer) throws -> FfiAnyQuery {
-    return try FfiConverterTypeFfiAnyQuery.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiAnyQuery_lower(_ value: FfiAnyQuery) -> RustBuffer {
-    return FfiConverterTypeFfiAnyQuery.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum FfiAnyQueryResponse: Equatable, Hashable {
-    
-    case isEmailRegistered(Bool
-    )
-    case findUserById(User?
-    )
-    case findUserByUsername(User?
-    )
-    case allActorIds([String]
-    )
-    case findActivityById(Activity?
-    )
-    case allActivities([Activity]
-    )
-    case allEntries([Entry]
-    )
-    case entriesRootedInTimeInterval([Entry]
-    )
-    case findAncestors([String]
-    )
-    case findEntryById(Entry?
-    )
-    case findEntryJoinById(EntryJoin?
-    )
-    case findDescendants([Entry]
-    )
-    case findAttributeById(Attribute?
-    )
-    case allAttributes([Attribute]
-    )
-    case findAttributesByOwner([Attribute]
-    )
-    case findValueByKey(Value?
-    )
-    case findValuesForEntry([Value]
-    )
-    case findValuesForEntries([Value]
-    )
-    case findAttributePairsForEntry([AttributePair]
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension FfiAnyQueryResponse: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFfiAnyQueryResponse: FfiConverterRustBuffer {
-    typealias SwiftType = FfiAnyQueryResponse
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiAnyQueryResponse {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .isEmailRegistered(try FfiConverterBool.read(from: &buf)
-        )
-        
-        case 2: return .findUserById(try FfiConverterOptionTypeUser.read(from: &buf)
-        )
-        
-        case 3: return .findUserByUsername(try FfiConverterOptionTypeUser.read(from: &buf)
-        )
-        
-        case 4: return .allActorIds(try FfiConverterSequenceString.read(from: &buf)
-        )
-        
-        case 5: return .findActivityById(try FfiConverterOptionTypeActivity.read(from: &buf)
-        )
-        
-        case 6: return .allActivities(try FfiConverterSequenceTypeActivity.read(from: &buf)
-        )
-        
-        case 7: return .allEntries(try FfiConverterSequenceTypeEntry.read(from: &buf)
-        )
-        
-        case 8: return .entriesRootedInTimeInterval(try FfiConverterSequenceTypeEntry.read(from: &buf)
-        )
-        
-        case 9: return .findAncestors(try FfiConverterSequenceString.read(from: &buf)
-        )
-        
-        case 10: return .findEntryById(try FfiConverterOptionTypeEntry.read(from: &buf)
-        )
-        
-        case 11: return .findEntryJoinById(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
-        )
-        
-        case 12: return .findDescendants(try FfiConverterSequenceTypeEntry.read(from: &buf)
-        )
-        
-        case 13: return .findAttributeById(try FfiConverterOptionTypeAttribute.read(from: &buf)
-        )
-        
-        case 14: return .allAttributes(try FfiConverterSequenceTypeAttribute.read(from: &buf)
-        )
-        
-        case 15: return .findAttributesByOwner(try FfiConverterSequenceTypeAttribute.read(from: &buf)
-        )
-        
-        case 16: return .findValueByKey(try FfiConverterOptionTypeValue.read(from: &buf)
-        )
-        
-        case 17: return .findValuesForEntry(try FfiConverterSequenceTypeValue.read(from: &buf)
-        )
-        
-        case 18: return .findValuesForEntries(try FfiConverterSequenceTypeValue.read(from: &buf)
-        )
-        
-        case 19: return .findAttributePairsForEntry(try FfiConverterSequenceTypeAttributePair.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: FfiAnyQueryResponse, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .isEmailRegistered(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterBool.write(v1, into: &buf)
-            
-        
-        case let .findUserById(v1):
-            writeInt(&buf, Int32(2))
-            FfiConverterOptionTypeUser.write(v1, into: &buf)
-            
-        
-        case let .findUserByUsername(v1):
-            writeInt(&buf, Int32(3))
-            FfiConverterOptionTypeUser.write(v1, into: &buf)
-            
-        
-        case let .allActorIds(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterSequenceString.write(v1, into: &buf)
-            
-        
-        case let .findActivityById(v1):
-            writeInt(&buf, Int32(5))
-            FfiConverterOptionTypeActivity.write(v1, into: &buf)
-            
-        
-        case let .allActivities(v1):
-            writeInt(&buf, Int32(6))
-            FfiConverterSequenceTypeActivity.write(v1, into: &buf)
-            
-        
-        case let .allEntries(v1):
-            writeInt(&buf, Int32(7))
-            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .entriesRootedInTimeInterval(v1):
-            writeInt(&buf, Int32(8))
-            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .findAncestors(v1):
-            writeInt(&buf, Int32(9))
-            FfiConverterSequenceString.write(v1, into: &buf)
-            
-        
-        case let .findEntryById(v1):
-            writeInt(&buf, Int32(10))
-            FfiConverterOptionTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .findEntryJoinById(v1):
-            writeInt(&buf, Int32(11))
-            FfiConverterOptionTypeEntryJoin.write(v1, into: &buf)
-            
-        
-        case let .findDescendants(v1):
-            writeInt(&buf, Int32(12))
-            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .findAttributeById(v1):
-            writeInt(&buf, Int32(13))
-            FfiConverterOptionTypeAttribute.write(v1, into: &buf)
-            
-        
-        case let .allAttributes(v1):
-            writeInt(&buf, Int32(14))
-            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
-            
-        
-        case let .findAttributesByOwner(v1):
-            writeInt(&buf, Int32(15))
-            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
-            
-        
-        case let .findValueByKey(v1):
-            writeInt(&buf, Int32(16))
-            FfiConverterOptionTypeValue.write(v1, into: &buf)
-            
-        
-        case let .findValuesForEntry(v1):
-            writeInt(&buf, Int32(17))
-            FfiConverterSequenceTypeValue.write(v1, into: &buf)
-            
-        
-        case let .findValuesForEntries(v1):
-            writeInt(&buf, Int32(18))
-            FfiConverterSequenceTypeValue.write(v1, into: &buf)
-            
-        
-        case let .findAttributePairsForEntry(v1):
-            writeInt(&buf, Int32(19))
-            FfiConverterSequenceTypeAttributePair.write(v1, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiAnyQueryResponse_lift(_ buf: RustBuffer) throws -> FfiAnyQueryResponse {
-    return try FfiConverterTypeFfiAnyQueryResponse.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiAnyQueryResponse_lower(_ value: FfiAnyQueryResponse) -> RustBuffer {
-    return FfiConverterTypeFfiAnyQueryResponse.lower(value)
 }
 
 
@@ -4258,6 +5206,30 @@ fileprivate struct FfiConverterOptionTypeValue: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeAnyQueryResponse: FfiConverterRustBuffer {
+    typealias SwiftType = AnyQueryResponse?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAnyQueryResponse.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAnyQueryResponse.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeAttributeValue: FfiConverterRustBuffer {
     typealias SwiftType = AttributeValue?
 
@@ -4274,30 +5246,6 @@ fileprivate struct FfiConverterOptionTypeAttributeValue: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeAttributeValue.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionTypeFfiAnyQueryResponse: FfiConverterRustBuffer {
-    typealias SwiftType = FfiAnyQueryResponse?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeFfiAnyQueryResponse.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeFfiAnyQueryResponse.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -4594,6 +5542,31 @@ fileprivate struct FfiConverterSequenceTypeMassUnit: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeMassUnit.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeUuid: FfiConverterRustBuffer {
+    typealias SwiftType = [Uuid]
+
+    public static func write(_ value: [Uuid], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUuid.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Uuid] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Uuid]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUuid.read(from: &buf))
         }
         return seq
     }
@@ -4914,7 +5887,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_would_create_cycle() != 34234) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_read_query() != 4312) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_read_query() != 52436) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_run_action() != 17775) {
@@ -4926,7 +5899,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_forest() != 23042) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_query() != 18119) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_query() != 33632) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_constructor_gainzvillecore_new() != 15001) {
