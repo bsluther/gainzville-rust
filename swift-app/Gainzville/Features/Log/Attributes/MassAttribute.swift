@@ -10,12 +10,12 @@ import SwiftUI
 // `[Pound]` as the ultimate fallback.
 struct MassAttribute: View {
     let entry: Entry
-    let pair: FfiMassAttributePair
+    let pair: MassAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
 
-    @State private var values: [FfiMassUnit: String] = [:]
+    @State private var values: [MassUnit: String] = [:]
     @State private var debounceTask: Task<Void, Never>?
-    @FocusState private var focusedUnit: FfiMassUnit?
+    @FocusState private var focusedUnit: MassUnit?
     @EnvironmentObject private var focusModel: AttributeFocusModel
 
     private var focus: AttributeFocus {
@@ -41,7 +41,7 @@ struct MassAttribute: View {
     }
 
     @ViewBuilder
-    private func massField(unit: FfiMassUnit) -> some View {
+    private func massField(unit: MassUnit) -> some View {
         HStack(spacing: GvSpacing.sm) {
             TextField(rangePlaceholder(for: unit), text: bindingFor(unit))
                 .textFieldStyle(.plain)
@@ -62,7 +62,7 @@ struct MassAttribute: View {
         }
     }
 
-    private func bindingFor(_ unit: FfiMassUnit) -> Binding<String> {
+    private func bindingFor(_ unit: MassUnit) -> Binding<String> {
         Binding(
             get: { values[unit] ?? "" },
             set: { values[unit] = $0 }
@@ -74,9 +74,9 @@ struct MassAttribute: View {
     /// Stable union of units currently in plan/actual and the attribute's defaults,
     /// with `[Pound]` as the ultimate fallback. Stable across edits so a unit
     /// field doesn't disappear after the user fills in a value.
-    private var unitsToShow: [FfiMassUnit] {
-        var seen = Set<FfiMassUnit>()
-        var result: [FfiMassUnit] = []
+    private var unitsToShow: [MassUnit] {
+        var seen = Set<MassUnit>()
+        var result: [MassUnit] = []
         for u in definedUnits() + pair.config.defaultUnits where !seen.contains(u) {
             seen.insert(u)
             result.append(u)
@@ -86,9 +86,9 @@ struct MassAttribute: View {
     }
 
     /// Mirrors `MassAttributePair::defined_units()` from core: union of plan + actual units.
-    private func definedUnits() -> [FfiMassUnit] {
-        var seen = Set<FfiMassUnit>()
-        var result: [FfiMassUnit] = []
+    private func definedUnits() -> [MassUnit] {
+        var seen = Set<MassUnit>()
+        var result: [MassUnit] = []
         let measurements = (planMeasurements ?? []) + (actualMeasurements ?? [])
         for m in measurements where !seen.contains(m.unit) {
             seen.insert(m.unit)
@@ -97,7 +97,7 @@ struct MassAttribute: View {
         return result
     }
 
-    private var planMeasurements: [FfiMassMeasurement]? {
+    private var planMeasurements: [MassMeasurement]? {
         switch pair.plan {
         case .none: return nil
         case .exact(let m): return m
@@ -105,7 +105,7 @@ struct MassAttribute: View {
         }
     }
 
-    private var actualMeasurements: [FfiMassMeasurement]? {
+    private var actualMeasurements: [MassMeasurement]? {
         switch pair.actual {
         case .none: return nil
         case .exact(let m): return m
@@ -117,7 +117,7 @@ struct MassAttribute: View {
 
     /// For range-valued mass, show "min – max" per unit as placeholder.
     /// Range collapses to Exact on first commit (see attributes-design.md).
-    private func rangePlaceholder(for unit: FfiMassUnit) -> String {
+    private func rangePlaceholder(for unit: MassUnit) -> String {
         guard case .range(let mins, let maxes) = pair.actual else { return "" }
         let lo = mins.first(where: { $0.unit == unit })?.value
         let hi = maxes.first(where: { $0.unit == unit })?.value
@@ -132,7 +132,7 @@ struct MassAttribute: View {
     // MARK: - Sync cache → shadow
 
     private func syncEditState() {
-        var next: [FfiMassUnit: String] = [:]
+        var next: [MassUnit: String] = [:]
         switch pair.actual {
         case .none, .range:
             // Empty / range: render empty fields. Range placeholder shows the value.
@@ -172,7 +172,7 @@ struct MassAttribute: View {
             entryId: entry.id,
             attributeId: pair.attrId,
             field: .actual,
-            value: .mass(.exact(measurements: new))
+            value: .mass(.exact(new))
         )
     }
 
@@ -181,9 +181,9 @@ struct MassAttribute: View {
     ///   exact value (so emptying clears-to-0); otherwise skip the unit, so an
     ///   un-touched empty field doesn't pollute a fresh value.
     /// - Non-parseable input: returns nil, skipping commit while user is mid-typing.
-    private func buildMeasurements() -> [FfiMassMeasurement]? {
-        var out: [FfiMassMeasurement] = []
-        let currentExactUnits: Set<FfiMassUnit> = {
+    private func buildMeasurements() -> [MassMeasurement]? {
+        var out: [MassMeasurement] = []
+        let currentExactUnits: Set<MassUnit> = {
             if case .exact(let m) = pair.actual {
                 return Set(m.map { $0.unit })
             }
@@ -193,25 +193,25 @@ struct MassAttribute: View {
             let raw = (values[unit] ?? "").trimmingCharacters(in: .whitespaces)
             if raw.isEmpty {
                 if currentExactUnits.contains(unit) {
-                    out.append(FfiMassMeasurement(unit: unit, value: 0))
+                    out.append(MassMeasurement(unit: unit, value: 0))
                 }
                 continue
             }
             guard let parsed = Self.formatter.number(from: raw)?.doubleValue else {
                 return nil
             }
-            out.append(FfiMassMeasurement(unit: unit, value: parsed))
+            out.append(MassMeasurement(unit: unit, value: parsed))
         }
         return out
     }
 
-    private func shouldCommit(_ new: [FfiMassMeasurement]) -> Bool {
+    private func shouldCommit(_ new: [MassMeasurement]) -> Bool {
         if new.isEmpty { return false }
         return !sameAsCurrent(new)
     }
 
     /// Order-insensitive comparison against the stored Exact value.
-    private func sameAsCurrent(_ new: [FfiMassMeasurement]) -> Bool {
+    private func sameAsCurrent(_ new: [MassMeasurement]) -> Bool {
         guard case .exact(let cur) = pair.actual else { return false }
         if cur.count != new.count { return false }
         let curMap = Dictionary(uniqueKeysWithValues: cur.map { ($0.unit, $0.value) })
@@ -234,7 +234,7 @@ struct MassAttribute: View {
     }
 }
 
-private extension FfiMassUnit {
+private extension MassUnit {
     var shortLabel: String {
         switch self {
         case .gram:     return "g"

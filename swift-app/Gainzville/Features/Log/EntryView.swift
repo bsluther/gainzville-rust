@@ -147,7 +147,7 @@ private struct EntryHeader: View {
 
 private struct EntryBody: View {
     let entry: Entry
-    let attributes: [FfiAttributePair]
+    let attributes: [AttributePair]
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.entrySpacing) {
@@ -375,7 +375,7 @@ private struct EntryMenuContent: View {
 
 private struct AttributesSection: View {
     let entry: Entry
-    let attributes: [FfiAttributePair]
+    let attributes: [AttributePair]
 
     var body: some View {
         // ASCII name sort is a placeholder; see docs/attributes-design.md

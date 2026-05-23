@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AttributesListView: View {
-    let attributes: [FfiAttribute]
+    let attributes: [Attribute]
 
     var body: some View {
         if attributes.isEmpty {
@@ -28,7 +28,7 @@ struct AttributesListView: View {
     }
 }
 
-private extension FfiAttributeConfig {
+private extension AttributeConfig {
     var typeName: String {
         switch self {
         case .numeric:  return "Numeric"

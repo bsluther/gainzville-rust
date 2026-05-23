@@ -3,7 +3,7 @@ import SwiftUI
 /// Navigation destination types within the Library section.
 enum LibraryDestination: Hashable {
     case activity(Activity)
-    case attribute(FfiAttribute)
+    case attribute(Attribute)
 }
 
 /// Library root — browse Activities and Attributes.

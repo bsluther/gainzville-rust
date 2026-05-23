@@ -188,7 +188,7 @@ class ForestViewModel: ObservableObject {
         entryId: String,
         attributeId: String,
         field: FfiValueField,
-        value: FfiAttributeValue
+        value: AttributeValue
     ) {
         guard let core else { return }
         try? core.runAction(action: .updateAttributeValue(FfiUpdateAttributeValue(
@@ -254,7 +254,7 @@ class ForestViewModel: ObservableObject {
 // which auto-removes the query from the Rust cache.
 @MainActor
 class EntryViewModel: ObservableObject {
-    @Published var entryJoin: FfiEntryJoin?
+    @Published var entryJoin: EntryJoin?
     private var subscription: FfiQuerySubscription?
     private var cancellable: AnyCancellable?
     private var entryId: String?
@@ -281,7 +281,7 @@ class EntryViewModel: ObservableObject {
 
 @MainActor
 class AttributesViewModel: ObservableObject {
-    @Published var attributes: [FfiAttribute] = []
+    @Published var attributes: [Attribute] = []
     private var subscription: FfiQuerySubscription?
 
     func subscribe(to core: GainzvilleCore) {

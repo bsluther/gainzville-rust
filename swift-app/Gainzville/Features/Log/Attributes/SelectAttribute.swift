@@ -6,7 +6,7 @@ import SwiftUI
 // option commits `Exact(option)` immediately — no debounce.
 struct SelectAttribute: View {
     let entry: Entry
-    let pair: FfiSelectAttributePair
+    let pair: SelectAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
     @State private var isPresenting = false
     @EnvironmentObject private var focusModel: AttributeFocusModel
@@ -58,7 +58,7 @@ struct SelectAttribute: View {
             entryId: entry.id,
             attributeId: pair.attrId,
             field: .actual,
-            value: .select(.exact(value: option))
+            value: .select(.exact(option))
         )
     }
 }

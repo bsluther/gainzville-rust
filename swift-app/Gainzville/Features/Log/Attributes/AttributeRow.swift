@@ -151,9 +151,9 @@ extension View {
 // Fixed-width whitespace placeholder so empty pills have a consistent minimum size.
 let gvEmptyPillText = "\u{00a0}\u{00a0}\u{00a0}\u{00a0}\u{00a0}"
 
-// Identifiable + name accessor so SwiftUI can ForEach over `[FfiAttributePair]`
+// Identifiable + name accessor so SwiftUI can ForEach over `[AttributePair]`
 // without per-call-site switch boilerplate.
-extension FfiAttributePair: Identifiable {
+extension AttributePair: Identifiable {
     public var id: String {
         switch self {
         case .numeric(let p): return p.attrId

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AttributeDetailView: View {
-    let attribute: FfiAttribute
+    let attribute: Attribute
 
     var body: some View {
         ScrollView {
@@ -31,7 +31,7 @@ struct AttributeDetailView: View {
     }
 }
 
-private extension FfiAttributeConfig {
+private extension AttributeConfig {
     var typeName: String {
         switch self {
         case .numeric:  return "Numeric"

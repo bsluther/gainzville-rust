@@ -6,7 +6,7 @@ import SwiftUI
 // dispatched as `UpdateAttributeValue` after a 1s pause or on focus loss.
 struct NumericAttribute: View {
     let entry: Entry
-    let pair: FfiNumericAttributePair
+    let pair: NumericAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
 
     @State private var editValue: String = ""
@@ -92,7 +92,7 @@ struct NumericAttribute: View {
             entryId: entry.id,
             attributeId: pair.attrId,
             field: .actual,
-            value: .numeric(.exact(value: new))
+            value: .numeric(.exact(new))
         )
     }
 

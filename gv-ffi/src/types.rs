@@ -171,7 +171,7 @@ pub(crate) fn ffi_action_to_core(
                 entry_id,
                 attribute_id,
                 field: a.field.into(),
-                value: a.value.into(),
+                value: a.value,
             }
             .into())
         }
@@ -233,407 +233,147 @@ pub struct Entry {
 
 // --- Attribute ---
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiNumericConfig {
+#[uniffi::remote(Record)]
+pub struct NumericConfig {
     pub min: Option<f64>,
     pub max: Option<f64>,
     pub integer: bool,
     pub default: Option<f64>,
 }
 
-impl From<NumericConfig> for FfiNumericConfig {
-    fn from(c: NumericConfig) -> Self {
-        FfiNumericConfig {
-            min: c.min,
-            max: c.max,
-            integer: c.integer,
-            default: c.default,
-        }
-    }
-}
-
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiSelectConfig {
+#[uniffi::remote(Record)]
+pub struct SelectConfig {
     pub options: Vec<String>,
     pub ordered: bool,
     pub default: Option<String>,
 }
 
-impl From<SelectConfig> for FfiSelectConfig {
-    fn from(c: SelectConfig) -> Self {
-        FfiSelectConfig {
-            options: c.options,
-            ordered: c.ordered,
-            default: c.default,
-        }
-    }
-}
-
-#[derive(uniffi::Enum, Debug, Clone)]
-pub enum FfiMassUnit {
+#[uniffi::remote(Enum)]
+pub enum MassUnit {
     Gram,
     Kilogram,
     Pound,
 }
 
-impl From<MassUnit> for FfiMassUnit {
-    fn from(u: MassUnit) -> Self {
-        match u {
-            MassUnit::Gram => FfiMassUnit::Gram,
-            MassUnit::Kilogram => FfiMassUnit::Kilogram,
-            MassUnit::Pound => FfiMassUnit::Pound,
-        }
-    }
+#[uniffi::remote(Record)]
+pub struct MassConfig {
+    pub default_units: Vec<MassUnit>,
 }
 
-impl From<FfiMassUnit> for MassUnit {
-    fn from(u: FfiMassUnit) -> Self {
-        match u {
-            FfiMassUnit::Gram => MassUnit::Gram,
-            FfiMassUnit::Kilogram => MassUnit::Kilogram,
-            FfiMassUnit::Pound => MassUnit::Pound,
-        }
-    }
+#[uniffi::remote(Enum)]
+pub enum AttributeConfig {
+    Numeric(NumericConfig),
+    Select(SelectConfig),
+    Mass(MassConfig),
 }
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiMassConfig {
-    pub default_units: Vec<FfiMassUnit>,
-}
-
-impl From<MassConfig> for FfiMassConfig {
-    fn from(c: MassConfig) -> Self {
-        FfiMassConfig {
-            default_units: c.default_units.into_iter().map(FfiMassUnit::from).collect(),
-        }
-    }
-}
-
-#[derive(uniffi::Enum, Debug, Clone)]
-pub enum FfiAttributeConfig {
-    Numeric(FfiNumericConfig),
-    Select(FfiSelectConfig),
-    Mass(FfiMassConfig),
-}
-
-impl From<AttributeConfig> for FfiAttributeConfig {
-    fn from(c: AttributeConfig) -> Self {
-        match c {
-            AttributeConfig::Numeric(c) => FfiAttributeConfig::Numeric(c.into()),
-            AttributeConfig::Select(c) => FfiAttributeConfig::Select(c.into()),
-            AttributeConfig::Mass(c) => FfiAttributeConfig::Mass(c.into()),
-        }
-    }
-}
-
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiAttribute {
-    pub id: String,
-    pub owner_id: String,
+#[uniffi::remote(Record)]
+pub struct Attribute {
+    pub id: Uuid,
+    pub owner_id: Uuid,
     pub name: String,
-    pub config: FfiAttributeConfig,
-}
-
-impl From<Attribute> for FfiAttribute {
-    fn from(a: Attribute) -> Self {
-        FfiAttribute {
-            id: a.id.to_string(),
-            owner_id: a.owner_id.to_string(),
-            name: a.name,
-            config: FfiAttributeConfig::from(a.config),
-        }
-    }
+    pub config: AttributeConfig,
 }
 
 // --- Value ---
 
-#[derive(uniffi::Enum, Debug, Clone)]
-pub enum FfiNumericValue {
-    Exact { value: f64 },
+#[uniffi::remote(Enum)]
+pub enum NumericValue {
+    Exact(f64),
     Range { min: f64, max: f64 },
 }
 
-impl From<NumericValue> for FfiNumericValue {
-    fn from(v: NumericValue) -> Self {
-        match v {
-            NumericValue::Exact(value) => FfiNumericValue::Exact { value },
-            NumericValue::Range { min, max } => FfiNumericValue::Range { min, max },
-        }
-    }
-}
-
-impl From<FfiNumericValue> for NumericValue {
-    fn from(v: FfiNumericValue) -> Self {
-        match v {
-            FfiNumericValue::Exact { value } => NumericValue::Exact(value),
-            FfiNumericValue::Range { min, max } => NumericValue::Range { min, max },
-        }
-    }
-}
-
-#[derive(uniffi::Enum, Debug, Clone)]
-pub enum FfiSelectValue {
-    Exact { value: String },
+#[uniffi::remote(Enum)]
+pub enum SelectValue {
+    Exact(String),
     Range { min: String, max: String },
 }
 
-impl From<SelectValue> for FfiSelectValue {
-    fn from(v: SelectValue) -> Self {
-        match v {
-            SelectValue::Exact(value) => FfiSelectValue::Exact { value },
-            SelectValue::Range { min, max } => FfiSelectValue::Range { min, max },
-        }
-    }
-}
-
-impl From<FfiSelectValue> for SelectValue {
-    fn from(v: FfiSelectValue) -> Self {
-        match v {
-            FfiSelectValue::Exact { value } => SelectValue::Exact(value),
-            FfiSelectValue::Range { min, max } => SelectValue::Range { min, max },
-        }
-    }
-}
-
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiMassMeasurement {
-    pub unit: FfiMassUnit,
+#[uniffi::remote(Record)]
+pub struct MassMeasurement {
+    pub unit: MassUnit,
     pub value: f64,
 }
 
-impl From<MassMeasurement> for FfiMassMeasurement {
-    fn from(m: MassMeasurement) -> Self {
-        FfiMassMeasurement {
-            unit: FfiMassUnit::from(m.unit),
-            value: m.value,
-        }
-    }
-}
-
-impl From<FfiMassMeasurement> for MassMeasurement {
-    fn from(m: FfiMassMeasurement) -> Self {
-        MassMeasurement {
-            unit: MassUnit::from(m.unit),
-            value: m.value,
-        }
-    }
-}
-
-#[derive(uniffi::Enum, Debug, Clone)]
-pub enum FfiMassValue {
-    Exact {
-        measurements: Vec<FfiMassMeasurement>,
-    },
+#[uniffi::remote(Enum)]
+pub enum MassValue {
+    Exact(Vec<MassMeasurement>),
     Range {
-        min: Vec<FfiMassMeasurement>,
-        max: Vec<FfiMassMeasurement>,
+        min: Vec<MassMeasurement>,
+        max: Vec<MassMeasurement>,
     },
 }
 
-impl From<MassValue> for FfiMassValue {
-    fn from(v: MassValue) -> Self {
-        match v {
-            MassValue::Exact(ms) => FfiMassValue::Exact {
-                measurements: ms.into_iter().map(FfiMassMeasurement::from).collect(),
-            },
-            MassValue::Range { min, max } => FfiMassValue::Range {
-                min: min.into_iter().map(FfiMassMeasurement::from).collect(),
-                max: max.into_iter().map(FfiMassMeasurement::from).collect(),
-            },
-        }
-    }
+#[uniffi::remote(Enum)]
+pub enum AttributeValue {
+    Numeric(NumericValue),
+    Select(SelectValue),
+    Mass(MassValue),
 }
 
-impl From<FfiMassValue> for MassValue {
-    fn from(v: FfiMassValue) -> Self {
-        match v {
-            FfiMassValue::Exact { measurements } => MassValue::Exact(
-                measurements
-                    .into_iter()
-                    .map(MassMeasurement::from)
-                    .collect(),
-            ),
-            FfiMassValue::Range { min, max } => MassValue::Range {
-                min: min.into_iter().map(MassMeasurement::from).collect(),
-                max: max.into_iter().map(MassMeasurement::from).collect(),
-            },
-        }
-    }
-}
-
-#[derive(uniffi::Enum, Debug, Clone)]
-pub enum FfiAttributeValue {
-    Numeric(FfiNumericValue),
-    Select(FfiSelectValue),
-    Mass(FfiMassValue),
-}
-
-impl From<AttributeValue> for FfiAttributeValue {
-    fn from(v: AttributeValue) -> Self {
-        match v {
-            AttributeValue::Numeric(v) => FfiAttributeValue::Numeric(v.into()),
-            AttributeValue::Select(v) => FfiAttributeValue::Select(v.into()),
-            AttributeValue::Mass(v) => FfiAttributeValue::Mass(v.into()),
-        }
-    }
-}
-
-impl From<FfiAttributeValue> for AttributeValue {
-    fn from(v: FfiAttributeValue) -> Self {
-        match v {
-            FfiAttributeValue::Numeric(v) => AttributeValue::Numeric(v.into()),
-            FfiAttributeValue::Select(v) => AttributeValue::Select(v.into()),
-            FfiAttributeValue::Mass(v) => AttributeValue::Mass(v.into()),
-        }
-    }
-}
-
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiValue {
-    pub entry_id: String,
-    pub attribute_id: String,
+#[uniffi::remote(Record)]
+pub struct Value {
+    pub entry_id: Uuid,
+    pub attribute_id: Uuid,
     pub index_float: Option<f64>,
     pub index_string: Option<String>,
-    pub plan: Option<FfiAttributeValue>,
-    pub actual: Option<FfiAttributeValue>,
-}
-
-impl From<Value> for FfiValue {
-    fn from(v: Value) -> Self {
-        FfiValue {
-            entry_id: v.entry_id.to_string(),
-            attribute_id: v.attribute_id.to_string(),
-            index_float: v.index_float,
-            index_string: v.index_string,
-            plan: v.plan.map(FfiAttributeValue::from),
-            actual: v.actual.map(FfiAttributeValue::from),
-        }
-    }
+    pub plan: Option<AttributeValue>,
+    pub actual: Option<AttributeValue>,
 }
 
 // --- AttributePair ---
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiNumericAttributePair {
-    pub attr_id: String,
-    pub entry_id: String,
-    pub owner_id: String,
+#[uniffi::remote(Record)]
+pub struct NumericAttributePair {
+    pub attr_id: Uuid,
+    pub entry_id: Uuid,
+    pub owner_id: Uuid,
     pub name: String,
-    pub config: FfiNumericConfig,
+    pub config: NumericConfig,
     pub index_float: Option<f64>,
-    pub plan: Option<FfiNumericValue>,
-    pub actual: Option<FfiNumericValue>,
+    pub plan: Option<NumericValue>,
+    pub actual: Option<NumericValue>,
 }
 
-impl From<NumericAttributePair> for FfiNumericAttributePair {
-    fn from(p: NumericAttributePair) -> Self {
-        FfiNumericAttributePair {
-            attr_id: p.attr_id.to_string(),
-            entry_id: p.entry_id.to_string(),
-            owner_id: p.owner_id.to_string(),
-            name: p.name,
-            config: p.config.into(),
-            index_float: p.index_float,
-            plan: p.plan.map(FfiNumericValue::from),
-            actual: p.actual.map(FfiNumericValue::from),
-        }
-    }
-}
-
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiSelectAttributePair {
-    pub attr_id: String,
-    pub entry_id: String,
-    pub owner_id: String,
+#[uniffi::remote(Record)]
+pub struct SelectAttributePair {
+    pub attr_id: Uuid,
+    pub entry_id: Uuid,
+    pub owner_id: Uuid,
     pub name: String,
-    pub config: FfiSelectConfig,
+    pub config: SelectConfig,
     pub index_string: Option<String>,
-    pub plan: Option<FfiSelectValue>,
-    pub actual: Option<FfiSelectValue>,
+    pub plan: Option<SelectValue>,
+    pub actual: Option<SelectValue>,
 }
 
-impl From<SelectAttributePair> for FfiSelectAttributePair {
-    fn from(p: SelectAttributePair) -> Self {
-        FfiSelectAttributePair {
-            attr_id: p.attr_id.to_string(),
-            entry_id: p.entry_id.to_string(),
-            owner_id: p.owner_id.to_string(),
-            name: p.name,
-            config: p.config.into(),
-            index_string: p.index_string,
-            plan: p.plan.map(FfiSelectValue::from),
-            actual: p.actual.map(FfiSelectValue::from),
-        }
-    }
-}
-
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiMassAttributePair {
-    pub attr_id: String,
-    pub entry_id: String,
-    pub owner_id: String,
+#[uniffi::remote(Record)]
+pub struct MassAttributePair {
+    pub attr_id: Uuid,
+    pub entry_id: Uuid,
+    pub owner_id: Uuid,
     pub name: String,
-    pub config: FfiMassConfig,
+    pub config: MassConfig,
     pub index_float: Option<f64>,
-    pub plan: Option<FfiMassValue>,
-    pub actual: Option<FfiMassValue>,
+    pub plan: Option<MassValue>,
+    pub actual: Option<MassValue>,
 }
 
-impl From<MassAttributePair> for FfiMassAttributePair {
-    fn from(p: MassAttributePair) -> Self {
-        FfiMassAttributePair {
-            attr_id: p.attr_id.to_string(),
-            entry_id: p.entry_id.to_string(),
-            owner_id: p.owner_id.to_string(),
-            name: p.name,
-            config: p.config.into(),
-            index_float: p.index_float,
-            plan: p.plan.map(FfiMassValue::from),
-            actual: p.actual.map(FfiMassValue::from),
-        }
-    }
-}
-
-#[derive(uniffi::Enum, Debug, Clone)]
-pub enum FfiAttributePair {
-    Numeric(FfiNumericAttributePair),
-    Select(FfiSelectAttributePair),
-    Mass(FfiMassAttributePair),
-}
-
-impl From<AttributePair> for FfiAttributePair {
-    fn from(p: AttributePair) -> Self {
-        match p {
-            AttributePair::Numeric(p) => FfiAttributePair::Numeric(p.into()),
-            AttributePair::Select(p) => FfiAttributePair::Select(p.into()),
-            AttributePair::Mass(p) => FfiAttributePair::Mass(p.into()),
-        }
-    }
+#[uniffi::remote(Enum)]
+pub enum AttributePair {
+    Numeric(NumericAttributePair),
+    Select(SelectAttributePair),
+    Mass(MassAttributePair),
 }
 
 // --- EntryJoin ---
 
-#[derive(uniffi::Record, Debug, Clone)]
-pub struct FfiEntryJoin {
+#[uniffi::remote(Record)]
+pub struct EntryJoin {
     pub entry: Entry,
     pub activity: Option<Activity>,
-    pub attributes: Vec<FfiAttributePair>,
+    pub attributes: Vec<AttributePair>,
     pub display_name: String,
-}
-
-impl From<EntryJoin> for FfiEntryJoin {
-    fn from(ej: EntryJoin) -> Self {
-        FfiEntryJoin {
-            entry: ej.entry,
-            activity: ej.activity,
-            attributes: ej
-                .attributes
-                .into_iter()
-                .map(FfiAttributePair::from)
-                .collect(),
-            display_name: ej.display_name,
-        }
-    }
 }
 
 // --- Queries ---
@@ -807,17 +547,17 @@ pub enum FfiAnyQueryResponse {
     EntriesRootedInTimeInterval(Vec<Entry>),
     FindAncestors(Vec<String>),
     FindEntryById(Option<Entry>),
-    FindEntryJoinById(Option<FfiEntryJoin>),
+    FindEntryJoinById(Option<EntryJoin>),
     FindDescendants(Vec<Entry>),
     // Attribute
-    FindAttributeById(Option<FfiAttribute>),
-    AllAttributes(Vec<FfiAttribute>),
-    FindAttributesByOwner(Vec<FfiAttribute>),
+    FindAttributeById(Option<Attribute>),
+    AllAttributes(Vec<Attribute>),
+    FindAttributesByOwner(Vec<Attribute>),
     // Value
-    FindValueByKey(Option<FfiValue>),
-    FindValuesForEntry(Vec<FfiValue>),
-    FindValuesForEntries(Vec<FfiValue>),
-    FindAttributePairsForEntry(Vec<FfiAttributePair>),
+    FindValueByKey(Option<Value>),
+    FindValuesForEntry(Vec<Value>),
+    FindValuesForEntries(Vec<Value>),
+    FindAttributePairsForEntry(Vec<AttributePair>),
 }
 
 impl From<AnyQueryResponse> for FfiAnyQueryResponse {
@@ -842,36 +582,22 @@ impl From<AnyQueryResponse> for FfiAnyQueryResponse {
                 FfiAnyQueryResponse::FindAncestors(v.into_iter().map(|id| id.to_string()).collect())
             }
             AnyQueryResponse::FindEntryById(v) => FfiAnyQueryResponse::FindEntryById(v),
-            AnyQueryResponse::FindEntryJoinById(v) => {
-                FfiAnyQueryResponse::FindEntryJoinById(v.map(FfiEntryJoin::from))
-            }
+            AnyQueryResponse::FindEntryJoinById(v) => FfiAnyQueryResponse::FindEntryJoinById(v),
             AnyQueryResponse::FindDescendants(v) => FfiAnyQueryResponse::FindDescendants(v),
             // Attribute
-            AnyQueryResponse::FindAttributeById(v) => {
-                FfiAnyQueryResponse::FindAttributeById(v.map(FfiAttribute::from))
-            }
-            AnyQueryResponse::AllAttributes(v) => {
-                FfiAnyQueryResponse::AllAttributes(v.into_iter().map(FfiAttribute::from).collect())
-            }
+            AnyQueryResponse::FindAttributeById(v) => FfiAnyQueryResponse::FindAttributeById(v),
+            AnyQueryResponse::AllAttributes(v) => FfiAnyQueryResponse::AllAttributes(v),
             AnyQueryResponse::FindAttributesByOwner(v) => {
-                FfiAnyQueryResponse::FindAttributesByOwner(
-                    v.into_iter().map(FfiAttribute::from).collect(),
-                )
+                FfiAnyQueryResponse::FindAttributesByOwner(v)
             }
             // Value
-            AnyQueryResponse::FindValueByKey(v) => {
-                FfiAnyQueryResponse::FindValueByKey(v.map(FfiValue::from))
+            AnyQueryResponse::FindValueByKey(v) => FfiAnyQueryResponse::FindValueByKey(v),
+            AnyQueryResponse::FindValuesForEntry(v) => FfiAnyQueryResponse::FindValuesForEntry(v),
+            AnyQueryResponse::FindValuesForEntries(v) => {
+                FfiAnyQueryResponse::FindValuesForEntries(v)
             }
-            AnyQueryResponse::FindValuesForEntry(v) => {
-                FfiAnyQueryResponse::FindValuesForEntry(v.into_iter().map(FfiValue::from).collect())
-            }
-            AnyQueryResponse::FindValuesForEntries(v) => FfiAnyQueryResponse::FindValuesForEntries(
-                v.into_iter().map(FfiValue::from).collect(),
-            ),
             AnyQueryResponse::FindAttributePairsForEntry(v) => {
-                FfiAnyQueryResponse::FindAttributePairsForEntry(
-                    v.into_iter().map(FfiAttributePair::from).collect(),
-                )
+                FfiAnyQueryResponse::FindAttributePairsForEntry(v)
             }
         }
     }
@@ -949,7 +675,7 @@ pub struct FfiUpdateAttributeValue {
     pub entry_id: String,
     pub attribute_id: String,
     pub field: FfiValueField,
-    pub value: FfiAttributeValue,
+    pub value: AttributeValue,
 }
 
 #[derive(uniffi::Enum, Debug, Clone)]
