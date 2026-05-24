@@ -91,6 +91,7 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
         id: Uuid::new_v4(),
         owner_id: SYSTEM_ACTOR_ID,
         name: "Weight".to_string(),
+        description: None,
         config,
     };
 

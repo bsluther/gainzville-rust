@@ -13,6 +13,7 @@ impl StandardLibrary {
             id: Uuid::new_v4(),
             owner_id: SYSTEM_ACTOR_ID,
             name: "Reps".to_string(),
+            description: Some("Number of repetitions performed".to_string()),
             config: NumericConfig {
                 min: Some(0.),
                 max: Some(100.),
@@ -26,6 +27,7 @@ impl StandardLibrary {
             id: Uuid::new_v4(),
             owner_id: SYSTEM_ACTOR_ID,
             name: "Load".to_string(),
+            description: Some("External resistance or weight moved".to_string()),
             config: MassConfig {
                 default_units: vec![MassUnit::Pound],
             }
@@ -36,6 +38,7 @@ impl StandardLibrary {
             id: Uuid::new_v4(),
             owner_id: SYSTEM_ACTOR_ID,
             name: "Outcome".to_string(),
+            description: Some("How an attempt ended (redpoint, flash, onsight, attempt)".to_string()),
             config: SelectConfig {
                 options: vec![
                     "Redpoint".to_string(),
@@ -55,6 +58,7 @@ impl StandardLibrary {
             id: Uuid::new_v4(),
             owner_id: SYSTEM_ACTOR_ID,
             name: "YDS Grade".to_string(),
+            description: Some("Yosemite Decimal System climbing grade".to_string()),
             config: SelectConfig {
                 options: vec![
                     "5.8".to_string(),

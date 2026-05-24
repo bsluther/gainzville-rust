@@ -161,6 +161,7 @@ fn attribute_round_trips_numeric() {
         id: Uuid::new_v4(),
         owner_id: SYSTEM_ACTOR_ID,
         name: "Reps".to_string(),
+        description: Some("Number of repetitions performed".to_string()),
         config: AttributeConfig::Numeric(
             NumericConfig::new(Some(0.0), Some(100.0), true, Some(10.0)).unwrap(),
         ),
@@ -176,6 +177,7 @@ fn attribute_round_trips_mass() {
         id: Uuid::new_v4(),
         owner_id: SYSTEM_ACTOR_ID,
         name: "Load".to_string(),
+        description: None,
         config: AttributeConfig::Mass(MassConfig {
             default_units: vec![MassUnit::Kilogram, MassUnit::Pound],
         }),

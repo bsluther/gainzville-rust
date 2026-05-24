@@ -176,6 +176,7 @@ pub struct AttributeRow {
     pub id: UuidColumn,
     pub owner_id: UuidColumn,
     pub name: String,
+    pub description: Option<String>,
     pub data_type: String,
     pub config: String, // JSON as TEXT
 }
@@ -186,6 +187,7 @@ impl AttributeRow {
             id: UuidColumn(attr.id),
             owner_id: UuidColumn(attr.owner_id),
             name: attr.name.clone(),
+            description: attr.description.clone(),
             data_type: attr.config.data_type().to_string(),
             config: serde_json::to_string(&attr.config)
                 .map_err(|e| DomainError::Other(e.to_string()))?,
@@ -199,6 +201,7 @@ impl AttributeRow {
             id: self.id.0,
             owner_id: self.owner_id.0,
             name: self.name,
+            description: self.description,
             config,
         })
     }
@@ -274,6 +277,8 @@ pub struct AttributePairRow {
     pub attr_owner_id: UuidColumn,
     #[sqlx(rename = "attr_name")]
     pub attr_name: String,
+    #[sqlx(rename = "attr_description")]
+    pub attr_description: Option<String>,
     #[sqlx(rename = "attr_data_type")]
     pub attr_data_type: String,
     #[sqlx(rename = "attr_config")]
@@ -293,6 +298,7 @@ impl AttributePairRow {
             id: self.attr_id,
             owner_id: self.attr_owner_id,
             name: self.attr_name,
+            description: self.attr_description,
             data_type: self.attr_data_type,
             config: self.attr_config,
         }

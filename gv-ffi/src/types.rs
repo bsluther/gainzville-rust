@@ -189,6 +189,7 @@ pub struct Attribute {
     pub id: Uuid,
     pub owner_id: Uuid,
     pub name: String,
+    pub description: Option<String>,
     pub config: AttributeConfig,
 }
 

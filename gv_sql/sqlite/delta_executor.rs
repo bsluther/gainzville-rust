@@ -223,11 +223,12 @@ impl DeltaExecutor<Attribute> for SqliteDeltaExecutor<'_> {
             Delta::Insert { new } => {
                 let row = crate::rows::AttributeRow::from_attribute(&new)?;
                 sqlx::query(
-                    "INSERT INTO attributes (id, owner_id, name, data_type, config) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO attributes (id, owner_id, name, description, data_type, config) VALUES (?, ?, ?, ?, ?, ?)",
                 )
                 .bind(row.id)
                 .bind(row.owner_id)
                 .bind(row.name)
+                .bind(row.description)
                 .bind(row.data_type)
                 .bind(row.config)
                 .execute(&mut *self.conn)
@@ -237,10 +238,11 @@ impl DeltaExecutor<Attribute> for SqliteDeltaExecutor<'_> {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
                 let row = crate::rows::AttributeRow::from_attribute(&new)?;
                 sqlx::query(
-                    "UPDATE attributes SET owner_id = ?, name = ?, data_type = ?, config = ? WHERE id = ?",
+                    "UPDATE attributes SET owner_id = ?, name = ?, description = ?, data_type = ?, config = ? WHERE id = ?",
                 )
                 .bind(row.owner_id)
                 .bind(row.name)
+                .bind(row.description)
                 .bind(row.data_type)
                 .bind(row.config)
                 .bind(row.id)

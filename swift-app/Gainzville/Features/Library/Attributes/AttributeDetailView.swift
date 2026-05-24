@@ -12,6 +12,12 @@ struct AttributeDetailView: View {
                         .foregroundStyle(Color.gvTextPrimary)
                 }
 
+                GvDetailSection(title: "Description", actionIcon: "pencil", onAction: {}) {
+                    Text(attribute.description ?? "No description")
+                        .font(.gvBody)
+                        .foregroundStyle(attribute.description != nil ? Color.gvTextPrimary : Color.gvTextSecondary)
+                }
+
                 GvDetailSection(title: "Type") {
                     Text(attribute.config.typeName)
                         .font(.gvBody)

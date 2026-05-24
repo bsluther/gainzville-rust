@@ -23,6 +23,7 @@ pub struct Attribute {
     pub id: Uuid,
     pub owner_id: Uuid,
     pub name: String, // TODO: use a validated type.
+    pub description: Option<String>,
     pub config: AttributeConfig,
 }
 

@@ -16,6 +16,11 @@ struct AttributesListView: View {
                     VStack(alignment: .leading, spacing: GvSpacing.sm) {
                         Text(attribute.name)
                             .font(.gvBody)
+                        if let desc = attribute.description {
+                            Text(desc)
+                                .font(.gvCaption)
+                                .foregroundStyle(Color.gvTextSecondary)
+                        }
                         Text(attribute.config.typeName)
                             .font(.gvCaption)
                             .foregroundStyle(Color.gvTextSecondary)

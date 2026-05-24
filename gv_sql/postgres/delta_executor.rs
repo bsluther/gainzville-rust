@@ -281,13 +281,14 @@ impl DeltaExecutor<Attribute> for PostgresDeltaExecutor<'_> {
                 let row = crate::rows::AttributeRow::from_attribute(&new)?;
                 sqlx::query(
                     r#"
-                    INSERT INTO attributes (id, owner_id, name, data_type, config)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO attributes (id, owner_id, name, description, data_type, config)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     "#,
                 )
                 .bind(row.id)
                 .bind(row.owner_id)
                 .bind(row.name)
+                .bind(row.description)
                 .bind(row.data_type)
                 .bind(row.config)
                 .execute(&mut *self.conn)
@@ -299,12 +300,13 @@ impl DeltaExecutor<Attribute> for PostgresDeltaExecutor<'_> {
                 sqlx::query(
                     r#"
                     UPDATE attributes
-                    SET owner_id = $1, name = $2, data_type = $3, config = $4
-                    WHERE id = $5
+                    SET owner_id = $1, name = $2, description = $3, data_type = $4, config = $5
+                    WHERE id = $6
                     "#,
                 )
                 .bind(row.owner_id)
                 .bind(row.name)
+                .bind(row.description)
                 .bind(row.data_type)
                 .bind(row.config)
                 .bind(row.id)

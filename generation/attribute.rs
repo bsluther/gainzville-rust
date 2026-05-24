@@ -23,6 +23,7 @@ impl ArbitraryFrom<&[Uuid]> for Attribute {
                 .expect("owner_ids must not be empty")
                 .clone(),
             name: gen_random_text(rng, 1..5).to_string(),
+            description: maybe(rng, 0.5, |rng| gen_random_text(rng, 1..8).to_string()),
             config: AttributeConfig::arbitrary(rng, context),
         }
     }

@@ -294,7 +294,7 @@ impl QueryExecutor<FindAttributeById> for SqliteQueryExecutor<'_> {
         query: FindAttributeById,
     ) -> Result<<FindAttributeById as Query>::Response> {
         sqlx::query_as::<_, crate::rows::AttributeRow>(
-            "SELECT id, owner_id, name, data_type, config FROM attributes WHERE id = ?",
+            "SELECT id, owner_id, name, description, data_type, config FROM attributes WHERE id = ?",
         )
         .bind(crate::columns::UuidColumn(query.attribute_id))
         .fetch_optional(&mut *self.conn)
@@ -310,7 +310,7 @@ impl QueryExecutor<AllAttributes> for SqliteQueryExecutor<'_> {
         _query: AllAttributes,
     ) -> Result<<AllAttributes as Query>::Response> {
         sqlx::query_as::<_, crate::rows::AttributeRow>(
-            "SELECT id, owner_id, name, data_type, config FROM attributes",
+            "SELECT id, owner_id, name, description, data_type, config FROM attributes",
         )
         .fetch_all(&mut *self.conn)
         .await.db_err()?
@@ -326,7 +326,7 @@ impl QueryExecutor<FindAttributesByOwner> for SqliteQueryExecutor<'_> {
         query: FindAttributesByOwner,
     ) -> Result<<FindAttributesByOwner as Query>::Response> {
         sqlx::query_as::<_, crate::rows::AttributeRow>(
-            "SELECT id, owner_id, name, data_type, config FROM attributes WHERE owner_id = ?",
+            "SELECT id, owner_id, name, description, data_type, config FROM attributes WHERE owner_id = ?",
         )
         .bind(crate::columns::UuidColumn(query.owner_id))
         .fetch_all(&mut *self.conn)
@@ -408,7 +408,8 @@ impl QueryExecutor<FindAttributePairsForEntry> for SqliteQueryExecutor<'_> {
             r#"
             SELECT
                 a.id as attr_id, a.owner_id as attr_owner_id,
-                a.name as attr_name, a.data_type as attr_data_type,
+                a.name as attr_name, a.description as attr_description,
+                a.data_type as attr_data_type,
                 a.config as attr_config,
                 v.entry_id, v.attribute_id, v.plan, v.actual,
                 v.index_float, v.index_string

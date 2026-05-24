@@ -1541,14 +1541,16 @@ public struct Attribute: Equatable, Hashable {
     public var id: Uuid
     public var ownerId: Uuid
     public var name: String
+    public var description: String?
     public var config: AttributeConfig
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: Uuid, ownerId: Uuid, name: String, config: AttributeConfig) {
+    public init(id: Uuid, ownerId: Uuid, name: String, description: String?, config: AttributeConfig) {
         self.id = id
         self.ownerId = ownerId
         self.name = name
+        self.description = description
         self.config = config
     }
 
@@ -1571,6 +1573,7 @@ public struct FfiConverterTypeAttribute: FfiConverterRustBuffer {
                 id: FfiConverterTypeUuid.read(from: &buf), 
                 ownerId: FfiConverterTypeUuid.read(from: &buf), 
                 name: FfiConverterString.read(from: &buf), 
+                description: FfiConverterOptionString.read(from: &buf), 
                 config: FfiConverterTypeAttributeConfig.read(from: &buf)
         )
     }
@@ -1579,6 +1582,7 @@ public struct FfiConverterTypeAttribute: FfiConverterRustBuffer {
         FfiConverterTypeUuid.write(value.id, into: &buf)
         FfiConverterTypeUuid.write(value.ownerId, into: &buf)
         FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
         FfiConverterTypeAttributeConfig.write(value.config, into: &buf)
     }
 }
