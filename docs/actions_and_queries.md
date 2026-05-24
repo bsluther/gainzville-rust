@@ -15,14 +15,15 @@ registration (for the reactive iOS cache model).
 | Mutators | `core/src/mutators.rs` | Validate an action against current state; produce a `Mutation` |
 | `Delta<M>` / `AnyDelta` | `core/src/delta.rs` | Typed (Insert/Update/Delete) and type-erased change records |
 | `Mutation` | `core/src/delta.rs` | Bundles action + timestamp + `Vec<AnyDelta>` for apply/audit |
-| `SqliteApply` / `PgApply` | `sqlite/apply.rs`, `postgres/apply.rs` | Write `AnyDelta` to DB inside the current transaction |
+| `DeltaExecutor<M>` / `AnyDeltaExecutor` | `core/src/delta_executor.rs` | Write-path traits (core, DB-agnostic); apply a `Delta<M>` / `AnyDelta` |
+| `SqliteDeltaExecutor` / `PostgresDeltaExecutor` | `gv-sql/sqlite/delta_executor.rs`, `gv-sql/postgres/delta_executor.rs` | Write `AnyDelta` to DB inside the current transaction |
 | `Query` (sealed trait) | `core/src/queries.rs` | Binds each request type to its `Response` type at compile time |
 | `define_query!` macro | `core/src/queries.rs` | One-line declaration: struct + seal impl + `Query` impl |
 | `AnyQuery` enum | `core/src/queries.rs` | Type-erased wrapper for all query types; used in FFI / streaming |
-| `QueryExecutor<Q>` | `core/src/query_executor.rs` | One impl per (executor, query) pair; SQL lives in the DB crate |
+| `QueryExecutor<Q>` | `core/src/query_executor.rs` | One impl per (executor, query) pair; SQL lives in `gv-sql` |
 | `AnyQueryExecutor` | `core/src/query_executor.rs` | Marker supertrait; single bound used by all mutator signatures |
-| `SqliteQueryExecutor` | `sqlite/sqlite_executor.rs` | Holds `&mut SqliteConnection`; implements all 19 query impls |
-| `PostgresQueryExecutor` | `postgres/postgres_executor.rs` | Mirror of above for Postgres (`$1/$2` placeholders, `ANY($1)`) |
+| `SqliteQueryExecutor` | `gv-sql/sqlite/query_executor.rs` | Holds `&mut SqliteConnection`; implements all query impls |
+| `PostgresQueryExecutor` | `gv-sql/postgres/query_executor.rs` | Mirror of above for Postgres (`$1/$2` placeholders, `ANY($1)`) |
 
 ---
 
@@ -111,34 +112,32 @@ pub struct Mutation {
 `Mutation` bundles user intent (`action`) with its effects (`changes`) for logging, sync, and
 auditing.
 
-### Apply (`sqlite/apply.rs`, `postgres/apply.rs`)
+### Apply (`core/src/delta_executor.rs`, `gv-sql/{sqlite,postgres}/delta_executor.rs`)
 
-The `SqliteApply` / `PgApply` traits write deltas to the database inside the current transaction.
+The write path is defined in core by two DB-agnostic traits:
 
 ```rust
-pub trait SqliteApply: Sized {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()>;
+pub trait DeltaExecutor<M> {
+    async fn apply_delta(&mut self, delta: Delta<M>) -> Result<()>;
 }
 
-impl SqliteApply for AnyDelta {
-    async fn apply_delta(self, tx: &mut Transaction<'_, Sqlite>) -> Result<()> {
-        match self {
-            AnyDelta::Actor(delta) => delta.apply_delta(tx).await,
-            AnyDelta::Entry(delta) => delta.apply_delta(tx).await,
-            // ... one arm per model
-        }
-    }
+pub trait AnyDeltaExecutor {
+    async fn apply_any_delta(&mut self, delta: AnyDelta) -> Result<()>;
 }
 ```
 
-Each model type gets its own `impl SqliteApply for Delta<T>` with the concrete INSERT / UPDATE /
-DELETE SQL.
+`gv-sql` provides `SqliteDeltaExecutor` and `PostgresDeltaExecutor`. `AnyDeltaExecutor`
+dispatches each `AnyDelta` variant to the matching `DeltaExecutor<M>` impl, and each
+`impl DeltaExecutor<M>` holds the concrete INSERT / UPDATE / DELETE SQL — binding from the
+model's `*Row` (`*Column`-typed fields), so leaf encoding lives in `gv-sql`, not at the bind
+site. See [Boundary transformations](./boundary-transformations.md) for the `*Column` / `*Row`
+layering.
 
-### Full Write Flow (`sqlite/client.rs`)
+### Full Write Flow (`client/client.rs`)
 
 ```rust
 pub async fn run_action(&self, action: Action) -> Result<()> {
-    let mut tx = self.pool.begin().await?;
+    let mut tx = self.pool.begin().await.db_err()?;
     let mut executor = SqliteQueryExecutor::new(&mut tx); // executor borrows tx
 
     let mx = match action {
@@ -147,19 +146,23 @@ pub async fn run_action(&self, action: Action) -> Result<()> {
     };
     // executor borrow ends here; tx is usable again
 
-    sqlx::query("PRAGMA defer_foreign_keys = ON").execute(&mut *tx).await?;
+    // Defer FK constraint checking until commit so delta order doesn't matter.
+    sqlx::query("PRAGMA defer_foreign_keys = ON").execute(&mut *tx).await.db_err()?;
+
+    let mut delta_executor = SqliteDeltaExecutor::new(&mut *tx);
     for delta in mx.changes {
-        delta.apply_delta(&mut tx).await?;
+        delta_executor.apply_any_delta(delta).await?;
     }
-    tx.commit().await?;
+    tx.commit().await.db_err()?;
     let _ = self.change_transmitter.send(()); // notify subscribers
     Ok(())
 }
 ```
 
-The executor wraps the transaction for reads inside the mutator. After the mutator returns,
-Rust's borrow checker releases the executor's borrow of `tx`, and the same transaction is used
-to apply deltas and commit.
+The query executor wraps the transaction for reads inside the mutator. After the mutator returns,
+Rust's borrow checker releases its borrow of `tx`, and the same transaction is reborrowed by
+`SqliteDeltaExecutor` to apply deltas and commit. `.db_err()` is core's `DbErr` extension trait,
+which boxes the sqlx error into `DomainError::Database` so the signature stays sqlx-free.
 
 ---
 
@@ -257,7 +260,7 @@ impl<T> AnyQueryExecutor for T where T: QueryExecutor<FindEntryById> + QueryExec
 Mutators take `executor: &mut impl AnyQueryExecutor` — a single clean bound that means "can
 execute any query."
 
-### DB-Specific Executors (`sqlite/sqlite_executor.rs`, `postgres/postgres_executor.rs`)
+### DB-Specific Executors (`gv-sql/sqlite/query_executor.rs`, `gv-sql/postgres/query_executor.rs`)
 
 ```rust
 pub struct SqliteQueryExecutor<'c> {
@@ -364,25 +367,23 @@ to contain exactly the SQL for that query, with no dispatch overhead or runtime 
 ### 5. `Reader<DB>` fully retired
 
 `Reader<DB>` required `sqlx::Database` and `sqlx::Connection` in core's public API surface.
-After the migration, core exports `Query`, `QueryExecutor<Q>`, `AnyQueryExecutor`, and domain
-types. No sqlx types appear in core's public signatures. The FFI boundary (`gv-ffi`) will see
-only core types.
+After the migration, core exports `Query`, `QueryExecutor<Q>`, `AnyQueryExecutor`,
+`DeltaExecutor<M>`, `AnyDeltaExecutor`, and domain types. The concrete executors and all SQL live
+in `gv-sql`; `gv-core` has **zero `sqlx` dependency** (`cargo tree -p gv-core | grep sqlx` →
+nothing).
 
-`DomainError::Database(sqlx::Error)` remains in core as a pragmatic concession — it is a minor
-dependency compared to having `sqlx::Database` in trait signatures and can be boxed later if
-fully removing sqlx from core's `Cargo.toml` becomes worthwhile.
+`DomainError::Database` is now `Box<dyn std::error::Error + Send + Sync>` rather than
+`sqlx::Error`. The `DbErr` extension trait (`core/src/error.rs`) boxes any concrete backend error
+into that variant at the call site, so core never names a sqlx type. See
+[Boundary transformations](./boundary-transformations.md).
 
 ---
 
 ## What's Planned / Deferred
 
-**Generic stream method**: `SqliteClient` currently has five hand-written stream methods
-(`stream_activities`, `stream_entries`, etc.) with identical structure. A generic
-`stream<Q: QueryExecutor<Q> + Clone>(query: Q) -> impl Stream<Item = Result<Q::Response>>`
-method would collapse these, with callsites like `client.stream(AllActivities {})`. Deferred
-until the streaming API is stabilized.
-
-**FFI dispatch**: The `gv-ffi` crate will use `AnyQuery` as the serialization boundary. Swift
-sends `AnyQuery` values (via UniFFI), Rust dispatches them through an exhaustive match, and
-stores results as `AnyQueryResponse` values in a subscription cache. The sealed trait guarantees
-the match is exhaustive — adding a new query type forces a compiler error at the dispatch site.
+**FFI dispatch**: The `gv-ffi` crate uses `AnyQuery` as the serialization boundary. Swift
+sends `AnyQuery` values (via uniffi), Rust dispatches them through an exhaustive match, and
+stores results in a subscription cache. The sealed `Query` trait guarantees the match is
+exhaustive — adding a new query type forces a compiler error at the dispatch site. See
+[Boundary transformations](./boundary-transformations.md) for how `AnyQuery` and the domain types
+cross the FFI boundary as uniffi remote types.

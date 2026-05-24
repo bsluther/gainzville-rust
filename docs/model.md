@@ -27,6 +27,16 @@ that make up the sequence.
 Activities configure default attributes for an entry of that activity, but a user is free to add and
 remove attributes for an particular entry.
 
+Activities are not designated as being scalar or sequences. This allows a user to associate either
+a scalar or sequence entry with an activity, e.g. a "Climbing" entry could be scalar to just say
+"I went climbing for 2 hours" or it could be a sequence, containing many entries like "Sport Climb".
+
+An activity templates is an entry tree. The entry tree must follow the same rules as standard log
+entries. Additionally, 
+- The entry tree must have a single root (as opposed to the entry forest constituting the log).
+- The root entry of the tree must have `entry.activity_id == activity.id`.
+- All entries in the template must have `is_template == true`.
+
 An entry must have the same owner as the associated activity. (Copy-on-add semantics, see
 [sync](./sync.md)).
 
@@ -37,11 +47,11 @@ An anonymous sequence entry may not have a name defined.
 
 #### Template and Log Entries
 An **activity template** (or **template entry**) is a configuration for creating an entry of that
-activity. The template is an entry and attached attribute values or child entries describe what a
-default instance of that activity looks like and, for sequences, the structure of the sequence. The
-`is_template` column of the entry denotes whether that entry is a template.
+activity. The template is an entry, the attached attribute values and/or child entries describe what
+a default instance of that activity looks like and, for sequences, the structure of the sequence.
+The `is_template` column of the entry denotes whether that entry is a template.
 
-Any entry which is not a template is a **log entry**. A log entry represented something which has
+Any entry which is not a template is a **log entry**. A log entry represents something which has
 happened or is planned.
 
 #### Scalar and Sequence Entries

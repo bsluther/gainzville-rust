@@ -4,11 +4,12 @@
 
 | Crate | Role |
 |-------|------|
-| `core` | Domain model, actions, mutators, queries, delta/mutation types. No sqlx types in public API. |
-| `client` | SQLite client: `SqliteQueryExecutor`, `SqliteApply`, `SqliteClient`. Offline-first target. |
-| `server` | Postgres server: `PostgresQueryExecutor`, `PgApply`, `PostgresServer`. HTTP API + sync target. |
+| `gv-core` | Domain model, actions, mutators, queries, delta/mutation types. No `sqlx` or `uniffi` dependency. |
+| `gv-sql` | DB boundary: `*Column` leaf encoders, `*Row` table mirrors, `core ↔ Row` transforms, and the per-backend executors (`Sqlite*`/`Postgres*`) behind `sqlite`/`postgres` features. |
+| `gv-client` | SQLite app shell: connection pool, app lifecycle, subscriptions. Offline-first target. |
+| `gv-server` | Postgres HTTP server: routes, auth, request handling. HTTP API + sync target. |
+| `gv-ffi` | FFI boundary: exposes `gv-core` types to Swift via uniffi (`[uniffi::remote]` + `custom_type!`). Depends on `gv-core`/`gv-client`, not `gv-sql`. |
 | `generation` | Arbitrary data generation traits for deterministic simulation and integration tests. |
-| `dx-app` | Cross-platform Dioxus app (desktop, mobile, web). **Deprecated** — kept as reference only. |
 | `ivm` | Experimental DBSP/incremental view maintenance for sync. |
 
 ## Docs
@@ -16,24 +17,20 @@
 | Doc | When to consult |
 |-----|----------------|
 | [Domain model](./docs/model.md) | Understanding entities (Entry, Activity, Attribute, Value) and the ordered-forest structure |
-| [Actions and queries](./docs/actions_and_queries.md) | Write path (Action→Mutator→Mutation→Apply) and read path (Query→QueryExecutor→DB) — the core I/O architecture |
+| [Actions and queries](./docs/actions_and_queries.md) | Write path (Action→Mutator→Mutation→DeltaExecutor) and read path (Query→QueryExecutor→DB) — the core I/O architecture |
+| [Boundary transformations](./docs/boundary-transformations.md) | How domain types cross the DB (`gv-sql`) and FFI (`gv-ffi`) boundaries; `*Column`/`*Row`, uniffi remote types, and gotchas |
 | [Permissions](./docs/permissions.md) | Authorization rules and actor/user model |
 | [Sync](./docs/sync.md) | Offline-first sync design: rebasing, HLC, global sequence numbers |
 | [Features](./docs/features.md) | Product feature roadmap |
-| [Generation](./docs/generation.md) | How arbitrary test data generation works |
 | [Properties](./docs/properties.md) | Property-based testing strategy |
 | [Attributes/Values design](./docs/attributes-design.md) | Typed attribute system and serde gotchas (`arbitrary_precision`) |
-| [UI Architecture](./docs/ui/architecture.md) | Dioxus: platform targeting (`#[cfg]`), component model, CSS/Tailwind styling |
-| [UI Design](./docs/ui/design.md) | Dioxus: navigation patterns, interaction models |
-| [Adaptive rendering decisions](./docs/ui/adaptive-rendering-decisions.md) | Dioxus: historical rationale for `#[cfg]` vs CSS vs runtime rendering |
+| [Forest UI model](./docs/forest-ui-model.md) | How the entry forest is presented and traversed in the UI |
 
-Additional Dioxus reference: `/dx-app/AGENTS.md` and `/dx-app/docs/00-OVERVIEW.md` through `10-WASM-SPLIT.md`.
-
-Swift app patterns, platform targets, design system, and open work: [`swift-app/SWIFT-APP.md`](./swift-app/SWIFT-APP.md).
+Swift app patterns, platform targets, design system, and open work: [`swift-app/SWIFT-APP.md`](./swift-app/SWIFT-APP.md). Swift/iOS architecture research and decisions live in [`docs/swift-architecture/`](./docs/swift-architecture/).
 
 ## Primary UI Target
 
-The **Swift app** (`swift-app/`) is the primary UI. The Dioxus app (`dx-app/`) is deprecated — do not add features to it, but it remains as a reference implementation.
+The **Swift app** (`swift-app/`) is the primary UI.
 
 ## Project Goals
 
@@ -45,7 +42,7 @@ The **Swift app** (`swift-app/`) is the primary UI. The Dioxus app (`dx-app/`) i
 
 ## Development Notes
 
-- **postgres docker required at compile time**: `cargo build` for `gv_server` connects to the live DB for sqlx compile-time verification. Start postgres before building.
+- **postgres docker required at compile time**: building the `postgres` feature of `gv-sql` (pulled in by `gv-server`) connects to the live DB for sqlx `query!` compile-time verification. Start postgres before building.
 - **Test from workspace root**: `cargo test` (not `--package`) to catch feature-unification issues. The `ivm` crate enables `serde_json/arbitrary_precision` workspace-wide, which breaks internally-tagged enums with numeric fields.
 - **Swift app — building and verifying**: see [`swift-app/SWIFT-APP.md`](./swift-app/SWIFT-APP.md) for how to rebuild Rust binaries, regenerate Swift bindings after FFI changes, and verify the Swift app compiles after any change.
 - **Previous versions (reference only, do not modify)**:
