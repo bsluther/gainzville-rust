@@ -1,29 +1,15 @@
-use std::{sync::Arc, time::Duration};
-
-use futures_core::Stream;
 use gv_core::delta_executor::AnyDeltaExecutor;
-use gv_core::error::{DbErr, DomainError};
+use gv_core::error::DbErr;
 use gv_core::{
     actions::{Action, CreateScalarActivity},
     error::Result,
-    models::{
-        activity::{Activity, ActivityName},
-        attribute::Attribute,
-        entry::Entry,
-        entry_join::EntryJoin,
-    },
+    models::activity::{Activity, ActivityName},
     mutators,
-    queries::{
-        AllActivities, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse,
-        EntriesRootedInTimeInterval, FindEntryJoinById, Query,
-    },
+    queries::{AnyQuery, AnyQueryResponse, Query},
     query_executor::QueryExecutor,
 };
-use sqlx::{
-    SqlitePool,
-    sqlite::SqlitePoolOptions,
-    types::chrono::{DateTime, Utc},
-};
+use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
+use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
@@ -204,134 +190,6 @@ impl SqliteClient {
                 let _ = client.run_action(create_scalar_activity.into()).await;
             }
         });
-    }
-
-    // TODO: move out of top-level, try generalizing to stream(query: <Fn...>) -> impl Stream<...>.
-    // Perhaps a macro? #[stream]
-    pub fn stream_activities(&self) -> impl Stream<Item = Result<Vec<Activity>>> + use<> {
-        let pool = self.pool.clone();
-        let mut change_rx = self.change_transmitter.subscribe();
-
-        async_stream::stream! {
-            let initial = async {
-                let mut connection = pool.acquire().await.db_err()?;
-                SqliteQueryExecutor::new(&mut *connection).execute(AllActivities {}).await
-            }
-            .await;
-            yield initial;
-
-            while let Ok(()) = change_rx.recv().await {
-                let next = async {
-                    let mut connection = pool.acquire().await.db_err()?;
-                    SqliteQueryExecutor::new(&mut *connection).execute(AllActivities {}).await
-                }
-                .await;
-                yield next;
-            }
-        }
-    }
-
-    pub fn stream_attributes(&self) -> impl Stream<Item = Result<Vec<Attribute>>> + use<> {
-        let pool = self.pool.clone();
-        let mut change_rx = self.change_transmitter.subscribe();
-
-        async_stream::stream! {
-            let initial = async {
-                let mut connection = pool.acquire().await.db_err()?;
-                SqliteQueryExecutor::new(&mut *connection).execute(AllAttributes {}).await
-            }
-            .await;
-            yield initial;
-
-            while let Ok(()) = change_rx.recv().await {
-                let next = async {
-                    let mut connection = pool.acquire().await.db_err()?;
-                    SqliteQueryExecutor::new(&mut *connection).execute(AllAttributes {}).await
-                }
-                .await;
-                yield next;
-            }
-        }
-    }
-
-    pub fn stream_entries(&self) -> impl Stream<Item = Result<Vec<Entry>>> + use<> {
-        let pool = self.pool.clone();
-        let mut change_rx = self.change_transmitter.subscribe();
-
-        async_stream::stream! {
-            let initial = async {
-                let mut connection = pool.acquire().await.db_err()?;
-                SqliteQueryExecutor::new(&mut *connection).execute(AllEntries {}).await
-            }
-            .await;
-            yield initial;
-
-            while let Ok(()) = change_rx.recv().await {
-                let next = async {
-                    let mut connection = pool.acquire().await.db_err()?;
-                    SqliteQueryExecutor::new(&mut *connection).execute(AllEntries {}).await
-                }
-                .await;
-                yield next;
-            }
-        }
-    }
-
-    pub fn stream_entries_rooted_in_time_interval(
-        &self,
-        min: DateTime<Utc>,
-        max: DateTime<Utc>,
-    ) -> impl Stream<Item = Result<Vec<Entry>>> + use<> {
-        let pool = self.pool.clone();
-        let mut change_rx = self.change_transmitter.subscribe();
-
-        async_stream::stream! {
-            let initial = async {
-                let mut connection = pool.acquire().await.db_err()?;
-                SqliteQueryExecutor::new(&mut *connection).execute(EntriesRootedInTimeInterval { from: min, to: max }).await
-            }
-            .await;
-            yield initial;
-
-            while let Ok(()) = change_rx.recv().await {
-                let next = async {
-                    let mut connection = pool.acquire().await.db_err()?;
-                    SqliteQueryExecutor::new(&mut *connection).execute(EntriesRootedInTimeInterval { from: min, to: max }).await
-                }
-                .await;
-                yield next;
-            }
-        }
-    }
-
-    pub fn stream_entry_join_by_id(
-        &self,
-        id: Uuid,
-    ) -> impl Stream<Item = Result<EntryJoin>> + use<> {
-        let pool = self.pool.clone();
-        let mut change_rx = self.change_transmitter.subscribe();
-
-        async_stream::stream! {
-            let initial = async {
-                let mut connection = pool.acquire().await.db_err()?;
-                SqliteQueryExecutor::new(&mut *connection).execute(FindEntryJoinById { entry_id: id })
-                    .await
-                    .and_then(|opt| opt.ok_or_else(|| DomainError::Other(format!("Entry not found: {}", id))))
-            }
-            .await;
-            yield initial;
-
-            while let Ok(()) = change_rx.recv().await {
-                let next = async {
-                    let mut connection = pool.acquire().await.db_err()?;
-                    SqliteQueryExecutor::new(&mut *connection).execute(FindEntryJoinById { entry_id: id })
-                        .await
-                        .and_then(|opt| opt.ok_or_else(|| DomainError::Other(format!("Entry not found: {}", id))))
-                }
-                .await;
-                yield next;
-            }
-        }
     }
 }
 
