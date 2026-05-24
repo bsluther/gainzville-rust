@@ -31,34 +31,48 @@ struct AttributeRow<Content: View>: View {
     private var isFocused: Bool { focusModel.focused == focus }
 
     var body: some View {
-        HStack(alignment: .center) {
-            Text(label)
-                .font(.attrLabel)
-                .foregroundStyle(Color.entryTextSecondary)
-                .padding(.leading, indent)
+        // Top alignment so that when value pills wrap to multiple lines the
+        // label/gear group stays anchored at the first row.
+        HStack(alignment: .top, spacing: 0) {
+            // Label + gear, sized to content, on the left.
+            HStack(alignment: .center, spacing: 0) {
+                Text(label)
+                    .font(.attrLabel)
+                    .foregroundStyle(Color.entryTextSecondary)
+                    .padding(.leading, indent)
 
-            // Reserved 20×20 slot — gear is always laid out, only its opacity
-            // toggles, so showing/hiding doesn't shift the row.
-            Button {
-                focusModel.focused = focus
-                isMenuPresented = true
-            } label: {
-                Image(systemName: "gearshape")
-                    .foregroundStyle(Color.gvTextSecondary)
-                    .opacity(isFocused ? 1 : 0)
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
+                // Reserved 20×20 slot — gear is always laid out, only its opacity
+                // toggles, so showing/hiding doesn't shift the row.
+                Button {
+                    focusModel.focused = focus
+                    isMenuPresented = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .foregroundStyle(Color.gvTextSecondary)
+                        .opacity(isFocused ? 1 : 0)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, GvSpacing.sm)
+                .platformPopover(isPresented: $isMenuPresented) {
+                    AttributeMenuContent(kind: kind)
+                }
             }
-            .buttonStyle(.plain)
-            .padding(.leading, GvSpacing.sm)
-            .platformPopover(isPresented: $isMenuPresented) {
-                AttributeMenuContent(kind: kind)
-            }
+            .frame(minHeight: GvSpacing.minAttributeHeight)
 
-            Spacer()
-            HStack(spacing: GvSpacing.lg) {
-                content
+            // Value pills lay out in a row; if they don't fit the remaining
+            // width, fall back to stacking vertically (right-aligned) rather
+            // than wrapping mid-row. ViewThatFits measures each candidate
+            // against the proposed width and picks the first that fits — this is
+            // also what stops fixed-size pills from inflating the entry. The
+            // maxWidth:.infinity frame claims the leftover horizontal space and
+            // right-pushes the content, mirroring the prior Spacer-pushed look.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: GvSpacing.lg) { content }
+                VStack(alignment: .trailing, spacing: GvSpacing.lg) { content }
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(minHeight: GvSpacing.minAttributeHeight)
         .contentShape(Rectangle())

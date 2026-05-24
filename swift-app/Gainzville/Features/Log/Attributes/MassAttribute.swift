@@ -56,7 +56,9 @@ struct MassAttribute: View {
                 .gvSelectAllOnFocus(isFocused: focusedUnit == unit)
                 .onSubmit { flushNow() }
             Text(unit.shortLabel)
-                .font(.attrLabel)
+                // Monospaced + padded labels give every unit a consistent width
+                // so the pills line up across rows regardless of unit length.
+                .font(.attrLabel.monospaced())
                 .foregroundStyle(Color.entryTextSecondary)
                 .fixedSize(horizontal: true, vertical: false)
         }
@@ -237,7 +239,9 @@ struct MassAttribute: View {
 private extension MassUnit {
     var shortLabel: String {
         switch self {
-        case .gram:     return "g"
+        // Pad single-char units to two chars so, under a monospaced font, every
+        // unit label occupies the same width.
+        case .gram:     return "g "
         case .kilogram: return "kg"
         case .pound:    return "lb"
         }

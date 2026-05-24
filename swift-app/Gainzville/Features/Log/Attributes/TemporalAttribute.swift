@@ -96,6 +96,8 @@ struct TemporalAttribute: View {
                 Text(temporalSummary(temporal))
                     .font(.attrLabel.italic())
                     .foregroundStyle(Color.gvTextSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             .contentShape(Rectangle())
             .frame(minHeight: GvSpacing.minAttributeHeight)

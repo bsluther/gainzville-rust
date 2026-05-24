@@ -47,11 +47,15 @@ struct EntryView: View {
                 EntryBody(entry: entry, attributes: vm.entryJoin?.attributes ?? [])
             }
         }
-        // Pin to the parent's proposal so over-eager content (TextField
-        // minWidths, long pill text, deeply nested children) gets clipped by
-        // the container style rather than pushing the entry past the screen.
+        // Pin to the parent's proposal. Over-eager value content can't inflate
+        // the card because AttributeRow falls back to stacking pills vertically
+        // (via ViewThatFits) when they don't fit horizontally. (A flexible frame
+        // alone does NOT cap — it grows to fit an oversized child — which is why
+        // the earlier maxWidth-only fix regressed.) `.clipped()` is a defensive
+        // rectangular backstop for any remaining horizontal overflow.
         .frame(maxWidth: .infinity, alignment: .leading)
         .entryContainerStyle(isSequence: entry.isSequence)
+        .clipped()
         // Tap-outside-to-clear inside an entry: the entry's colored background
         // swallows taps before they reach LogView's clear-background, so we
         // also clear at the entry level. AttributeRow's own .onTapGesture wins
