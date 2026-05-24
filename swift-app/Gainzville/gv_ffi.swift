@@ -1603,6 +1603,64 @@ public func FfiConverterTypeAttribute_lower(_ value: Attribute) -> RustBuffer {
 }
 
 
+public struct CreateActivity: Equatable, Hashable {
+    public var actorId: Uuid
+    public var activity: Activity
+    public var template: [Entry]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(actorId: Uuid, activity: Activity, template: [Entry]) {
+        self.actorId = actorId
+        self.activity = activity
+        self.template = template
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CreateActivity: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateActivity: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateActivity {
+        return
+            try CreateActivity(
+                actorId: FfiConverterTypeUuid.read(from: &buf), 
+                activity: FfiConverterTypeActivity.read(from: &buf), 
+                template: FfiConverterSequenceTypeEntry.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateActivity, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.actorId, into: &buf)
+        FfiConverterTypeActivity.write(value.activity, into: &buf)
+        FfiConverterSequenceTypeEntry.write(value.template, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateActivity_lift(_ buf: RustBuffer) throws -> CreateActivity {
+    return try FfiConverterTypeCreateActivity.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateActivity_lower(_ value: CreateActivity) -> RustBuffer {
+    return FfiConverterTypeCreateActivity.lower(value)
+}
+
+
 public struct CreateAttribute: Equatable, Hashable {
     public var actorId: Uuid
     public var attribute: Attribute
@@ -1708,122 +1766,6 @@ public func FfiConverterTypeCreateEntry_lift(_ buf: RustBuffer) throws -> Create
 #endif
 public func FfiConverterTypeCreateEntry_lower(_ value: CreateEntry) -> RustBuffer {
     return FfiConverterTypeCreateEntry.lower(value)
-}
-
-
-public struct CreateScalarActivity: Equatable, Hashable {
-    public var actorId: Uuid
-    public var activity: Activity
-    public var template: Entry
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(actorId: Uuid, activity: Activity, template: Entry) {
-        self.actorId = actorId
-        self.activity = activity
-        self.template = template
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension CreateScalarActivity: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCreateScalarActivity: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateScalarActivity {
-        return
-            try CreateScalarActivity(
-                actorId: FfiConverterTypeUuid.read(from: &buf), 
-                activity: FfiConverterTypeActivity.read(from: &buf), 
-                template: FfiConverterTypeEntry.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CreateScalarActivity, into buf: inout [UInt8]) {
-        FfiConverterTypeUuid.write(value.actorId, into: &buf)
-        FfiConverterTypeActivity.write(value.activity, into: &buf)
-        FfiConverterTypeEntry.write(value.template, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCreateScalarActivity_lift(_ buf: RustBuffer) throws -> CreateScalarActivity {
-    return try FfiConverterTypeCreateScalarActivity.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCreateScalarActivity_lower(_ value: CreateScalarActivity) -> RustBuffer {
-    return FfiConverterTypeCreateScalarActivity.lower(value)
-}
-
-
-public struct CreateSequenceActivity: Equatable, Hashable {
-    public var actorId: Uuid
-    public var activity: Activity
-    public var template: [Entry]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(actorId: Uuid, activity: Activity, template: [Entry]) {
-        self.actorId = actorId
-        self.activity = activity
-        self.template = template
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension CreateSequenceActivity: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCreateSequenceActivity: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateSequenceActivity {
-        return
-            try CreateSequenceActivity(
-                actorId: FfiConverterTypeUuid.read(from: &buf), 
-                activity: FfiConverterTypeActivity.read(from: &buf), 
-                template: FfiConverterSequenceTypeEntry.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CreateSequenceActivity, into buf: inout [UInt8]) {
-        FfiConverterTypeUuid.write(value.actorId, into: &buf)
-        FfiConverterTypeActivity.write(value.activity, into: &buf)
-        FfiConverterSequenceTypeEntry.write(value.template, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCreateSequenceActivity_lift(_ buf: RustBuffer) throws -> CreateSequenceActivity {
-    return try FfiConverterTypeCreateSequenceActivity.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCreateSequenceActivity_lower(_ value: CreateSequenceActivity) -> RustBuffer {
-    return FfiConverterTypeCreateSequenceActivity.lower(value)
 }
 
 
@@ -3723,7 +3665,7 @@ public enum Action: Equatable, Hashable {
     
     case createUser(CreateUser
     )
-    case createActivity(CreateScalarActivity
+    case createActivity(CreateActivity
     )
     case createAttribute(CreateAttribute
     )
@@ -3738,8 +3680,6 @@ public enum Action: Equatable, Hashable {
     case updateEntryCompletion(UpdateEntryCompletion
     )
     case updateAttributeValue(UpdateAttributeValue
-    )
-    case createSequenceActivity(CreateSequenceActivity
     )
 
 
@@ -3765,7 +3705,7 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         case 1: return .createUser(try FfiConverterTypeCreateUser.read(from: &buf)
         )
         
-        case 2: return .createActivity(try FfiConverterTypeCreateScalarActivity.read(from: &buf)
+        case 2: return .createActivity(try FfiConverterTypeCreateActivity.read(from: &buf)
         )
         
         case 3: return .createAttribute(try FfiConverterTypeCreateAttribute.read(from: &buf)
@@ -3789,9 +3729,6 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         case 9: return .updateAttributeValue(try FfiConverterTypeUpdateAttributeValue.read(from: &buf)
         )
         
-        case 10: return .createSequenceActivity(try FfiConverterTypeCreateSequenceActivity.read(from: &buf)
-        )
-        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -3807,7 +3744,7 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         
         case let .createActivity(v1):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeCreateScalarActivity.write(v1, into: &buf)
+            FfiConverterTypeCreateActivity.write(v1, into: &buf)
             
         
         case let .createAttribute(v1):
@@ -3843,11 +3780,6 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         case let .updateAttributeValue(v1):
             writeInt(&buf, Int32(9))
             FfiConverterTypeUpdateAttributeValue.write(v1, into: &buf)
-            
-        
-        case let .createSequenceActivity(v1):
-            writeInt(&buf, Int32(10))
-            FfiConverterTypeCreateSequenceActivity.write(v1, into: &buf)
             
         }
     }

@@ -88,10 +88,10 @@ class ActivitiesViewModel: ObservableObject {
             isComplete: false,
             temporal: .none
         )
-        try? core.runAction(action: .createActivity(CreateScalarActivity(
+        try? core.runAction(action: .createActivity(CreateActivity(
             actorId: SYSTEM_ACTOR_ID,
             activity: activity,
-            template: template
+            template: [template]
         )))
         // No manual refresh needed — runAction refreshes the cache and fires
         // on_data_changed, which triggers refresh via AppListener.
@@ -320,6 +320,14 @@ func makeCore(listener: AppListener) throws -> GainzvilleCore {
     let dbURL = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("gainzville.sqlite")
+
+    // Pass -wipeDB in the scheme's launch arguments to start from a fresh DB.
+    // Removes the WAL/SHM sidecars too, or a stale -wal could resurrect rows.
+    if CommandLine.arguments.contains("-wipeDB") {
+        for suffix in ["", "-wal", "-shm"] {
+            try? FileManager.default.removeItem(atPath: dbURL.path + suffix)
+        }
+    }
 
     // sqlx defaults to create_if_missing=false, so pre-create the file if needed.
     if !FileManager.default.fileExists(atPath: dbURL.path) {

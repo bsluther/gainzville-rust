@@ -35,6 +35,9 @@ An activity templates is an entry tree. The entry tree must follow the same rule
 entries. Additionally, 
 - The entry tree must have a single root (as opposed to the entry forest constituting the log).
 - The root entry of the tree must have `entry.activity_id == activity.id`.
+- Non-root entries in the template tree may have any legal `activity_id` (including `None`); this
+supports creating an activity like "Strength Workout" which has a sequence template containing
+entries of other activities like "Bench Press", "Pull Up", etc.
 - All entries in the template must have `is_template == true`.
 
 An entry must have the same owner as the associated activity. (Copy-on-add semantics, see

@@ -230,4 +230,25 @@ impl Forest {
         // If inserting into a day that is not today with no entries, default to noon.
         noon
     }
+
+    /// Returns true if the forest forms a single tree that contains at least one entry.
+    pub fn is_tree(&self) -> bool {
+        self.tree_root().is_some()
+    }
+
+    /// Returns the single root if the forest is one connected tree, else `None`.
+    /// In general a (finite) graph is a tree iff it is connected and has n-1 edges.
+    /// Because each entry has at most one parent, if the graph is connected then it has either
+    /// n-1 or n edges.
+    /// Therefore, connected && exactly one root => n-1 edges => graph is a tree.
+    /// Additionally enforces that the tree is non-trivial - must contain at least one entry.
+    pub fn tree_root(&self) -> Option<&Entry> {
+        let roots = self.roots();
+        // Return None if there is not exactly one root.
+        let [root] = roots.as_slice() else {
+            return None;
+        };
+        // Connected iff every entry is reachable downward from the unique root.
+        (self.descendants(root.id).len() == self.data().len()).then_some(*root)
+    }
 }

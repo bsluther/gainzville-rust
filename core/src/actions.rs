@@ -10,7 +10,7 @@ use crate::models::{
 #[derive(Debug, Clone)]
 pub enum Action {
     CreateUser(CreateUser),
-    CreateActivity(CreateScalarActivity),
+    CreateActivity(CreateActivity),
     CreateAttribute(CreateAttribute),
     CreateValue(CreateValue),
     CreateEntry(CreateEntry),
@@ -18,7 +18,6 @@ pub enum Action {
     MoveEntry(MoveEntry),
     UpdateEntryCompletion(UpdateEntryCompletion),
     UpdateAttributeValue(UpdateAttributeValue),
-    CreateSequenceActivity(CreateSequenceActivity),
 }
 
 impl From<CreateUser> for Action {
@@ -27,15 +26,9 @@ impl From<CreateUser> for Action {
     }
 }
 
-impl From<CreateScalarActivity> for Action {
-    fn from(value: CreateScalarActivity) -> Self {
+impl From<CreateActivity> for Action {
+    fn from(value: CreateActivity) -> Self {
         Action::CreateActivity(value)
-    }
-}
-
-impl From<CreateSequenceActivity> for Action {
-    fn from(value: CreateSequenceActivity) -> Self {
-        Action::CreateSequenceActivity(value)
     }
 }
 
@@ -70,43 +63,15 @@ impl From<CreateValue> for Action {
 }
 
 #[derive(Debug, Clone)]
-pub struct CreateScalarActivity {
-    pub actor_id: Uuid,
-    pub activity: Activity,
-    pub template: Entry,
-}
-
-impl From<Activity> for CreateScalarActivity {
-    fn from(activity: Activity) -> Self {
-        CreateScalarActivity {
-            actor_id: activity.owner_id,
-            activity: activity.clone(),
-            template: Entry {
-                id: uuid::Uuid::new_v4(),
-                owner_id: activity.owner_id,
-                activity_id: Some(activity.id),
-                name: None,
-                position: None,
-                is_template: true,
-                display_as_sets: false,
-                is_sequence: false,
-                is_complete: false,
-                temporal: Temporal::None,
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CreateSequenceActivity {
+pub struct CreateActivity {
     pub actor_id: Uuid,
     pub activity: Activity,
     pub template: Vec<Entry>,
 }
 
-impl From<Activity> for CreateSequenceActivity {
+impl From<Activity> for CreateActivity {
     fn from(activity: Activity) -> Self {
-        CreateSequenceActivity {
+        CreateActivity {
             actor_id: activity.owner_id,
             activity: activity.clone(),
             template: vec![Entry {

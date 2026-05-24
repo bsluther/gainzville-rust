@@ -1,7 +1,7 @@
 use fractional_index::FractionalIndex;
 use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
 use gv_core::{
-    actions::{Action, CreateAttribute, CreateEntry, CreateScalarActivity, CreateUser, MoveEntry},
+    actions::{Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, MoveEntry},
     models::{
         activity::Activity,
         attribute::Attribute,
@@ -117,7 +117,7 @@ async fn test_arbitrary_create_entry(pool: PgPool) {
     });
 
     for activity in activities {
-        let create_activity: CreateScalarActivity = activity.into();
+        let create_activity: CreateActivity = activity.into();
         server.run_action(create_activity.into()).await.unwrap();
     }
 

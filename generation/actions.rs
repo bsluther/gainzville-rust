@@ -4,8 +4,8 @@ use uuid::Uuid;
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick};
 use gv_core::{
     actions::{
-        Action, CreateAttribute, CreateEntry, CreateScalarActivity, CreateUser, CreateValue,
-        MoveEntry, UpdateEntryCompletion,
+        Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue, MoveEntry,
+        UpdateEntryCompletion,
     },
     models::{
         activity::Activity,
@@ -41,7 +41,7 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
         let choice = pick(&choices, rng).unwrap();
         match choice {
             0 => CreateUser::arbitrary(rng, context).into(),
-            1 => CreateScalarActivity::arbitrary_from(rng, context, actor_ids).into(),
+            1 => CreateActivity::arbitrary_from(rng, context, actor_ids).into(),
             2 => CreateEntry::arbitrary_from(rng, context, (actor_ids, activities, entries)).into(),
             3 => CreateAttribute::arbitrary_from(rng, context, actor_ids).into(),
             4 => MoveEntry::arbitrary_from(rng, context, entries).into(),
@@ -63,7 +63,7 @@ impl Arbitrary for CreateUser {
     }
 }
 
-impl ArbitraryFrom<&[Uuid]> for CreateScalarActivity {
+impl ArbitraryFrom<&[Uuid]> for CreateActivity {
     /// Generate an arbitrary activity owned by one of the provided uuids.
     fn arbitrary_from<R: rand::Rng, C: super::GenerationContext>(
         rng: &mut R,

@@ -3,12 +3,12 @@ use uuid::Uuid;
 
 use crate::{
     actions::{
-        Action, CreateAttribute, CreateEntry, CreateScalarActivity, CreateSequenceActivity,
-        CreateUser, CreateValue, DeleteEntryRecursive, MoveEntry, UpdateAttributeValue,
-        UpdateEntryCompletion, ValueField,
+        Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
+        DeleteEntryRecursive, MoveEntry, UpdateAttributeValue, UpdateEntryCompletion, ValueField,
     },
     delta::{AnyDelta, Delta},
     error::{DomainError, Result},
+    forest::Forest,
     models::{
         actor::{Actor, ActorKind},
         attribute::Value,
@@ -92,11 +92,9 @@ pub async fn create_user(
 
 pub async fn create_activity(
     _executor: &mut impl AnyQueryExecutor,
-    action: CreateScalarActivity,
+    action: CreateActivity,
 ) -> Result<Mutation> {
     let activity = action.activity.clone();
-    // Check if actor has permission to create activities for owner.
-    // For now, only allow if actor == owner.
     if action.actor_id != activity.owner_id {
         return Err(DomainError::Unauthorized(format!(
             "actor '{}' is not authorized to create activities for owner '{}'",
@@ -104,26 +102,26 @@ pub async fn create_activity(
         )));
     }
 
-    let insert_activity = Delta::Insert { new: activity };
+    // Templates must form a tree.
+    let template_forest = Forest::from(action.template.clone());
+    let Some(root) = template_forest.tree_root() else {
+        return Err(DomainError::Consistency(
+            "activity template must form a tree".to_string(),
+        ));
+    };
 
-    Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
-        action: Action::CreateActivity(action.clone()),
-        changes: vec![insert_activity.into()],
-    })
-}
+    // Root of template tree must have activity_id == activity.id.
+    if root.activity_id != Some(activity.id) {
+        return Err(DomainError::Consistency(
+            "activity template must have a root entry with activity_id == activity.id".to_string(),
+        ));
+    }
 
-pub async fn create_sequence_activity(
-    _executor: &mut impl AnyQueryExecutor,
-    action: CreateSequenceActivity,
-) -> Result<Mutation> {
-    let activity = action.activity.clone();
-    if action.actor_id != activity.owner_id {
-        return Err(DomainError::Unauthorized(format!(
-            "actor '{}' is not authorized to create activities for owner '{}'",
-            action.actor_id, activity.owner_id
-        )));
+    // All templates must have is_template == true.
+    if !action.template.iter().all(|e| e.is_template) {
+        return Err(DomainError::Consistency(
+            "all template entries must have is_template == true".to_string(),
+        ));
     }
 
     let insert_activity = Delta::Insert { new: activity };
@@ -133,14 +131,14 @@ pub async fn create_sequence_activity(
         .map(|e| Delta::Insert { new: e.clone() }.into())
         .collect();
 
-    let mut changes: Vec<AnyDelta> = vec![insert_activity.into()];
-    changes.extend(insert_templates);
+    let mut deltas: Vec<AnyDelta> = vec![insert_activity.into()];
+    deltas.extend(insert_templates);
 
     Ok(Mutation {
         id: Uuid::new_v4(),
         timestamp: Utc::now(),
-        action: Action::CreateSequenceActivity(action.clone()),
-        changes,
+        action: Action::CreateActivity(action.clone()),
+        changes: deltas,
     })
 }
 

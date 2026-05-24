@@ -2,9 +2,8 @@ use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
 use gv_core::{
     actions::{
-        Action, CreateAttribute, CreateEntry, CreateScalarActivity, CreateSequenceActivity,
-        CreateUser, CreateValue, DeleteEntryRecursive, MoveEntry, UpdateAttributeValue,
-        UpdateEntryCompletion, ValueField,
+        Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
+        DeleteEntryRecursive, MoveEntry, UpdateAttributeValue, UpdateEntryCompletion, ValueField,
     },
     models::{
         activity::{Activity, ActivityName},
@@ -126,12 +125,27 @@ pub struct Position {
 #[uniffi::remote(Enum)]
 pub enum Temporal {
     None,
-    Start { start: DateTime<Utc> },
-    End { end: DateTime<Utc> },
-    Duration { duration: u32 },
-    StartAndEnd { start: DateTime<Utc>, end: DateTime<Utc> },
-    StartAndDuration { start: DateTime<Utc>, duration_ms: u32 },
-    DurationAndEnd { duration_ms: u32, end: DateTime<Utc> },
+    Start {
+        start: DateTime<Utc>,
+    },
+    End {
+        end: DateTime<Utc>,
+    },
+    Duration {
+        duration: u32,
+    },
+    StartAndEnd {
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    },
+    StartAndDuration {
+        start: DateTime<Utc>,
+        duration_ms: u32,
+    },
+    DurationAndEnd {
+        duration_ms: u32,
+        end: DateTime<Utc>,
+    },
 }
 
 #[uniffi::remote(Record)]
@@ -449,14 +463,7 @@ pub struct CreateUser {
 }
 
 #[uniffi::remote(Record)]
-pub struct CreateScalarActivity {
-    pub actor_id: Uuid,
-    pub activity: Activity,
-    pub template: Entry,
-}
-
-#[uniffi::remote(Record)]
-pub struct CreateSequenceActivity {
+pub struct CreateActivity {
     pub actor_id: Uuid,
     pub activity: Activity,
     pub template: Vec<Entry>,
@@ -519,7 +526,7 @@ pub struct UpdateAttributeValue {
 #[uniffi::remote(Enum)]
 pub enum Action {
     CreateUser(CreateUser),
-    CreateActivity(CreateScalarActivity),
+    CreateActivity(CreateActivity),
     CreateAttribute(CreateAttribute),
     CreateValue(CreateValue),
     CreateEntry(CreateEntry),
@@ -527,5 +534,4 @@ pub enum Action {
     MoveEntry(MoveEntry),
     UpdateEntryCompletion(UpdateEntryCompletion),
     UpdateAttributeValue(UpdateAttributeValue),
-    CreateSequenceActivity(CreateSequenceActivity),
 }
