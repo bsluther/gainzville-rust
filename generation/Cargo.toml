@@ -7,7 +7,7 @@ edition = "2024"
 path = "lib.rs"
 
 [dependencies]
-gv_core = { path = "../core" }
+gv-core = { path = "../core" }
 
 rand = { workspace = true }
 uuid = { workspace = true }

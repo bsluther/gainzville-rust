@@ -9,7 +9,7 @@ use gv_core::{
 
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "../gv_sql/sqlite/migrations")]
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_create_user_roundtrip(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
 

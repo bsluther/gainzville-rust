@@ -12,7 +12,7 @@ use gv_server::server::PostgresServer;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "../gv_sql/postgres/migrations")]
+#[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
 async fn test_create_user_activity_entry(pool: PgPool) {
     let postgres_server = PostgresServer::new(pool);
 

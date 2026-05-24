@@ -1,5 +1,5 @@
 [package]
-name = "gv_sql"
+name = "gv-sql"
 version = "0.1.0"
 edition = "2024"
 
@@ -12,7 +12,7 @@ sqlite = ["sqlx/sqlite"]
 postgres = ["sqlx/postgres"]
 
 [dependencies]
-gv_core = { path = "../core" }
+gv-core = { path = "../core" }
 
 sqlx = { workspace = true }
 uuid = { workspace = true }

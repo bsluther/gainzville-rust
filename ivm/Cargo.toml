@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-gv_core = { path = "../core" }
+gv-core = { path = "../core" }
 generation = { path = "../generation" }
 
 anyhow.workspace = true

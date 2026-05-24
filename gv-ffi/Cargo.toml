@@ -1,5 +1,5 @@
 [package]
-name = "gv_ffi"
+name = "gv-ffi"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,8 +7,8 @@ edition = "2024"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-gv_core      = { path = "../core" }
-gv_client    = { path = "../client" }
+gv-core      = { path = "../core" }
+gv-client    = { path = "../client" }
 generation   = { path = "../generation" }
 rand         = { workspace = true }
 # "tokio" — static runtime for sync FFI wrappers.

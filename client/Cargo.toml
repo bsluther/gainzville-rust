@@ -1,5 +1,5 @@
 [package]
-name = "gv_client"
+name = "gv-client"
 version = "0.1.0"
 edition = "2024"
 
@@ -12,8 +12,8 @@ path = "tests/tests.rs"
 
 [dependencies]
 # Core dependency
-gv_core = { path = "../core" }
-gv_sql = { path = "../gv_sql", default-features = false, features = ["sqlite"] }
+gv-core = { path = "../core" }
+gv-sql = { path = "../gv-sql", default-features = false, features = ["sqlite"] }
 futures-core = "0.3"
 async-stream = "0.3"
 

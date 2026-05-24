@@ -1,5 +1,5 @@
 [package]
-name = "gv_server"
+name = "gv-server"
 version = "0.1.0"
 edition = "2024"
 
@@ -16,8 +16,8 @@ path = "tests/sandbox_test.rs"
 
 [dependencies]
 # Core dependency
-gv_core = { path = "../core" }
-gv_sql = { path = "../gv_sql", default-features = false, features = ["postgres"] }
+gv-core = { path = "../core" }
+gv-sql = { path = "../gv-sql", default-features = false, features = ["postgres"] }
 
 # Workspace deps
 sqlx = { workspace = true }

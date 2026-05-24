@@ -16,7 +16,7 @@ use gv_core::{
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "../gv_sql/sqlite/migrations")]
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_find_descendants(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
 
@@ -76,7 +76,7 @@ async fn test_find_descendants(pool: SqlitePool) {
     assert_eq!(b_descs.len(), 1);
 }
 
-#[sqlx::test(migrations = "../gv_sql/sqlite/migrations")]
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_create_attribute_and_value(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
 

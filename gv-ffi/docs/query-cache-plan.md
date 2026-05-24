@@ -231,7 +231,7 @@ let listener = AppListener {
 ## Step 10: Regenerate bindings + rebuild
 
 ```sh
-cargo build -p gv_ffi
+cargo build -p gv-ffi
 cargo run --bin uniffi-bindgen -- generate \
   --library target/debug/libgv_ffi.dylib --language swift --out-dir gv-ffi/bindings/
 cp gv-ffi/bindings/gv_ffi.swift swift-app/Gainzville/gv_ffi.swift

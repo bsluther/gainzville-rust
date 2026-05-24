@@ -7,7 +7,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 echo "==> Building debug dylib..."
-cargo build -p gv_ffi
+cargo build -p gv-ffi
 
 echo "==> Generating Swift bindings..."
 cargo run --bin uniffi-bindgen -- generate \

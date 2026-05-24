@@ -86,7 +86,7 @@ pub mod tests {
     };
     pub use uuid::Uuid;
 
-    #[sqlx::test(migrations = "../gv_sql/postgres/migrations")]
+    #[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
     fn test_create_activity(pool: PgPool) {
         let postgres_server = PostgresServer { pool };
 

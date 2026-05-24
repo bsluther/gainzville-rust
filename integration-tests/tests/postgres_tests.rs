@@ -18,7 +18,7 @@ use rand_chacha::ChaCha8Rng;
 use sqlx::PgPool;
 use tracing::info;
 
-#[sqlx::test(migrations = "../gv_sql/postgres/migrations")]
+#[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
 async fn test_move_entry_disallows_cycles(pool: PgPool) {
     let server = PostgresServer::new(pool);
     let mut tx = server
@@ -78,7 +78,7 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
     assert!(matches!(err, gv_core::error::DomainError::Consistency(_)));
 }
 
-#[sqlx::test(migrations = "../gv_sql/postgres/migrations")]
+#[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
 async fn test_arbitrary_create_user(pool: PgPool) {
     let server = PostgresServer::new(pool);
     let mut rng = rand::rng();
@@ -92,7 +92,7 @@ async fn test_arbitrary_create_user(pool: PgPool) {
         .expect("create_user action should succeed");
 }
 
-#[sqlx::test(migrations = "../gv_sql/postgres/migrations")]
+#[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
 async fn test_arbitrary_create_entry(pool: PgPool) {
     let server = PostgresServer::new(pool);
     let mut tx = server
@@ -127,7 +127,7 @@ async fn test_arbitrary_create_entry(pool: PgPool) {
     }
 }
 
-#[sqlx::test(migrations = "../gv_sql/postgres/migrations")]
+#[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
 async fn test_arbitrary_actions(pool: PgPool) {
     let _ = tracing_subscriber::FmtSubscriber::builder()
         .with_max_level(tracing::Level::WARN)

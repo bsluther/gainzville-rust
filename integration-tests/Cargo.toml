@@ -1,5 +1,5 @@
 [package]
-name = "integration_tests"
+name = "integration-tests"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,10 +7,10 @@ edition = "2024"
 
 
 [dependencies]
-gv_core = { path = "../core" }
-gv_server = { path = "../server" }
-gv_client = { path = "../client" }
-gv_sql = { path = "../gv_sql" }
+gv-core = { path = "../core" }
+gv-server = { path = "../server" }
+gv-client = { path = "../client" }
+gv-sql = { path = "../gv-sql" }
 generation = { path = "../generation" }
 sqlx = { workspace = true }
 tracing = { workspace = true }

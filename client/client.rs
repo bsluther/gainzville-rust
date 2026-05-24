@@ -74,7 +74,7 @@ impl SqliteClient {
     /// Run migrations on the database. Safe to call multiple times - sqlx tracks which migrations
     /// have already been applied.
     async fn run_migrations(&self) -> Result<()> {
-        sqlx::migrate!("../gv_sql/sqlite/migrations")
+        sqlx::migrate!("../gv-sql/sqlite/migrations")
             .run(&self.pool)
             .await
             .map_err(|e| gv_core::error::DomainError::Other(e.to_string()))
@@ -341,7 +341,7 @@ pub mod tests {
     pub use gv_core::queries::FindActivityById;
     pub use uuid::Uuid;
 
-    #[sqlx::test(migrations = "../gv_sql/sqlite/migrations")]
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
     fn test_create_activity(pool: SqlitePool) {
         let sqlite_client = SqliteClient::from_pool(pool);
 
