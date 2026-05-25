@@ -13,12 +13,23 @@ use tokio::sync::broadcast;
 
 use gv_sql::sqlite::SqliteQueryExecutor;
 
-type QueryCache = Arc<Mutex<HashMap<AnyQuery, AnyQueryResponse>>>;
+/// Shared cache state. `cache` holds the latest result per subscribed query;
+/// `refcounts` tracks how many live `QuerySubscription` handles reference each
+/// key. A key is evicted only when its last subscriber drops — multiple views
+/// can subscribe to the same query (e.g. two views observing the same
+/// `FindEntryJoinById`) without one's teardown starving the others.
+#[derive(Debug, Default)]
+struct CacheState {
+    cache: HashMap<AnyQuery, AnyQueryResponse>,
+    refcounts: HashMap<AnyQuery, usize>,
+}
+
+type SharedCache = Arc<Mutex<CacheState>>;
 
 #[derive(Clone, Debug)]
 pub struct QueryStore {
     pool: SqlitePool,
-    cache: QueryCache,
+    state: SharedCache,
 }
 
 impl QueryStore {
@@ -27,8 +38,10 @@ impl QueryStore {
         change_transmitter: broadcast::Sender<()>,
         on_cache_ready: Arc<dyn Fn() + Send + Sync>,
     ) -> Self {
-        let cache: QueryCache = Arc::new(Mutex::new(HashMap::new()));
-        let store = QueryStore { pool, cache };
+        let store = QueryStore {
+            pool,
+            state: Arc::new(Mutex::new(CacheState::default())),
+        };
 
         // Whenever the database changes re-run all subscribed queries and notify consumers that the
         // cache has been updated.
@@ -83,14 +96,19 @@ impl QueryStore {
     }
 
     /// Subscribe to a query. Runs the initial query immediately, populates the
-    /// cache, and returns a `QuerySubscription` handle. Dropping the handle
-    /// (Swift releasing the reference) auto-removes the query from the cache.
+    /// cache, increments the key's refcount, and returns a `QuerySubscription`
+    /// handle. Dropping the handle decrements the refcount; the cache entry is
+    /// removed only when the last subscriber for that key drops.
     pub async fn subscribe_query(&self, query: AnyQuery) -> Result<Arc<QuerySubscription>> {
         let initial = self.run_any_query(query.clone()).await?;
-        self.cache.lock().unwrap().insert(query.clone(), initial);
+        {
+            let mut state = self.state.lock().unwrap();
+            state.cache.insert(query.clone(), initial);
+            *state.refcounts.entry(query.clone()).or_insert(0) += 1;
+        }
         Ok(Arc::new(QuerySubscription {
             key: query,
-            cache: Arc::clone(&self.cache),
+            state: Arc::clone(&self.state),
         }))
     }
 
@@ -98,34 +116,46 @@ impl QueryStore {
     /// is not subscribed. Swift calls this synchronously from the main thread
     /// after receiving `on_data_changed()`.
     pub fn read_cached_query(&self, query: AnyQuery) -> Option<AnyQueryResponse> {
-        self.cache.lock().unwrap().get(&query).cloned()
+        self.state.lock().unwrap().cache.get(&query).cloned()
     }
 
     /// Refresh all keys currently present in the cache.
     ///
     /// Uses std::sync::Mutex; the lock is dropped before each await point so this
-    /// is safe to call from async contexts.
+    /// is safe to call from async contexts. A key that was unsubscribed during
+    /// an await is not resurrected.
     async fn refresh_subscribed_queries(&self) -> Result<()> {
-        let queries: Vec<AnyQuery> = self.cache.lock().unwrap().keys().cloned().collect();
+        let queries: Vec<AnyQuery> = self.state.lock().unwrap().cache.keys().cloned().collect();
         for query in queries {
             let result = self.run_any_query(query.clone()).await?;
-            self.cache.lock().unwrap().insert(query, result);
+            let mut state = self.state.lock().unwrap();
+            // Don't resurrect a key whose last subscriber dropped mid-refresh.
+            if state.refcounts.contains_key(&query) {
+                state.cache.insert(query, result);
+            }
         }
         Ok(())
     }
 }
 
-/// Opaque handle returned by `subscribe_query`. Dropping this value automatically removes the query
-/// from the cache via the Drop impl — no manual unsubscribe call needed.
+/// Opaque handle returned by `subscribe_query`. Dropping this value decrements
+/// the key's refcount and removes it from the cache once no subscribers remain —
+/// no manual unsubscribe call needed.
 pub struct QuerySubscription {
     key: AnyQuery,
-    cache: QueryCache,
+    state: SharedCache,
 }
 
 impl Drop for QuerySubscription {
     fn drop(&mut self) {
-        if let Ok(mut c) = self.cache.lock() {
-            c.remove(&self.key);
+        if let Ok(mut state) = self.state.lock() {
+            if let Some(count) = state.refcounts.get_mut(&self.key) {
+                *count -= 1;
+                if *count == 0 {
+                    state.refcounts.remove(&self.key);
+                    state.cache.remove(&self.key);
+                }
+            }
         }
     }
 }

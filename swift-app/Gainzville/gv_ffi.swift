@@ -1537,6 +1537,64 @@ public func FfiConverterTypeAllEntries_lower(_ value: AllEntries) -> RustBuffer 
 }
 
 
+public struct AttachValue: Equatable, Hashable {
+    public var actorId: Uuid
+    public var entryId: Uuid
+    public var attributeId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(actorId: Uuid, entryId: Uuid, attributeId: Uuid) {
+        self.actorId = actorId
+        self.entryId = entryId
+        self.attributeId = attributeId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AttachValue: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAttachValue: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AttachValue {
+        return
+            try AttachValue(
+                actorId: FfiConverterTypeUuid.read(from: &buf), 
+                entryId: FfiConverterTypeUuid.read(from: &buf), 
+                attributeId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AttachValue, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.actorId, into: &buf)
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+        FfiConverterTypeUuid.write(value.attributeId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAttachValue_lift(_ buf: RustBuffer) throws -> AttachValue {
+    return try FfiConverterTypeAttachValue.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAttachValue_lower(_ value: AttachValue) -> RustBuffer {
+    return FfiConverterTypeAttachValue.lower(value)
+}
+
+
 public struct Attribute: Equatable, Hashable {
     public var id: Uuid
     public var ownerId: Uuid
@@ -1870,6 +1928,64 @@ public func FfiConverterTypeCreateValue_lift(_ buf: RustBuffer) throws -> Create
 #endif
 public func FfiConverterTypeCreateValue_lower(_ value: CreateValue) -> RustBuffer {
     return FfiConverterTypeCreateValue.lower(value)
+}
+
+
+public struct DeleteAttributeValue: Equatable, Hashable {
+    public var actorId: Uuid
+    public var entryId: Uuid
+    public var attributeId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(actorId: Uuid, entryId: Uuid, attributeId: Uuid) {
+        self.actorId = actorId
+        self.entryId = entryId
+        self.attributeId = attributeId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension DeleteAttributeValue: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDeleteAttributeValue: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DeleteAttributeValue {
+        return
+            try DeleteAttributeValue(
+                actorId: FfiConverterTypeUuid.read(from: &buf), 
+                entryId: FfiConverterTypeUuid.read(from: &buf), 
+                attributeId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DeleteAttributeValue, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.actorId, into: &buf)
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+        FfiConverterTypeUuid.write(value.attributeId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDeleteAttributeValue_lift(_ buf: RustBuffer) throws -> DeleteAttributeValue {
+    return try FfiConverterTypeDeleteAttributeValue.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDeleteAttributeValue_lower(_ value: DeleteAttributeValue) -> RustBuffer {
+    return FfiConverterTypeDeleteAttributeValue.lower(value)
 }
 
 
@@ -3671,6 +3787,10 @@ public enum Action: Equatable, Hashable {
     )
     case createValue(CreateValue
     )
+    case attachValue(AttachValue
+    )
+    case deleteAttributeValue(DeleteAttributeValue
+    )
     case createEntry(CreateEntry
     )
     case deleteEntryRecursive(DeleteEntryRecursive
@@ -3714,19 +3834,25 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         case 4: return .createValue(try FfiConverterTypeCreateValue.read(from: &buf)
         )
         
-        case 5: return .createEntry(try FfiConverterTypeCreateEntry.read(from: &buf)
+        case 5: return .attachValue(try FfiConverterTypeAttachValue.read(from: &buf)
         )
         
-        case 6: return .deleteEntryRecursive(try FfiConverterTypeDeleteEntryRecursive.read(from: &buf)
+        case 6: return .deleteAttributeValue(try FfiConverterTypeDeleteAttributeValue.read(from: &buf)
         )
         
-        case 7: return .moveEntry(try FfiConverterTypeMoveEntry.read(from: &buf)
+        case 7: return .createEntry(try FfiConverterTypeCreateEntry.read(from: &buf)
         )
         
-        case 8: return .updateEntryCompletion(try FfiConverterTypeUpdateEntryCompletion.read(from: &buf)
+        case 8: return .deleteEntryRecursive(try FfiConverterTypeDeleteEntryRecursive.read(from: &buf)
         )
         
-        case 9: return .updateAttributeValue(try FfiConverterTypeUpdateAttributeValue.read(from: &buf)
+        case 9: return .moveEntry(try FfiConverterTypeMoveEntry.read(from: &buf)
+        )
+        
+        case 10: return .updateEntryCompletion(try FfiConverterTypeUpdateEntryCompletion.read(from: &buf)
+        )
+        
+        case 11: return .updateAttributeValue(try FfiConverterTypeUpdateAttributeValue.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -3757,28 +3883,38 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
             FfiConverterTypeCreateValue.write(v1, into: &buf)
             
         
-        case let .createEntry(v1):
+        case let .attachValue(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterTypeAttachValue.write(v1, into: &buf)
+            
+        
+        case let .deleteAttributeValue(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeDeleteAttributeValue.write(v1, into: &buf)
+            
+        
+        case let .createEntry(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterTypeCreateEntry.write(v1, into: &buf)
             
         
         case let .deleteEntryRecursive(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeDeleteEntryRecursive.write(v1, into: &buf)
             
         
         case let .moveEntry(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeMoveEntry.write(v1, into: &buf)
             
         
         case let .updateEntryCompletion(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeUpdateEntryCompletion.write(v1, into: &buf)
             
         
         case let .updateAttributeValue(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeUpdateAttributeValue.write(v1, into: &buf)
             
         }

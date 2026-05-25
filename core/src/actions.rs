@@ -13,6 +13,8 @@ pub enum Action {
     CreateActivity(CreateActivity),
     CreateAttribute(CreateAttribute),
     CreateValue(CreateValue),
+    AttachValue(AttachValue),
+    DeleteAttributeValue(DeleteAttributeValue),
     CreateEntry(CreateEntry),
     DeleteEntryRecursive(DeleteEntryRecursive),
     MoveEntry(MoveEntry),
@@ -59,6 +61,18 @@ impl From<CreateAttribute> for Action {
 impl From<CreateValue> for Action {
     fn from(value: CreateValue) -> Self {
         Action::CreateValue(value)
+    }
+}
+
+impl From<AttachValue> for Action {
+    fn from(value: AttachValue) -> Self {
+        Action::AttachValue(value)
+    }
+}
+
+impl From<DeleteAttributeValue> for Action {
+    fn from(value: DeleteAttributeValue) -> Self {
+        Action::DeleteAttributeValue(value)
     }
 }
 
@@ -151,6 +165,17 @@ pub struct CreateValue {
     pub value: Value,
 }
 
+/// Attach an attribute to an entry, seeding the value from the attribute's
+/// config default (both plan and actual). A no-op if a value for
+/// `(entry_id, attribute_id)` already exists. Unlike `CreateValue`, the caller
+/// passes only identifiers; the mutator resolves the default in core.
+#[derive(Debug, Clone)]
+pub struct AttachValue {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub attribute_id: Uuid,
+}
+
 #[derive(Debug, Clone)]
 pub struct UpdateEntryCompletion {
     pub actor_id: Uuid,
@@ -183,4 +208,18 @@ impl From<UpdateAttributeValue> for Action {
     fn from(value: UpdateAttributeValue) -> Self {
         Action::UpdateAttributeValue(value)
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteAttributeValue {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub attribute_id: Uuid,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateAttribute {
+    pub actor_id: Uuid,
+    pub attribute_id: Uuid,
+    pub attribute: Attribute,
 }

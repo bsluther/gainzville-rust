@@ -40,6 +40,10 @@ impl PostgresServer {
                 mutators::create_attribute(&mut executor, action).await?
             }
             Action::CreateValue(action) => mutators::create_value(&mut executor, action).await?,
+            Action::AttachValue(action) => mutators::attach_value(&mut executor, action).await?,
+            Action::DeleteAttributeValue(action) => {
+                mutators::delete_attribute_value(&mut executor, action).await?
+            }
             Action::UpdateEntryCompletion(action) => {
                 mutators::update_entry_completion(&mut executor, action).await?
             }

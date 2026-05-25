@@ -93,6 +93,10 @@ impl SqliteClient {
                 mutators::create_attribute(&mut executor, action).await?
             }
             Action::CreateValue(action) => mutators::create_value(&mut executor, action).await?,
+            Action::AttachValue(action) => mutators::attach_value(&mut executor, action).await?,
+            Action::DeleteAttributeValue(action) => {
+                mutators::delete_attribute_value(&mut executor, action).await?
+            }
             Action::UpdateEntryCompletion(action) => {
                 mutators::update_entry_completion(&mut executor, action).await?
             }
@@ -193,8 +197,37 @@ impl SqliteClient {
 pub mod tests {
     pub use super::*;
     pub use gv_core::SYSTEM_ACTOR_ID;
-    pub use gv_core::queries::FindActivityById;
+    pub use gv_core::queries::{AnyQuery, FindActivityById, FindEntryJoinById};
     pub use uuid::Uuid;
+
+    /// Two subscriptions to the same query key share one cache entry; the entry
+    /// must survive until the *last* handle drops. Regression for a refcount bug
+    /// where the first drop evicted the key, starving the other subscriber's
+    /// refreshes (stale reads until restart).
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+    fn test_query_subscription_refcount(pool: SqlitePool) {
+        let client = SqliteClient::from_pool(pool);
+        let query = AnyQuery::FindEntryJoinById(FindEntryJoinById {
+            entry_id: Uuid::new_v4(),
+        });
+
+        let sub1 = client.subscribe_query(query.clone()).await.unwrap();
+        let sub2 = client.subscribe_query(query.clone()).await.unwrap();
+
+        // Dropping one of two subscribers must NOT evict the shared key.
+        drop(sub2);
+        assert!(
+            client.read_cached_query(query.clone()).is_some(),
+            "cache key must survive while another subscriber is alive"
+        );
+
+        // Dropping the last subscriber evicts it.
+        drop(sub1);
+        assert!(
+            client.read_cached_query(query).is_none(),
+            "cache key must be evicted once the last subscriber drops"
+        );
+    }
 
     #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
     fn test_create_activity(pool: SqlitePool) {

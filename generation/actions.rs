@@ -4,8 +4,8 @@ use uuid::Uuid;
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick};
 use gv_core::{
     actions::{
-        Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue, MoveEntry,
-        UpdateEntryCompletion,
+        Action, AttachValue, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
+        DeleteAttributeValue, MoveEntry, UpdateEntryCompletion,
     },
     models::{
         activity::Activity,
@@ -30,12 +30,19 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
         // Actions that are always available: CreateUser, CreateActivity, CreateEntry, CreateAttribute
         // Actions that require non-empty entries: MoveEntry, UpdateEntryCompletion
         // Actions that require non-empty entries and attributes: CreateValue
+        // Actions requiring entries + attributes that share at least one owner:
+        // CreateValue, AttachValue, DeleteAttributeValue.
         let mut choices: Vec<u8> = vec![0, 1, 2, 3];
         if !entries.is_empty() {
             choices.push(4);
             choices.push(6);
-            if !attributes.is_empty() {
+            let owners_overlap = entries
+                .iter()
+                .any(|e| attributes.iter().any(|a| a.owner_id == e.owner_id));
+            if owners_overlap {
                 choices.push(5);
+                choices.push(7);
+                choices.push(8);
             }
         }
         let choice = pick(&choices, rng).unwrap();
@@ -47,6 +54,8 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
             4 => MoveEntry::arbitrary_from(rng, context, entries).into(),
             5 => CreateValue::arbitrary_from(rng, context, (entries, attributes)).into(),
             6 => UpdateEntryCompletion::arbitrary_from(rng, context, entries).into(),
+            7 => AttachValue::arbitrary_from(rng, context, (entries, attributes)).into(),
+            8 => DeleteAttributeValue::arbitrary_from(rng, context, (entries, attributes)).into(),
             _ => unreachable!(),
         }
     }
@@ -145,6 +154,54 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for CreateValue {
         CreateValue {
             actor_id: entry.owner_id,
             value,
+        }
+    }
+}
+
+/// Pick an (entry, attribute) pair whose owners match, mirroring the constraint
+/// the attach/detach mutators enforce. Panics if no owned attribute exists for
+/// the picked entry — callers gate on owner overlap before generating.
+fn pick_owned_pair<'a, R: Rng>(
+    rng: &mut R,
+    entries: &'a [Entry],
+    attributes: &'a [Attribute],
+) -> (&'a Entry, &'a Attribute) {
+    let entry = pick(entries, rng).expect("entries must not be empty");
+    let owned_attrs: Vec<&Attribute> = attributes
+        .iter()
+        .filter(|a| a.owner_id == entry.owner_id)
+        .collect();
+    let attribute = pick(&owned_attrs[..], rng)
+        .expect("no attribute matches the picked entry's owner");
+    (entry, attribute)
+}
+
+impl ArbitraryFrom<(&[Entry], &[Attribute])> for AttachValue {
+    fn arbitrary_from<R: Rng, C: GenerationContext>(
+        rng: &mut R,
+        _context: &C,
+        (entries, attributes): (&[Entry], &[Attribute]),
+    ) -> Self {
+        let (entry, attribute) = pick_owned_pair(rng, entries, attributes);
+        AttachValue {
+            actor_id: entry.owner_id,
+            entry_id: entry.id,
+            attribute_id: attribute.id,
+        }
+    }
+}
+
+impl ArbitraryFrom<(&[Entry], &[Attribute])> for DeleteAttributeValue {
+    fn arbitrary_from<R: Rng, C: GenerationContext>(
+        rng: &mut R,
+        _context: &C,
+        (entries, attributes): (&[Entry], &[Attribute]),
+    ) -> Self {
+        let (entry, attribute) = pick_owned_pair(rng, entries, attributes);
+        DeleteAttributeValue {
+            actor_id: entry.owner_id,
+            entry_id: entry.id,
+            attribute_id: attribute.id,
         }
     }
 }

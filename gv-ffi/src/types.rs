@@ -2,8 +2,9 @@ use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
 use gv_core::{
     actions::{
-        Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
-        DeleteEntryRecursive, MoveEntry, UpdateAttributeValue, UpdateEntryCompletion, ValueField,
+        Action, AttachValue, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
+        DeleteAttributeValue, DeleteEntryRecursive, MoveEntry, UpdateAttributeValue,
+        UpdateEntryCompletion, ValueField,
     },
     models::{
         activity::{Activity, ActivityName},
@@ -523,12 +524,28 @@ pub struct UpdateAttributeValue {
     pub value: AttributeValue,
 }
 
+#[uniffi::remote(Record)]
+pub struct AttachValue {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub attribute_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct DeleteAttributeValue {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub attribute_id: Uuid,
+}
+
 #[uniffi::remote(Enum)]
 pub enum Action {
     CreateUser(CreateUser),
     CreateActivity(CreateActivity),
     CreateAttribute(CreateAttribute),
     CreateValue(CreateValue),
+    AttachValue(AttachValue),
+    DeleteAttributeValue(DeleteAttributeValue),
     CreateEntry(CreateEntry),
     DeleteEntryRecursive(DeleteEntryRecursive),
     MoveEntry(MoveEntry),

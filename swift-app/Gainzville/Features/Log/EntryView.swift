@@ -321,7 +321,7 @@ private struct EntryMenuContent: View {
                     // Group 2 — attributes
                     GvMenuRow("Add attribute", icon: "tag")
                     NavigationLink {
-                        EditAttributesView(entryName: entryName, activityName: activityName, isPresented: $isPresented)
+                        EditAttributesView(entry: entry, entryName: entryName, hasActivity: entry.activityId != nil, isPresented: $isPresented)
                     } label: {
                         HStack(spacing: GvSpacing.lg) {
                             Image(systemName: "slider.horizontal.3").frame(width: 20)

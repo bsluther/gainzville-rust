@@ -3,8 +3,9 @@ use uuid::Uuid;
 
 use crate::{
     actions::{
-        Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
-        DeleteEntryRecursive, MoveEntry, UpdateAttributeValue, UpdateEntryCompletion, ValueField,
+        Action, AttachValue, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
+        DeleteAttributeValue, DeleteEntryRecursive, MoveEntry, UpdateAttributeValue,
+        UpdateEntryCompletion, ValueField,
     },
     delta::{AnyDelta, Delta},
     error::{DomainError, Result},
@@ -430,6 +431,24 @@ pub async fn create_value(
         )));
     }
 
+    // No-op if a value for this (entry_id, attribute_id) already exists: an
+    // attribute is attached to an entry at most once.
+    if executor
+        .execute(FindValueByKey {
+            entry_id: value.entry_id,
+            attribute_id: value.attribute_id,
+        })
+        .await?
+        .is_some()
+    {
+        return Ok(Mutation {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            action: Action::CreateValue(action),
+            changes: vec![],
+        });
+    }
+
     let insert_value = Delta::Insert { new: value };
 
     Ok(Mutation {
@@ -437,6 +456,123 @@ pub async fn create_value(
         timestamp: Utc::now(),
         action: Action::CreateValue(action),
         changes: vec![insert_value.into()],
+    })
+}
+
+/// Attach an attribute to an entry, seeding the value from the attribute's
+/// config default (both plan and actual). A no-op if the attribute is already
+/// attached. The default is resolved here in core via `Attribute::seed_value`.
+pub async fn attach_value(
+    executor: &mut impl AnyQueryExecutor,
+    action: AttachValue,
+) -> Result<Mutation> {
+    let entry = executor
+        .execute(FindEntryById {
+            entry_id: action.entry_id,
+        })
+        .await?
+        .ok_or_else(|| DomainError::Other(format!("entry '{}' not found", action.entry_id)))?;
+
+    // Only the entry owner can attach values to it.
+    if action.actor_id != entry.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "actor '{}' is not authorized to attach values on entry owned by '{}'",
+            action.actor_id, entry.owner_id
+        )));
+    }
+
+    let attribute = executor
+        .execute(FindAttributeById {
+            attribute_id: action.attribute_id,
+        })
+        .await?
+        .ok_or_else(|| {
+            DomainError::Other(format!("attribute '{}' not found", action.attribute_id))
+        })?;
+
+    if attribute.owner_id != entry.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "attribute owner '{}' does not match entry owner '{}'",
+            attribute.owner_id, entry.owner_id
+        )));
+    }
+
+    // No-op if already attached.
+    if executor
+        .execute(FindValueByKey {
+            entry_id: action.entry_id,
+            attribute_id: action.attribute_id,
+        })
+        .await?
+        .is_some()
+    {
+        return Ok(Mutation {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            action: Action::AttachValue(action),
+            changes: vec![],
+        });
+    }
+
+    let seeded = attribute.seed_value(action.entry_id);
+    let insert_value = Delta::Insert { new: seeded };
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: Action::AttachValue(action),
+        changes: vec![insert_value.into()],
+    })
+}
+
+/// Detach an attribute from an entry by deleting its value, keyed by
+/// `(entry_id, attribute_id)`. A no-op if no such value exists, so the UI
+/// toggle is idempotent.
+pub async fn delete_attribute_value(
+    executor: &mut impl AnyQueryExecutor,
+    action: DeleteAttributeValue,
+) -> Result<Mutation> {
+    let Some(old) = executor
+        .execute(FindValueByKey {
+            entry_id: action.entry_id,
+            attribute_id: action.attribute_id,
+        })
+        .await?
+    else {
+        // No-op: nothing attached.
+        return Ok(Mutation {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            action: Action::DeleteAttributeValue(action),
+            changes: vec![],
+        });
+    };
+
+    let entry = executor
+        .execute(FindEntryById {
+            entry_id: action.entry_id,
+        })
+        .await?
+        .ok_or_else(|| {
+            DomainError::Consistency(format!(
+                "value exists for entry '{}' but the entry does not",
+                action.entry_id
+            ))
+        })?;
+
+    // Only the entry owner can detach values from it.
+    if action.actor_id != entry.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "actor '{}' is not the owner of entry '{}'",
+            action.actor_id, entry.id
+        )));
+    }
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: Action::DeleteAttributeValue(action),
+        changes: vec![Delta::<Value>::Delete { old }.into()],
     })
 }
 

@@ -55,6 +55,54 @@ impl Attribute {
             _ => Err(DomainError::AttributeMismatch),
         }
     }
+
+    /// The scalar config default mapped to an `AttributeValue`, if this type has
+    /// one. Numeric and Select carry a scalar default; Mass has only
+    /// `default_units` and returns `None` here (use `seed_value` to build a Mass
+    /// seed from its units).
+    pub fn default_value(&self) -> Option<AttributeValue> {
+        match &self.config {
+            AttributeConfig::Numeric(c) => {
+                c.default.map(|d| AttributeValue::Numeric(NumericValue::Exact(d)))
+            }
+            AttributeConfig::Select(c) => c
+                .default
+                .clone()
+                .map(|s| AttributeValue::Select(SelectValue::Exact(s))),
+            AttributeConfig::Mass(_) => None,
+        }
+    }
+
+    /// Build the seed `Value` used when attaching this attribute to an entry.
+    /// Both `plan` and `actual` are set to the resolved default. Scalar types use
+    /// `default_value`; Mass constructs a zero-magnitude `MassMeasurement` per
+    /// `default_unit` (or `None` when there are no default units). The composite
+    /// key is `(entry_id, self.id)`.
+    pub fn seed_value(&self, entry_id: Uuid) -> Value {
+        let seed = match &self.config {
+            AttributeConfig::Mass(c) if !c.default_units.is_empty() => {
+                let measurements = c
+                    .default_units
+                    .iter()
+                    .map(|unit| MassMeasurement {
+                        unit: unit.clone(),
+                        value: 0.0,
+                    })
+                    .collect();
+                Some(AttributeValue::Mass(MassValue::Exact(measurements)))
+            }
+            AttributeConfig::Mass(_) => None,
+            _ => self.default_value(),
+        };
+        Value {
+            entry_id,
+            attribute_id: self.id,
+            index_float: None,
+            index_string: None,
+            plan: seed.clone(),
+            actual: seed,
+        }
+    }
 }
 
 ///// Configs /////
