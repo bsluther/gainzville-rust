@@ -167,6 +167,15 @@ impl GainzvilleCore {
             .unwrap_or_default()
     }
 
+    /// The root template entry for an activity, if present in the forest cache.
+    /// Backs the library's activity-template editing: the activity detail view
+    /// resolves the root here, then reuses the existing forest traversal +
+    /// per-entry join subscriptions to render and edit the template.
+    pub fn forest_activity_template_root(&self, activity_id: Uuid) -> Option<Entry> {
+        self.forest_snapshot()
+            .and_then(|f| f.template_root(activity_id).cloned())
+    }
+
     /// Ancestors of `entry_id` from immediate parent up to the root.
     pub fn forest_ancestors(&self, entry_id: Uuid) -> Vec<Entry> {
         self.forest_snapshot()
@@ -200,7 +209,7 @@ impl GainzvilleCore {
         succ_id: Option<Uuid>,
     ) -> Option<Position> {
         self.forest_snapshot()
-            .map(|f| f.position_between(parent_id, pred_id, succ_id))
+            .and_then(|f| f.position_between(parent_id, pred_id, succ_id))
     }
 
     /// Suggested start time for a new root-level entry on the given day.

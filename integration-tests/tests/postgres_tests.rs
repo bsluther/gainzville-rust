@@ -42,6 +42,8 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
     entry_a.is_template = true;
     entry_a.activity_id = None;
     entry_a.position = None;
+    // Templates carry no start/end (arbitrary may produce one).
+    entry_a.temporal = Temporal::None;
 
     let mut entry_b = Entry::arbitrary(&mut rng, &context);
     entry_b.owner_id = actor_id;
@@ -52,6 +54,7 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
         parent_id: entry_a.id,
         frac_index: FractionalIndex::default(),
     });
+    entry_b.temporal = Temporal::None;
 
     let move_action = Action::MoveEntry(MoveEntry {
         actor_id,

@@ -10,21 +10,33 @@ internal import Combine
 final class EditAttributesViewModel: ObservableObject {
     @Published private(set) var attributes: [Attribute] = []  // all owned by the entry's owner
     @Published private(set) var attachedIds: Set<String> = []
+    // Attributes attached to the activity's template root ("All entries" column).
+    @Published private(set) var activityAttachedIds: Set<String> = []
 
     private var core: GainzvilleCore?
     private var ownerId: String = ""
     private var entryId: String = ""
+    private var activityId: String?
+    private var templateRootId: String?
     private var attrSub: FfiQuerySubscription?
     private var joinSub: FfiQuerySubscription?
+    private var templateJoinSub: FfiQuerySubscription?
     private var cancellable: AnyCancellable?
     private var started = false
 
-    func start(core: GainzvilleCore?, dataChange: DataChange, entryId: String, ownerId: String) {
+    func start(
+        core: GainzvilleCore?,
+        dataChange: DataChange,
+        entryId: String,
+        ownerId: String,
+        activityId: String?
+    ) {
         guard !started, let core else { return }
         started = true
         self.core = core
         self.entryId = entryId
         self.ownerId = ownerId
+        self.activityId = activityId
         attrSub = try? core.subscribeQuery(
             query: .findAttributesByOwner(FindAttributesByOwner(ownerId: ownerId)))
         joinSub = try? core.subscribeQuery(
@@ -33,15 +45,33 @@ final class EditAttributesViewModel: ObservableObject {
         cancellable = dataChange.didChange.sink { [weak self] in self?.refresh() }
     }
 
+    /// Resolve the activity's template root from the (app-wide) forest cache the
+    /// first time it's available, then subscribe to its join. Done lazily in
+    /// refresh so a cold-start race — sheet opened before the forest populates —
+    /// recovers on a later DataChange instead of leaving the column dead.
+    private func resolveTemplateRootIfNeeded() {
+        guard templateRootId == nil, let core, let activityId else { return }
+        guard let root = core.forestActivityTemplateRoot(activityId: activityId) else { return }
+        templateRootId = root.id
+        templateJoinSub = try? core.subscribeQuery(
+            query: .findEntryJoinById(FindEntryJoinById(entryId: root.id)))
+    }
+
     private func refresh() {
         guard let core else { return }
-        // Set `attachedIds` before `attributes`: the `attributes` publisher
-        // drives the order snapshot, which reads `attachedIds` to put attached
-        // attributes first. Publishing it last guarantees the snapshot sees an
-        // up-to-date attached set regardless of subscriber timing.
+        resolveTemplateRootIfNeeded()
+        // Set the attached sets before `attributes`: the `attributes` publisher
+        // drives the order snapshot, which reads the attached sets to group
+        // attached attributes first. Publishing it last guarantees the snapshot
+        // sees up-to-date sets regardless of subscriber timing.
         if case .findEntryJoinById(let join) =
             core.readQuery(query: .findEntryJoinById(FindEntryJoinById(entryId: entryId))) {
             attachedIds = Set((join?.attributes ?? []).map { $0.id })
+        }
+        if let templateRootId,
+           case .findEntryJoinById(let join) =
+            core.readQuery(query: .findEntryJoinById(FindEntryJoinById(entryId: templateRootId))) {
+            activityAttachedIds = Set((join?.attributes ?? []).map { $0.id })
         }
         if case .findAttributesByOwner(let list) =
             core.readQuery(query: .findAttributesByOwner(FindAttributesByOwner(ownerId: ownerId))) {
@@ -49,13 +79,26 @@ final class EditAttributesViewModel: ObservableObject {
         }
     }
 
+    /// Toggle attachment on this entry ("This entry" column).
     func toggle(_ attributeId: String) {
+        toggle(attributeId, on: entryId, attached: attachedIds.contains(attributeId))
+    }
+
+    /// Toggle attachment on the activity's template root ("All entries" column).
+    /// Under materialization this affects future instances only, not existing
+    /// log entries.
+    func toggleActivity(_ attributeId: String) {
+        guard let templateRootId else { return }
+        toggle(attributeId, on: templateRootId, attached: activityAttachedIds.contains(attributeId))
+    }
+
+    private func toggle(_ attributeId: String, on targetEntryId: String, attached: Bool) {
         guard let core else { return }
-        let action: Action = attachedIds.contains(attributeId)
+        let action: Action = attached
             ? .deleteAttributeValue(DeleteAttributeValue(
-                actorId: SYSTEM_ACTOR_ID, entryId: entryId, attributeId: attributeId))
+                actorId: SYSTEM_ACTOR_ID, entryId: targetEntryId, attributeId: attributeId))
             : .attachValue(AttachValue(
-                actorId: SYSTEM_ACTOR_ID, entryId: entryId, attributeId: attributeId))
+                actorId: SYSTEM_ACTOR_ID, entryId: targetEntryId, attributeId: attributeId))
         try? core.runAction(action: action)
     }
 }
@@ -108,8 +151,11 @@ struct EditAttributesView: View {
         .frame(minWidth: 340, minHeight: 440)
         #endif
         .onAppear {
+            // The VM resolves the activity's template root (for the "All entries"
+            // column) lazily from the forest cache; activityId is nil when the
+            // entry has no activity (column hidden).
             vm.start(core: coreEnv.core, dataChange: dataChange,
-                     entryId: entry.id, ownerId: entry.ownerId)
+                     entryId: entry.id, ownerId: entry.ownerId, activityId: entry.activityId)
         }
         .onReceive(vm.$attributes) { _ in rebuildOrderIfNeeded() }
         .toolbar {
@@ -149,9 +195,17 @@ struct EditAttributesView: View {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
         if !hasSnapshot {
-            let attached = all.filter { vm.attachedIds.contains($0.id) }.sorted(by: byName)
-            let rest = all.filter { !vm.attachedIds.contains($0.id) }.sorted(by: byName)
-            orderedIds = attached.map(\.id) + rest.map(\.id)
+            // Group order (frozen at open): attributes on this entry first, then
+            // attributes on the activity (template), then the rest — each group
+            // alphabetical.
+            let onEntry = all.filter { vm.attachedIds.contains($0.id) }.sorted(by: byName)
+            let onActivity = all
+                .filter { !vm.attachedIds.contains($0.id) && vm.activityAttachedIds.contains($0.id) }
+                .sorted(by: byName)
+            let rest = all
+                .filter { !vm.attachedIds.contains($0.id) && !vm.activityAttachedIds.contains($0.id) }
+                .sorted(by: byName)
+            orderedIds = onEntry.map(\.id) + onActivity.map(\.id) + rest.map(\.id)
             hasSnapshot = true
         } else {
             let known = Set(orderedIds)
@@ -168,13 +222,21 @@ struct EditAttributesView: View {
                 .font(.gvCaption)
                 .foregroundStyle(Color.gvTextSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            // Phase 3 adds an "All entries" (activity default) column here,
-            // gated on `hasActivity`.
-            Text("This entry")
-                .font(.gvCaption)
-                .foregroundStyle(Color.gvTextSecondary)
-                .multilineTextAlignment(.center)
-                .frame(width: 44)
+            HStack(spacing: 0) {
+                Text("This entry")
+                    .font(.gvCaption)
+                    .foregroundStyle(Color.gvTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 44)
+                if hasActivity {
+                    Text("All entries")
+                        .font(.gvCaption)
+                        .foregroundStyle(Color.gvTextSecondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .frame(width: 44)
+                }
+            }
         }
         .padding(.vertical, GvSpacing.md)
         .padding(.horizontal, GvSpacing.lg)
@@ -186,10 +248,18 @@ struct EditAttributesView: View {
                 .font(.gvBody)
                 .foregroundStyle(Color.gvTextPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            GvCheckbox(checked: vm.attachedIds.contains(attr.id)) {
-                vm.toggle(attr.id)
+            HStack(spacing: 0) {
+                GvCheckbox(checked: vm.attachedIds.contains(attr.id)) {
+                    vm.toggle(attr.id)
+                }
+                .frame(width: 44)
+                if hasActivity {
+                    GvCheckbox(checked: vm.activityAttachedIds.contains(attr.id)) {
+                        vm.toggleActivity(attr.id)
+                    }
+                    .frame(width: 44)
+                }
             }
-            .frame(width: 44)
         }
         .padding(.vertical, GvSpacing.sm)
         .padding(.horizontal, GvSpacing.lg)

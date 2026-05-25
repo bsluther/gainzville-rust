@@ -41,6 +41,7 @@ struct TemporalAttribute: View {
     @State private var showConflictAlert = false
     @State private var pendingField: TemporalField?
     @EnvironmentObject private var focusModel: AttributeFocusModel
+    @Environment(\.entryContext) private var entryContext
 
     private var temporal: Temporal { entry.temporal }
 
@@ -196,16 +197,20 @@ private struct TemporalExpandedRows: View {
     var onBeforeEditStart: () -> Bool = { true }
     var onBeforeEditEnd: () -> Bool = { true }
     var onBeforeEditDuration: () -> Bool = { true }
-    
+    @Environment(\.entryContext) private var entryContext
+
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
-            AttributeRow(label: "Start", focus: focusFor(.start, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
-                DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart)
-                DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart)
-            }
-            AttributeRow(label: "End", focus: focusFor(.end, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
-                DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd)
-                DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd)
+            // Templates live outside the timeline: duration only, no start/end.
+            if !entryContext.isTemplate {
+                AttributeRow(label: "Start", focus: focusFor(.start, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
+                    DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart)
+                    DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart)
+                }
+                AttributeRow(label: "End", focus: focusFor(.end, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
+                    DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd)
+                    DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd)
+                }
             }
             AttributeRow(label: "Duration", focus: focusFor(.duration, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
                 DurationPickerPill(durationMs: $editDurationMs, onBeforeEdit: onBeforeEditDuration)

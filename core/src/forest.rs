@@ -23,15 +23,36 @@ impl Forest {
         self.data().iter().find(|e| e.id == id)
     }
 
-    /// Get all root entries in the forest.
-    pub fn roots(&self) -> Vec<&Entry> {
-        let mut roots: Vec<&Entry> = self
-            .data()
+    /// All parentless entries, templates included. Internal: structural root
+    /// set used for tree validation. Public callers want `roots` (log) or
+    /// `template_root`.
+    fn all_roots(&self) -> Vec<&Entry> {
+        self.data()
             .iter()
             .filter(|e| e.parent_id().is_none())
+            .collect()
+    }
+
+    /// Get all log root entries in the forest, sorted by canonical instant.
+    /// Template entries are excluded explicitly: they are structurally rootable
+    /// (no parent) but live outside the timeline, so they are reached via
+    /// `template_root`, not the log root list.
+    pub fn roots(&self) -> Vec<&Entry> {
+        let mut roots: Vec<&Entry> = self
+            .all_roots()
+            .into_iter()
+            .filter(|e| !e.is_template)
             .collect();
         roots.sort_by_key(|e| e.temporal.canonical_instant());
         roots
+    }
+
+    /// The root template entry for an activity: the parentless template entry
+    /// whose `activity_id` matches. `CreateActivity` guarantees exactly one.
+    pub fn template_root(&self, activity_id: Uuid) -> Option<&Entry> {
+        self.data().iter().find(|e| {
+            e.is_template && e.parent_id().is_none() && e.activity_id == Some(activity_id)
+        })
     }
 
     /// Get all root entries whose start time falls within the provided interval, sorted by time.
@@ -129,52 +150,57 @@ impl Forest {
         entry_id == proposed_parent_id || self.is_descendant_of(proposed_parent_id, entry_id)
     }
 
-    /// Get the position between two entries in a sequence.
+    /// Get the position between two entries in a sequence. Returns `None` when
+    /// the request can't be satisfied against the current forest — the parent is
+    /// missing or not a sequence, or a given `pred_id`/`succ_id` is missing or
+    /// lacks a fractional index. These can occur transiently during UI
+    /// re-render races (e.g. the parent's cardinality flips while drop-target
+    /// views from the prior state are still mounted), so this is total rather
+    /// than panicking — it's a query over live, changing data, and a panic here
+    /// would cross the FFI boundary and crash the app.
     pub fn position_between(
         &self,
         parent_id: Uuid,
         pred_id: Option<Uuid>,
         succ_id: Option<Uuid>,
-    ) -> Position {
-        assert!(
-            self.entry(parent_id).is_some_and(|p| p.is_sequence),
-            "parent_id must correspond to a sequence"
-        );
+    ) -> Option<Position> {
+        if !self.entry(parent_id).is_some_and(|p| p.is_sequence) {
+            return None;
+        }
 
         // TODO: assert that pred/succ are adjacent.
-        let pred_fi = pred_id.map(|id| {
-            self.entry(id)
-                .and_then(|e| e.frac_index())
-                .expect("pred_id must correspond to an entry with a defined fractional index")
-        });
-        let succ_fi = succ_id.map(|id| {
-            self.entry(id)
-                .and_then(|e| e.frac_index())
-                .expect("succ_id must correspond to an entry with a defined fractional index")
-        });
+        let pred_fi = match pred_id {
+            Some(id) => Some(self.entry(id).and_then(|e| e.frac_index())?),
+            None => None,
+        };
+        let succ_fi = match succ_id {
+            Some(id) => Some(self.entry(id).and_then(|e| e.frac_index())?),
+            None => None,
+        };
 
         let frac_index = match (pred_fi, succ_fi) {
             (None, None) => FractionalIndex::default(),
             (Some(pred), None) => FractionalIndex::new_after(pred),
             (None, Some(succ)) => FractionalIndex::new_before(succ),
-            (Some(pred), Some(succ)) => {
-                FractionalIndex::new_between(pred, succ).expect("pred must precede succ")
-            }
+            // `new_between` yields None only if pred doesn't precede succ — a
+            // stale pred/succ pairing during a race; treat as no valid position.
+            (Some(pred), Some(succ)) => FractionalIndex::new_between(pred, succ)?,
         };
 
-        Position {
+        Some(Position {
             parent_id,
             frac_index,
-        }
+        })
     }
 
     /// Get the position immediately succeeding the last child of a sequence.
     pub fn position_after_children(&self, parent_id: Uuid) -> Option<Position> {
         if let Some(parent) = self.entry(parent_id) {
-            assert!(
-                parent.is_sequence,
-                "provided parent_id must correspond to a sequence, found a scalar entry"
-            );
+            // Total over live data (see `position_between`): a non-sequence
+            // parent yields no append position rather than panicking.
+            if !parent.is_sequence {
+                return None;
+            }
             let children = self.children(parent_id);
             return children
                 .last()
@@ -243,12 +269,89 @@ impl Forest {
     /// Therefore, connected && exactly one root => n-1 edges => graph is a tree.
     /// Additionally enforces that the tree is non-trivial - must contain at least one entry.
     pub fn tree_root(&self) -> Option<&Entry> {
-        let roots = self.roots();
+        // Template trees are validated here too, so consider all structural
+        // roots (templates included), not just log roots.
+        let roots = self.all_roots();
         // Return None if there is not exactly one root.
         let [root] = roots.as_slice() else {
             return None;
         };
         // Connected iff every entry is reachable downward from the unique root.
         (self.descendants(root.id).len() == self.data().len()).then_some(*root)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::entry::Temporal;
+
+    fn root_entry(is_template: bool, activity_id: Option<Uuid>) -> Entry {
+        Entry {
+            id: Uuid::new_v4(),
+            activity_id,
+            owner_id: Uuid::new_v4(),
+            name: None,
+            position: None,
+            is_template,
+            display_as_sets: false,
+            is_sequence: true,
+            is_complete: false,
+            temporal: Temporal::None,
+        }
+    }
+
+    #[test]
+    fn roots_excludes_templates() {
+        let log = root_entry(false, None);
+        let template = root_entry(true, Some(Uuid::new_v4()));
+        let forest = Forest::from(vec![log.clone(), template]);
+        let roots = forest.roots();
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].id, log.id);
+    }
+
+    #[test]
+    fn template_root_matches_activity() {
+        let activity_id = Uuid::new_v4();
+        let template = root_entry(true, Some(activity_id));
+        let other_template = root_entry(true, Some(Uuid::new_v4()));
+        let log = root_entry(false, None);
+        let forest = Forest::from(vec![template.clone(), other_template, log]);
+
+        assert_eq!(forest.template_root(activity_id).map(|e| e.id), Some(template.id));
+        assert!(forest.template_root(Uuid::new_v4()).is_none());
+    }
+
+    #[test]
+    fn position_queries_are_total_on_non_sequence_parent() {
+        // Regression: a UI re-render race can call these against a parent whose
+        // cardinality just flipped to scalar. They must return None, not panic
+        // (a panic would cross the FFI boundary and crash the app).
+        let scalar = root_entry(false, None); // root_entry sets is_sequence = true
+        let mut scalar = scalar;
+        scalar.is_sequence = false;
+        let forest = Forest::from(vec![scalar.clone()]);
+
+        assert!(forest.position_between(scalar.id, None, None).is_none());
+        assert!(forest.position_after_children(scalar.id).is_none());
+        // Unknown parent id is also handled.
+        assert!(forest.position_between(Uuid::new_v4(), None, None).is_none());
+    }
+
+    #[test]
+    fn position_between_empty_sequence_returns_default() {
+        let seq = root_entry(false, None); // is_sequence = true
+        let forest = Forest::from(vec![seq.clone()]);
+        assert!(forest.position_between(seq.id, None, None).is_some());
+    }
+
+    #[test]
+    fn tree_root_still_finds_template_root() {
+        // A template-only forest must still validate as a tree (used by
+        // create_activity), even though `roots` excludes templates.
+        let template = root_entry(true, Some(Uuid::new_v4()));
+        let forest = Forest::from(vec![template.clone()]);
+        assert_eq!(forest.tree_root().map(|e| e.id), Some(template.id));
     }
 }

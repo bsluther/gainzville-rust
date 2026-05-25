@@ -879,6 +879,14 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     func devSeedStdLib() throws 
     
     /**
+     * The root template entry for an activity, if present in the forest cache.
+     * Backs the library's activity-template editing: the activity detail view
+     * resolves the root here, then reuses the existing forest traversal +
+     * per-entry join subscriptions to render and edit the template.
+     */
+    func forestActivityTemplateRoot(activityId: Uuid)  -> Entry?
+    
+    /**
      * Ancestors of `entry_id` from immediate parent up to the root.
      */
     func forestAncestors(entryId: Uuid)  -> [Entry]
@@ -1070,6 +1078,21 @@ open func devSeedStdLib()throws   {try rustCallWithError(FfiConverterTypeFfiErro
             self.uniffiCloneHandle(),$0
     )
 }
+}
+    
+    /**
+     * The root template entry for an activity, if present in the forest cache.
+     * Backs the library's activity-template editing: the activity detail view
+     * resolves the root here, then reuses the existing forest traversal +
+     * per-entry join subscriptions to render and edit the template.
+     */
+open func forestActivityTemplateRoot(activityId: Uuid) -> Entry?  {
+    return try!  FfiConverterOptionTypeEntry.lift(try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_forest_activity_template_root(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(activityId),$0
+    )
+})
 }
     
     /**
@@ -3647,6 +3670,64 @@ public func FfiConverterTypeUpdateAttributeValue_lower(_ value: UpdateAttributeV
 }
 
 
+public struct UpdateEntry: Equatable, Hashable {
+    public var actorId: Uuid
+    public var entryId: Uuid
+    public var change: EntryChange
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(actorId: Uuid, entryId: Uuid, change: EntryChange) {
+        self.actorId = actorId
+        self.entryId = entryId
+        self.change = change
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension UpdateEntry: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUpdateEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UpdateEntry {
+        return
+            try UpdateEntry(
+                actorId: FfiConverterTypeUuid.read(from: &buf), 
+                entryId: FfiConverterTypeUuid.read(from: &buf), 
+                change: FfiConverterTypeEntryChange.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UpdateEntry, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.actorId, into: &buf)
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+        FfiConverterTypeEntryChange.write(value.change, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUpdateEntry_lift(_ buf: RustBuffer) throws -> UpdateEntry {
+    return try FfiConverterTypeUpdateEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUpdateEntry_lower(_ value: UpdateEntry) -> RustBuffer {
+    return FfiConverterTypeUpdateEntry.lower(value)
+}
+
+
 public struct UpdateEntryCompletion: Equatable, Hashable {
     public var actorId: Uuid
     public var entryId: Uuid
@@ -3861,6 +3942,8 @@ public enum Action: Equatable, Hashable {
     )
     case updateAttribute(UpdateAttribute
     )
+    case updateEntry(UpdateEntry
+    )
 
 
 
@@ -3916,6 +3999,9 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         )
         
         case 12: return .updateAttribute(try FfiConverterTypeUpdateAttribute.read(from: &buf)
+        )
+        
+        case 13: return .updateEntry(try FfiConverterTypeUpdateEntry.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -3984,6 +4070,11 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         case let .updateAttribute(v1):
             writeInt(&buf, Int32(12))
             FfiConverterTypeUpdateAttribute.write(v1, into: &buf)
+            
+        
+        case let .updateEntry(v1):
+            writeInt(&buf, Int32(13))
+            FfiConverterTypeUpdateEntry.write(v1, into: &buf)
             
         }
     }
@@ -4840,6 +4931,69 @@ public func FfiConverterTypeAttributeValue_lift(_ buf: RustBuffer) throws -> Att
 #endif
 public func FfiConverterTypeAttributeValue_lower(_ value: AttributeValue) -> RustBuffer {
     return FfiConverterTypeAttributeValue.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum EntryChange: Equatable, Hashable {
+    
+    case setIsSequence(Bool
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension EntryChange: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEntryChange: FfiConverterRustBuffer {
+    typealias SwiftType = EntryChange
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EntryChange {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .setIsSequence(try FfiConverterBool.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: EntryChange, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .setIsSequence(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterBool.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEntryChange_lift(_ buf: RustBuffer) throws -> EntryChange {
+    return try FfiConverterTypeEntryChange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEntryChange_lower(_ value: EntryChange) -> RustBuffer {
+    return FfiConverterTypeEntryChange.lower(value)
 }
 
 
@@ -6466,6 +6620,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_seed_std_lib() != 27833) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_activity_template_root() != 27869) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_ancestors() != 33280) {

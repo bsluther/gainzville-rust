@@ -5,8 +5,8 @@ use crate::{Arbitrary, ArbitraryFrom, GenerationContext, gen_random_text, maybe,
 use gv_core::{
     actions::{
         Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateUser, CreateValue, DeleteAttributeValue, MassChange, MoveEntry, NumericChange,
-        SelectChange, UpdateAttribute, UpdateEntryCompletion,
+        CreateUser, CreateValue, DeleteAttributeValue, EntryChange, MassChange, MoveEntry,
+        NumericChange, SelectChange, UpdateAttribute, UpdateEntry, UpdateEntryCompletion,
     },
     models::{
         activity::Activity,
@@ -49,6 +49,9 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
         if !attributes.is_empty() {
             choices.push(9);
         }
+        if !entries.is_empty() {
+            choices.push(10);
+        }
         let choice = pick(&choices, rng).unwrap();
         match choice {
             0 => CreateUser::arbitrary(rng, context).into(),
@@ -61,6 +64,7 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
             7 => AttachValue::arbitrary_from(rng, context, (entries, attributes)).into(),
             8 => DeleteAttributeValue::arbitrary_from(rng, context, (entries, attributes)).into(),
             9 => UpdateAttribute::arbitrary_from(rng, context, attributes).into(),
+            10 => UpdateEntry::arbitrary_from(rng, context, entries).into(),
             _ => unreachable!(),
         }
     }
@@ -207,6 +211,21 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for DeleteAttributeValue {
             actor_id: entry.owner_id,
             entry_id: entry.id,
             attribute_id: attribute.id,
+        }
+    }
+}
+
+impl ArbitraryFrom<&[Entry]> for UpdateEntry {
+    fn arbitrary_from<R: Rng, C: GenerationContext>(
+        rng: &mut R,
+        _context: &C,
+        entries: &[Entry],
+    ) -> Self {
+        let entry = pick(entries, rng).expect("entries must not be empty");
+        UpdateEntry {
+            actor_id: entry.owner_id,
+            entry_id: entry.id,
+            change: EntryChange::SetIsSequence(rng.random_bool(0.5)),
         }
     }
 }

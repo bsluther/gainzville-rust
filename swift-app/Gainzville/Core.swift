@@ -127,6 +127,13 @@ class ForestViewModel: ObservableObject {
         core?.forestChildren(parentId: parentId) ?? []
     }
 
+    /// The root template entry for an activity, read from the same forest cache
+    /// the log uses. Backs activity-template editing in the library.
+    func templateRoot(activityId: String) -> Entry? {
+        _ = roots  // establish a SwiftUI dependency so views re-render on change
+        return core?.forestActivityTemplateRoot(activityId: activityId)
+    }
+
     func wouldCreateCycle(entryId: String, proposedParentId: String) -> Bool {
         _ = roots
         return core?.forestWouldCreateCycle(entryId: entryId, proposedParentId: proposedParentId) ?? false
@@ -240,7 +247,10 @@ class ForestViewModel: ObservableObject {
                 ownerId: SYSTEM_ACTOR_ID,
                 name: name,
                 position: position,
-                isTemplate: false,
+                // A child of a template is itself a template entry; a child of a
+                // log entry is a log entry. Mismatched template/log nesting is
+                // rejected by move_entry, so inherit the parent's flag.
+                isTemplate: parent.isTemplate,
                 displayAsSets: false,
                 isSequence: isSequence,
                 isComplete: false,
@@ -263,6 +273,18 @@ class ForestViewModel: ObservableObject {
         try? core.runAction(action: .deleteEntryRecursive(DeleteEntryRecursive(
             actorId: SYSTEM_ACTOR_ID,
             entryId: entry.id
+        )))
+    }
+
+    /// Toggle an entry between sequence and scalar. Converting a sequence to a
+    /// scalar deletes its children (enforced in core); the UI should eventually
+    /// confirm this destructive action.
+    func setIsSequence(entryId: String, isSequence: Bool) {
+        guard let core else { return }
+        try? core.runAction(action: .updateEntry(UpdateEntry(
+            actorId: SYSTEM_ACTOR_ID,
+            entryId: entryId,
+            change: .setIsSequence(isSequence)
         )))
     }
 }

@@ -3,9 +3,9 @@ use fractional_index::FractionalIndex;
 use gv_core::{
     actions::{
         Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateUser, CreateValue, DeleteAttributeValue, DeleteEntryRecursive, MassChange, MoveEntry,
-        NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntryCompletion,
-        ValueField,
+        CreateUser, CreateValue, DeleteAttributeValue, DeleteEntryRecursive, EntryChange,
+        MassChange, MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue,
+        UpdateEntry, UpdateEntryCompletion, ValueField,
     },
     models::{
         activity::{Activity, ActivityName},
@@ -571,6 +571,18 @@ pub struct UpdateAttribute {
 }
 
 #[uniffi::remote(Enum)]
+pub enum EntryChange {
+    SetIsSequence(bool),
+}
+
+#[uniffi::remote(Record)]
+pub struct UpdateEntry {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub change: EntryChange,
+}
+
+#[uniffi::remote(Enum)]
 pub enum Action {
     CreateUser(CreateUser),
     CreateActivity(CreateActivity),
@@ -584,4 +596,5 @@ pub enum Action {
     UpdateEntryCompletion(UpdateEntryCompletion),
     UpdateAttributeValue(UpdateAttributeValue),
     UpdateAttribute(UpdateAttribute),
+    UpdateEntry(UpdateEntry),
 }

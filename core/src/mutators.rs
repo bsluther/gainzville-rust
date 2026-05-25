@@ -4,9 +4,9 @@ use uuid::Uuid;
 use crate::{
     actions::{
         Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateUser, CreateValue, DeleteAttributeValue, DeleteEntryRecursive, MassChange, MoveEntry,
-        NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntryCompletion,
-        ValueField,
+        CreateUser, CreateValue, DeleteAttributeValue, DeleteEntryRecursive, EntryChange,
+        MassChange, MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue,
+        UpdateEntry, UpdateEntryCompletion, ValueField,
     },
     delta::{AnyDelta, Delta},
     error::{DomainError, Result, ValidationError},
@@ -36,6 +36,18 @@ pub struct Mutation {
     pub timestamp: DateTime<Utc>,
     pub action: Action,
     pub changes: Vec<AnyDelta>,
+}
+
+/// Template entries live "outside the timeline": they may carry a duration but
+/// never a start or end time. Shared by `create_entry` and `move_entry` so the
+/// invariant is enforced on every write path that sets a template's temporal.
+fn validate_template_temporal(is_template: bool, temporal: &crate::models::entry::Temporal) -> Result<()> {
+    if is_template && (temporal.start().is_some() || temporal.end().is_some()) {
+        return Err(DomainError::Consistency(
+            "template entries cannot have a start or end time (duration only)".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 pub async fn create_user(
@@ -173,6 +185,26 @@ pub async fn create_entry(
         }
     };
 
+    // A child must match its parent's template/log kind — a template tree and a
+    // log tree never mix. Enforced here (not just in move_entry) so no caller
+    // can create a mismatched child that would then fail to move.
+    if let Some(position) = &action.entry.position {
+        if let Some(parent) = executor
+            .execute(FindEntryById {
+                entry_id: position.parent_id,
+            })
+            .await?
+        {
+            if parent.is_template != action.entry.is_template {
+                return Err(DomainError::Consistency(
+                    "child entry must match its parent's template/log kind".to_string(),
+                ));
+            }
+        }
+    }
+
+    validate_template_temporal(action.entry.is_template, &action.entry.temporal)?;
+
     let insert_entry = Delta::Insert {
         new: action.entry.clone(),
     };
@@ -242,14 +274,18 @@ pub async fn move_entry(
                 "log entry cannot be a child of a template entry".to_string(),
             ));
         }
-    } else {
-        // Moving to root, check that start or end time is defined.
+    } else if !entry.is_template {
+        // Log entries at root must be placed on the timeline; templates are
+        // exempt (they live outside the timeline).
         if action.temporal.start().is_none() && action.temporal.end().is_none() {
             return Err(DomainError::Consistency(
                 "root entry must have defined start or end time".to_string(),
             ));
         }
     }
+
+    // Template entries never carry a start or end, root or child.
+    validate_template_temporal(entry.is_template, &action.temporal)?;
 
     let update_delta = entry
         .update()
@@ -758,5 +794,78 @@ pub async fn update_attribute(
         timestamp: Utc::now(),
         action: Action::UpdateAttribute(action),
         changes: vec![Delta::<crate::models::attribute::Attribute>::Update { old, new }.into()],
+    })
+}
+
+/// Update an entry's structural/metadata fields (currently `is_sequence`).
+/// Converting a sequence to a scalar deletes all descendants and their values —
+/// a scalar cannot contain children. Position/temporal are not touched here;
+/// they go through `move_entry`.
+pub async fn update_entry(
+    executor: &mut impl AnyQueryExecutor,
+    action: UpdateEntry,
+) -> Result<Mutation> {
+    let Some(entry) = executor
+        .execute(FindEntryById {
+            entry_id: action.entry_id,
+        })
+        .await?
+    else {
+        return Err(DomainError::Consistency("entry does not exist".to_string()));
+    };
+
+    if action.actor_id != entry.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "actor '{}' is not the owner of entry '{}'",
+            action.actor_id, entry.id
+        )));
+    }
+
+    let mut deltas: Vec<AnyDelta> = vec![];
+
+    match &action.change {
+        EntryChange::SetIsSequence(is_sequence) => {
+            if entry.is_sequence == *is_sequence {
+                // No-op.
+                return Ok(Mutation {
+                    id: Uuid::new_v4(),
+                    timestamp: Utc::now(),
+                    action: Action::UpdateEntry(action),
+                    changes: vec![],
+                });
+            }
+
+            // Converting sequence -> scalar: a scalar can't hold children, so
+            // delete the entire descendant subtree (and its attribute values).
+            if !is_sequence {
+                let subtree = executor
+                    .execute(FindDescendants {
+                        entry_id: action.entry_id,
+                    })
+                    .await?;
+                let descendants: Vec<_> = subtree
+                    .into_iter()
+                    .filter(|e| e.id != action.entry_id)
+                    .collect();
+                let descendant_ids: Vec<Uuid> = descendants.iter().map(|e| e.id).collect();
+                let values = executor
+                    .execute(FindValuesForEntries {
+                        entry_ids: descendant_ids,
+                    })
+                    .await?;
+                deltas.extend(descendants.into_iter().map(|e| Delta::Delete { old: e }.into()));
+                deltas.extend(values.into_iter().map(|v| Delta::Delete { old: v }.into()));
+            }
+
+            let update = entry.update().is_sequence(*is_sequence).to_delta();
+            deltas.push(update.into());
+        }
+    }
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: Action::UpdateEntry(action),
+        changes: deltas,
     })
 }

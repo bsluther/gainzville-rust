@@ -21,6 +21,7 @@ pub enum Action {
     UpdateEntryCompletion(UpdateEntryCompletion),
     UpdateAttributeValue(UpdateAttributeValue),
     UpdateAttribute(UpdateAttribute),
+    UpdateEntry(UpdateEntry),
 }
 
 impl From<CreateUser> for Action {
@@ -268,4 +269,29 @@ pub enum MassChange {
     /// Replace the default unit set. Not additive-constrained — changing units
     /// doesn't invalidate existing values — so add/remove are both allowed.
     SetDefaultUnits(Vec<MassUnit>),
+}
+
+/// Update an entry's structural/metadata fields. Deliberately excludes
+/// `position` and `temporal` — those are owned by `MoveEntry`, which enforces
+/// their cycle/parent/temporal constraints atomically. Completion has its own
+/// action (`UpdateEntryCompletion`) for now.
+#[derive(Debug, Clone)]
+pub struct UpdateEntry {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub change: EntryChange,
+}
+
+impl From<UpdateEntry> for Action {
+    fn from(value: UpdateEntry) -> Self {
+        Action::UpdateEntry(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum EntryChange {
+    /// Toggle sequence/scalar. Becoming a scalar deletes all descendants (a
+    /// scalar cannot contain children).
+    SetIsSequence(bool),
+    // Future: SetName(Option<String>), SetDisplayAsSets(bool), completion.
 }

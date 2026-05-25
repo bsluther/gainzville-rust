@@ -1,6 +1,29 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// Distinguishes the log from activity-template editing. EntryView and its
+// subviews render identically except at a few chrome points (temporal editor,
+// completion checkbox, day-root drop). The context lives in the Environment so
+// it propagates automatically through the recursive ChildrenSection — template
+// children inherit `.template` without threading a parameter through every init.
+enum EntryContext {
+    case log
+    case template
+
+    var isTemplate: Bool { self == .template }
+}
+
+private struct EntryContextKey: EnvironmentKey {
+    static let defaultValue: EntryContext = .log
+}
+
+extension EnvironmentValues {
+    var entryContext: EntryContext {
+        get { self[EntryContextKey.self] }
+        set { self[EntryContextKey.self] = newValue }
+    }
+}
+
 // We take the full Entry rather than just an id even though `vm.entryJoin`
 // will provide its own copy of the entry. The forest gives us the entry as
 // the unit of iteration, and rendering needs structural/temporal fields
@@ -106,6 +129,7 @@ private struct EntryHeader: View {
     @State private var isMenuPresented = false
     @EnvironmentObject private var forestVM: ForestViewModel
     @EnvironmentObject private var dragState: DragState
+    @Environment(\.entryContext) private var entryContext
 
     var body: some View {
         HStack(spacing: 0) {
@@ -120,7 +144,9 @@ private struct EntryHeader: View {
             }
             .buttonStyle(.plain)
 
-            if entry.isSequence || isExpanded {
+            // Templates never show the completion checkbox (they can't be
+            // completed); show the menu affordance instead.
+            if entry.isSequence || isExpanded || entryContext.isTemplate {
                 Button { isMenuPresented = true } label: {
                     Image(systemName: "ellipsis")
                         .rotationEffect(.degrees(90))
@@ -231,6 +257,7 @@ private struct ChildrenSection: View {
 private struct EntryFooter: View {
     let entry: Entry
     @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.entryContext) private var entryContext
     @State private var isCreatePresented = false
 
     var body: some View {
@@ -258,7 +285,7 @@ private struct EntryFooter: View {
                     isCreatePresented = false
                 }
             }
-        } else {
+        } else if !entryContext.isTemplate {
             HStack {
                 Spacer()
                 FillCheckbox(checked: entry.isComplete, onToggle: {

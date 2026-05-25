@@ -4,17 +4,19 @@ use gv_sql::sqlite::SqliteQueryExecutor;
 use gv_core::{
     SYSTEM_ACTOR_ID,
     actions::{
-        AttachValue, AttributeChange, CreateAttribute, CreateEntry, CreateValue,
-        DeleteAttributeValue, MassChange, NumericChange, SelectChange, UpdateAttribute,
+        AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry, CreateValue,
+        DeleteAttributeValue, EntryChange, MassChange, MoveEntry, NumericChange, SelectChange,
+        UpdateAttribute, UpdateEntry,
     },
     models::{
+        activity::{Activity, ActivityName},
         attribute::{
             Attribute, AttributeConfig, AttributeValue, MassConfig, MassMeasurement, MassUnit,
             MassValue, NumericConfig, NumericValue, SelectConfig, Value,
         },
         entry::{Entry, Position, Temporal},
     },
-    queries::{FindAttributeById, FindDescendants, FindValueByKey},
+    queries::{FindAttributeById, FindDescendants, FindEntryById, FindValueByKey},
     query_executor::QueryExecutor,
 };
 use sqlx::SqlitePool;
@@ -743,4 +745,204 @@ async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
         read_attribute(&sqlite_client, mass.id).await.expect_mass().unwrap().default_units,
         vec![MassUnit::Kilogram, MassUnit::Pound, MassUnit::Gram]
     );
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_template_temporal_rules(pool: SqlitePool) {
+    let sqlite_client = SqliteClient::from_pool(pool);
+
+    let activity = Activity {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: ActivityName::parse("Squat".to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    sqlite_client
+        .run_action(CreateActivity::from(activity.clone()).into())
+        .await
+        .unwrap();
+
+    let template_entry = |temporal: Temporal| Entry {
+        id: Uuid::new_v4(),
+        activity_id: Some(activity.id),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: None,
+        position: None,
+        is_template: true,
+        display_as_sets: false,
+        is_sequence: false,
+        is_complete: false,
+        temporal,
+    };
+
+    // create_entry: a template entry with a start time is rejected...
+    assert!(
+        sqlite_client
+            .run_action(
+                CreateEntry::from(template_entry(Temporal::Start { start: sqlx::types::chrono::Utc::now() }))
+                    .into(),
+            )
+            .await
+            .is_err(),
+        "template entry with a start time must be rejected"
+    );
+    // ...but duration-only and None are allowed.
+    sqlite_client
+        .run_action(CreateEntry::from(template_entry(Temporal::Duration { duration: 60_000 })).into())
+        .await
+        .unwrap();
+    let none_template = template_entry(Temporal::None);
+    let none_template_id = none_template.id;
+    sqlite_client
+        .run_action(CreateEntry::from(none_template.clone()).into())
+        .await
+        .unwrap();
+
+    // move_entry: a template root with no start/end is allowed (templates are
+    // exempt from the log-root "must have start or end" rule).
+    sqlite_client
+        .run_action(
+            MoveEntry {
+                actor_id: SYSTEM_ACTOR_ID,
+                entry_id: none_template_id,
+                position: None,
+                temporal: Temporal::None,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // move_entry: giving a template a start time is rejected.
+    assert!(
+        sqlite_client
+            .run_action(
+                MoveEntry {
+                    actor_id: SYSTEM_ACTOR_ID,
+                    entry_id: none_template_id,
+                    position: None,
+                    temporal: Temporal::Start { start: sqlx::types::chrono::Utc::now() },
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "moving a template to a start-timed temporal must be rejected"
+    );
+
+    // Sanity: a log entry at root with no start/end is still rejected.
+    let log_root = Entry {
+        id: Uuid::new_v4(),
+        activity_id: None,
+        owner_id: SYSTEM_ACTOR_ID,
+        name: None,
+        position: None,
+        is_template: false,
+        display_as_sets: false,
+        is_sequence: false,
+        is_complete: false,
+        temporal: Temporal::Start { start: sqlx::types::chrono::Utc::now() },
+    };
+    sqlite_client
+        .run_action(CreateEntry::from(log_root.clone()).into())
+        .await
+        .unwrap();
+    assert!(
+        sqlite_client
+            .run_action(
+                MoveEntry {
+                    actor_id: SYSTEM_ACTOR_ID,
+                    entry_id: log_root.id,
+                    position: None,
+                    temporal: Temporal::None,
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "log root with no start/end must still be rejected"
+    );
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_update_entry_set_is_sequence(pool: SqlitePool) {
+    let sqlite_client = SqliteClient::from_pool(pool);
+
+    // A sequence root with one child.
+    let parent = Entry {
+        id: Uuid::new_v4(),
+        activity_id: None,
+        name: None,
+        owner_id: SYSTEM_ACTOR_ID,
+        position: None,
+        display_as_sets: false,
+        is_sequence: true,
+        is_complete: false,
+        is_template: false,
+        temporal: Temporal::Start { start: sqlx::types::chrono::Utc::now() },
+    };
+    let child = Entry {
+        id: Uuid::new_v4(),
+        activity_id: None,
+        name: None,
+        owner_id: SYSTEM_ACTOR_ID,
+        position: Some(Position {
+            parent_id: parent.id,
+            frac_index: FractionalIndex::default(),
+        }),
+        display_as_sets: false,
+        is_sequence: false,
+        is_complete: false,
+        is_template: false,
+        temporal: Temporal::None,
+    };
+    sqlite_client
+        .run_action(CreateEntry::from(parent.clone()).into())
+        .await
+        .unwrap();
+    sqlite_client
+        .run_action(CreateEntry::from(child.clone()).into())
+        .await
+        .unwrap();
+
+    async fn find(client: &SqliteClient, id: Uuid) -> Option<Entry> {
+        let mut conn = client.pool.acquire().await.unwrap();
+        SqliteQueryExecutor::new(&mut *conn)
+            .execute(FindEntryById { entry_id: id })
+            .await
+            .unwrap()
+    }
+
+    // Converting the sequence to a scalar deletes its children.
+    sqlite_client
+        .run_action(
+            UpdateEntry {
+                actor_id: SYSTEM_ACTOR_ID,
+                entry_id: parent.id,
+                change: EntryChange::SetIsSequence(false),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(find(&sqlite_client, parent.id).await.map(|e| e.is_sequence), Some(false));
+    assert!(
+        find(&sqlite_client, child.id).await.is_none(),
+        "child must be deleted on scalar conversion"
+    );
+
+    // Converting back to a sequence is allowed.
+    sqlite_client
+        .run_action(
+            UpdateEntry {
+                actor_id: SYSTEM_ACTOR_ID,
+                entry_id: parent.id,
+                change: EntryChange::SetIsSequence(true),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(find(&sqlite_client, parent.id).await.map(|e| e.is_sequence), Some(true));
 }
