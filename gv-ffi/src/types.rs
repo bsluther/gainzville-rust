@@ -2,9 +2,10 @@ use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
 use gv_core::{
     actions::{
-        Action, AttachValue, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
-        DeleteAttributeValue, DeleteEntryRecursive, MoveEntry, UpdateAttributeValue,
-        UpdateEntryCompletion, ValueField,
+        Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
+        CreateUser, CreateValue, DeleteAttributeValue, DeleteEntryRecursive, MassChange, MoveEntry,
+        NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntryCompletion,
+        ValueField,
     },
     models::{
         activity::{Activity, ActivityName},
@@ -539,6 +540,37 @@ pub struct DeleteAttributeValue {
 }
 
 #[uniffi::remote(Enum)]
+pub enum NumericChange {
+    SetDefault(Option<f64>),
+}
+
+#[uniffi::remote(Enum)]
+pub enum SelectChange {
+    SetDefault(Option<String>),
+}
+
+#[uniffi::remote(Enum)]
+pub enum MassChange {
+    SetDefaultUnits(Vec<MassUnit>),
+}
+
+#[uniffi::remote(Enum)]
+pub enum AttributeChange {
+    SetName(String),
+    SetDescription(Option<String>),
+    Numeric(NumericChange),
+    Select(SelectChange),
+    Mass(MassChange),
+}
+
+#[uniffi::remote(Record)]
+pub struct UpdateAttribute {
+    pub actor_id: Uuid,
+    pub attribute_id: Uuid,
+    pub change: AttributeChange,
+}
+
+#[uniffi::remote(Enum)]
 pub enum Action {
     CreateUser(CreateUser),
     CreateActivity(CreateActivity),
@@ -551,4 +583,5 @@ pub enum Action {
     MoveEntry(MoveEntry),
     UpdateEntryCompletion(UpdateEntryCompletion),
     UpdateAttributeValue(UpdateAttributeValue),
+    UpdateAttribute(UpdateAttribute),
 }

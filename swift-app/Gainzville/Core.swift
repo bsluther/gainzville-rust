@@ -299,6 +299,12 @@ class EntryViewModel: ObservableObject {
     }
 }
 
+// TODO: AttributesViewModel does not subscribe to DataChange.didChange, so the
+// library attribute list (AttributesListView) won't live-refresh when an
+// attribute is created or edited — it only reflects what was cached at subscribe
+// time. Wire a DataChange sink that calls refresh(from:) like EntryViewModel /
+// EditAttributesViewModel do. Surfaces once name/description editing lands (the
+// list shows those fields); not visible while only config defaults are editable.
 @MainActor
 class AttributesViewModel: ObservableObject {
     @Published var attributes: [Attribute] = []

@@ -50,6 +50,9 @@ impl PostgresServer {
             Action::UpdateAttributeValue(action) => {
                 mutators::update_attribute_value(&mut executor, action).await?
             }
+            Action::UpdateAttribute(action) => {
+                mutators::update_attribute(&mut executor, action).await?
+            }
         };
 
         // TODO: log mutation in this transaction.

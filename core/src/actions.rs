@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::models::{
     activity::Activity,
-    attribute::{Attribute, AttributeValue, Value},
+    attribute::{Attribute, AttributeValue, MassUnit, Value},
     entry::{Entry, Position, Temporal},
     user::User,
 };
@@ -20,6 +20,7 @@ pub enum Action {
     MoveEntry(MoveEntry),
     UpdateEntryCompletion(UpdateEntryCompletion),
     UpdateAttributeValue(UpdateAttributeValue),
+    UpdateAttribute(UpdateAttribute),
 }
 
 impl From<CreateUser> for Action {
@@ -217,9 +218,54 @@ pub struct DeleteAttributeValue {
     pub attribute_id: Uuid,
 }
 
+/// Update an attribute's config or metadata. The `change` enum captures the
+/// user's intent as a single edit; the mutator validates it against the
+/// attribute's current type and (for type-specific edits) its config. Mirrors
+/// the Numeric/Select/Mass grouping used by `AttributeConfig`/`AttributePair`.
 #[derive(Debug, Clone)]
 pub struct UpdateAttribute {
     pub actor_id: Uuid,
     pub attribute_id: Uuid,
-    pub attribute: Attribute,
+    pub change: AttributeChange,
+}
+
+impl From<UpdateAttribute> for Action {
+    fn from(value: UpdateAttribute) -> Self {
+        Action::UpdateAttribute(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum AttributeChange {
+    // Common to all attribute types, freely editable.
+    SetName(String),
+    SetDescription(Option<String>),
+    // Type-specific; the mutator rejects a variant whose type doesn't match the
+    // attribute's config.
+    Numeric(NumericChange),
+    Select(SelectChange),
+    Mass(MassChange),
+}
+
+#[derive(Debug, Clone)]
+pub enum NumericChange {
+    /// Set (or clear, with `None`) the default value. Must respect the config's
+    /// `integer`/`min`/`max` constraints.
+    SetDefault(Option<f64>),
+    // Future additive edits: RaiseMax, LowerMin, SetInteger.
+}
+
+#[derive(Debug, Clone)]
+pub enum SelectChange {
+    /// Set (or clear, with `None`) the default. A non-`None` default must be one
+    /// of the config's existing options.
+    SetDefault(Option<String>),
+    // Future additive edits: AddOption, RenameOption, SetOrdered.
+}
+
+#[derive(Debug, Clone)]
+pub enum MassChange {
+    /// Replace the default unit set. Not additive-constrained — changing units
+    /// doesn't invalidate existing values — so add/remove are both allowed.
+    SetDefaultUnits(Vec<MassUnit>),
 }

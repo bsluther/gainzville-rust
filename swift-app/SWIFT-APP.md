@@ -46,6 +46,7 @@ SourceKit LSP will show false "Cannot find type" errors for FFI types (`FfiEntry
 
 ## Future / Open Questions
 
+- **Attribute list not live**: `AttributesViewModel` (`Core.swift`) backing `AttributesListView` has no `DataChange.didChange` sink, so the library attribute list doesn't refresh when an attribute is created or edited — only the snapshot from subscribe time. Add a sink calling `refresh(from:)` (as `EntryViewModel`/`EditAttributesViewModel` do). Latent until name/description editing lands, since the list only shows fields not yet editable.
 - **Unset controls**: no UI yet to clear individual temporal values (start, end, duration).
 - **Inline duration field (macOS)**: current stepper popover is a placeholder; long-term goal is an inline `hh:mm:ss` text field with a custom formatter.
 - **Sync / offline**: the Swift app is read/write via FFI today; full offline-first sync behaviour is driven by the Rust `client` crate.

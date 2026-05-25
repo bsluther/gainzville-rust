@@ -103,6 +103,9 @@ impl SqliteClient {
             Action::UpdateAttributeValue(action) => {
                 mutators::update_attribute_value(&mut executor, action).await?
             }
+            Action::UpdateAttribute(action) => {
+                mutators::update_attribute(&mut executor, action).await?
+            }
         };
 
         // TODO: write this mutation into the local mutation log.

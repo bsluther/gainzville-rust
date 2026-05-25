@@ -3,16 +3,17 @@ use uuid::Uuid;
 
 use crate::{
     actions::{
-        Action, AttachValue, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
-        DeleteAttributeValue, DeleteEntryRecursive, MoveEntry, UpdateAttributeValue,
-        UpdateEntryCompletion, ValueField,
+        Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
+        CreateUser, CreateValue, DeleteAttributeValue, DeleteEntryRecursive, MassChange, MoveEntry,
+        NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntryCompletion,
+        ValueField,
     },
     delta::{AnyDelta, Delta},
-    error::{DomainError, Result},
+    error::{DomainError, Result, ValidationError},
     forest::Forest,
     models::{
         actor::{Actor, ActorKind},
-        attribute::Value,
+        attribute::{AttributeConfig, Value},
         user::User,
     },
     queries::{
@@ -636,5 +637,126 @@ pub async fn update_attribute_value(
         timestamp: Utc::now(),
         action: Action::UpdateAttributeValue(action),
         changes: vec![Delta::<Value>::Update { old, new }.into()],
+    })
+}
+
+/// Apply a single `AttributeChange` to an attribute. Common edits (name,
+/// description) are unconstrained; type-specific edits are rejected if the
+/// variant doesn't match the attribute's config type, and `Set*Default` edits
+/// are validated against the config (select option membership, numeric
+/// integer/min/max). A change that leaves the attribute unchanged is a no-op.
+pub async fn update_attribute(
+    executor: &mut impl AnyQueryExecutor,
+    action: UpdateAttribute,
+) -> Result<Mutation> {
+    let Some(old) = executor
+        .execute(FindAttributeById {
+            attribute_id: action.attribute_id,
+        })
+        .await?
+    else {
+        return Err(DomainError::Consistency(
+            "attribute does not exist".to_string(),
+        ));
+    };
+
+    // Only the owner can modify their attributes.
+    if action.actor_id != old.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "actor '{}' is not the owner of attribute '{}'",
+            action.actor_id, old.id
+        )));
+    }
+
+    let mut new = old.clone();
+    match &action.change {
+        AttributeChange::SetName(name) => new.name = name.clone(),
+        AttributeChange::SetDescription(description) => new.description = description.clone(),
+        AttributeChange::Numeric(change) => {
+            let AttributeConfig::Numeric(cfg) = &mut new.config else {
+                return Err(DomainError::AttributeMismatch);
+            };
+            match change {
+                NumericChange::SetDefault(default) => {
+                    if let Some(v) = default {
+                        if cfg.integer && (!v.is_finite() || v.trunc() != *v) {
+                            return Err(ValidationError::InvalidNumericConfig(format!(
+                                "default ({v}) must be an integer"
+                            ))
+                            .into());
+                        }
+                        if let Some(min) = cfg.min {
+                            if *v < min {
+                                return Err(ValidationError::InvalidNumericConfig(format!(
+                                    "default ({v}) is below min ({min})"
+                                ))
+                                .into());
+                            }
+                        }
+                        if let Some(max) = cfg.max {
+                            if *v > max {
+                                return Err(ValidationError::InvalidNumericConfig(format!(
+                                    "default ({v}) is above max ({max})"
+                                ))
+                                .into());
+                            }
+                        }
+                    }
+                    cfg.default = *default;
+                }
+            }
+        }
+        AttributeChange::Select(change) => {
+            let AttributeConfig::Select(cfg) = &mut new.config else {
+                return Err(DomainError::AttributeMismatch);
+            };
+            match change {
+                SelectChange::SetDefault(default) => {
+                    if let Some(s) = default {
+                        if !cfg.options.contains(s) {
+                            return Err(ValidationError::Other(format!(
+                                "default '{s}' is not one of the select options"
+                            ))
+                            .into());
+                        }
+                    }
+                    cfg.default = default.clone();
+                }
+            }
+        }
+        AttributeChange::Mass(change) => {
+            let AttributeConfig::Mass(cfg) = &mut new.config else {
+                return Err(DomainError::AttributeMismatch);
+            };
+            match change {
+                MassChange::SetDefaultUnits(units) => {
+                    // Dedupe while preserving order.
+                    let mut deduped = Vec::with_capacity(units.len());
+                    for unit in units {
+                        if !deduped.contains(unit) {
+                            deduped.push(unit.clone());
+                        }
+                    }
+                    cfg.default_units = deduped;
+                }
+            }
+        }
+    }
+
+    // No-op if the change left the attribute unchanged.
+    if new == old {
+        return Ok(Mutation {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            action: Action::UpdateAttribute(action),
+            changes: vec![],
+        });
+    }
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: Action::UpdateAttribute(action),
+        changes: vec![Delta::<crate::models::attribute::Attribute>::Update { old, new }.into()],
     })
 }

@@ -3523,6 +3523,64 @@ public func FfiConverterTypeSelectConfig_lower(_ value: SelectConfig) -> RustBuf
 }
 
 
+public struct UpdateAttribute: Equatable, Hashable {
+    public var actorId: Uuid
+    public var attributeId: Uuid
+    public var change: AttributeChange
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(actorId: Uuid, attributeId: Uuid, change: AttributeChange) {
+        self.actorId = actorId
+        self.attributeId = attributeId
+        self.change = change
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension UpdateAttribute: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUpdateAttribute: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UpdateAttribute {
+        return
+            try UpdateAttribute(
+                actorId: FfiConverterTypeUuid.read(from: &buf), 
+                attributeId: FfiConverterTypeUuid.read(from: &buf), 
+                change: FfiConverterTypeAttributeChange.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UpdateAttribute, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.actorId, into: &buf)
+        FfiConverterTypeUuid.write(value.attributeId, into: &buf)
+        FfiConverterTypeAttributeChange.write(value.change, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUpdateAttribute_lift(_ buf: RustBuffer) throws -> UpdateAttribute {
+    return try FfiConverterTypeUpdateAttribute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUpdateAttribute_lower(_ value: UpdateAttribute) -> RustBuffer {
+    return FfiConverterTypeUpdateAttribute.lower(value)
+}
+
+
 public struct UpdateAttributeValue: Equatable, Hashable {
     public var actorId: Uuid
     public var entryId: Uuid
@@ -3801,6 +3859,8 @@ public enum Action: Equatable, Hashable {
     )
     case updateAttributeValue(UpdateAttributeValue
     )
+    case updateAttribute(UpdateAttribute
+    )
 
 
 
@@ -3853,6 +3913,9 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         )
         
         case 11: return .updateAttributeValue(try FfiConverterTypeUpdateAttributeValue.read(from: &buf)
+        )
+        
+        case 12: return .updateAttribute(try FfiConverterTypeUpdateAttribute.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -3916,6 +3979,11 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         case let .updateAttributeValue(v1):
             writeInt(&buf, Int32(11))
             FfiConverterTypeUpdateAttributeValue.write(v1, into: &buf)
+            
+        
+        case let .updateAttribute(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterTypeUpdateAttribute.write(v1, into: &buf)
             
         }
     }
@@ -4426,6 +4494,109 @@ public func FfiConverterTypeAnyQueryResponse_lower(_ value: AnyQueryResponse) ->
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum AttributeChange: Equatable, Hashable {
+    
+    case setName(String
+    )
+    case setDescription(String?
+    )
+    case numeric(NumericChange
+    )
+    case select(SelectChange
+    )
+    case mass(MassChange
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AttributeChange: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAttributeChange: FfiConverterRustBuffer {
+    typealias SwiftType = AttributeChange
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AttributeChange {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .setName(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .setDescription(try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 3: return .numeric(try FfiConverterTypeNumericChange.read(from: &buf)
+        )
+        
+        case 4: return .select(try FfiConverterTypeSelectChange.read(from: &buf)
+        )
+        
+        case 5: return .mass(try FfiConverterTypeMassChange.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AttributeChange, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .setName(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .setDescription(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterOptionString.write(v1, into: &buf)
+            
+        
+        case let .numeric(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeNumericChange.write(v1, into: &buf)
+            
+        
+        case let .select(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeSelectChange.write(v1, into: &buf)
+            
+        
+        case let .mass(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeMassChange.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAttributeChange_lift(_ buf: RustBuffer) throws -> AttributeChange {
+    return try FfiConverterTypeAttributeChange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAttributeChange_lower(_ value: AttributeChange) -> RustBuffer {
+    return FfiConverterTypeAttributeChange.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum AttributeConfig: Equatable, Hashable {
     
     case numeric(NumericConfig
@@ -4749,6 +4920,69 @@ public func FfiConverterTypeFfiError_lower(_ value: FfiError) -> RustBuffer {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum MassChange: Equatable, Hashable {
+    
+    case setDefaultUnits([MassUnit]
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MassChange: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMassChange: FfiConverterRustBuffer {
+    typealias SwiftType = MassChange
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MassChange {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .setDefaultUnits(try FfiConverterSequenceTypeMassUnit.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MassChange, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .setDefaultUnits(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterSequenceTypeMassUnit.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMassChange_lift(_ buf: RustBuffer) throws -> MassChange {
+    return try FfiConverterTypeMassChange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMassChange_lower(_ value: MassChange) -> RustBuffer {
+    return FfiConverterTypeMassChange.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum MassUnit: Equatable, Hashable {
     
     case gram
@@ -4897,6 +5131,69 @@ public func FfiConverterTypeMassValue_lower(_ value: MassValue) -> RustBuffer {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum NumericChange: Equatable, Hashable {
+    
+    case setDefault(Double?
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NumericChange: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNumericChange: FfiConverterRustBuffer {
+    typealias SwiftType = NumericChange
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NumericChange {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .setDefault(try FfiConverterOptionDouble.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NumericChange, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .setDefault(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterOptionDouble.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNumericChange_lift(_ buf: RustBuffer) throws -> NumericChange {
+    return try FfiConverterTypeNumericChange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNumericChange_lower(_ value: NumericChange) -> RustBuffer {
+    return FfiConverterTypeNumericChange.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum NumericValue: Equatable, Hashable {
     
     case exact(Double
@@ -4965,6 +5262,69 @@ public func FfiConverterTypeNumericValue_lift(_ buf: RustBuffer) throws -> Numer
 #endif
 public func FfiConverterTypeNumericValue_lower(_ value: NumericValue) -> RustBuffer {
     return FfiConverterTypeNumericValue.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SelectChange: Equatable, Hashable {
+    
+    case setDefault(String?
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SelectChange: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSelectChange: FfiConverterRustBuffer {
+    typealias SwiftType = SelectChange
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SelectChange {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .setDefault(try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SelectChange, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .setDefault(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterOptionString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSelectChange_lift(_ buf: RustBuffer) throws -> SelectChange {
+    return try FfiConverterTypeSelectChange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSelectChange_lower(_ value: SelectChange) -> RustBuffer {
+    return FfiConverterTypeSelectChange.lower(value)
 }
 
 

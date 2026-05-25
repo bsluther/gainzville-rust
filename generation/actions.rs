@@ -1,15 +1,16 @@
 use rand::Rng;
 use uuid::Uuid;
 
-use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick};
+use crate::{Arbitrary, ArbitraryFrom, GenerationContext, gen_random_text, maybe, pick};
 use gv_core::{
     actions::{
-        Action, AttachValue, CreateActivity, CreateAttribute, CreateEntry, CreateUser, CreateValue,
-        DeleteAttributeValue, MoveEntry, UpdateEntryCompletion,
+        Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
+        CreateUser, CreateValue, DeleteAttributeValue, MassChange, MoveEntry, NumericChange,
+        SelectChange, UpdateAttribute, UpdateEntryCompletion,
     },
     models::{
         activity::Activity,
-        attribute::{Attribute, Value},
+        attribute::{Attribute, AttributeConfig, MassUnit, Value},
         entry::{Entry, Position, Temporal},
         user::User,
     },
@@ -45,6 +46,9 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
                 choices.push(8);
             }
         }
+        if !attributes.is_empty() {
+            choices.push(9);
+        }
         let choice = pick(&choices, rng).unwrap();
         match choice {
             0 => CreateUser::arbitrary(rng, context).into(),
@@ -56,6 +60,7 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
             6 => UpdateEntryCompletion::arbitrary_from(rng, context, entries).into(),
             7 => AttachValue::arbitrary_from(rng, context, (entries, attributes)).into(),
             8 => DeleteAttributeValue::arbitrary_from(rng, context, (entries, attributes)).into(),
+            9 => UpdateAttribute::arbitrary_from(rng, context, attributes).into(),
             _ => unreachable!(),
         }
     }
@@ -202,6 +207,52 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for DeleteAttributeValue {
             actor_id: entry.owner_id,
             entry_id: entry.id,
             attribute_id: attribute.id,
+        }
+    }
+}
+
+impl ArbitraryFrom<&[Attribute]> for UpdateAttribute {
+    fn arbitrary_from<R: Rng, C: GenerationContext>(
+        rng: &mut R,
+        _context: &C,
+        attributes: &[Attribute],
+    ) -> Self {
+        let attribute = pick(attributes, rng).expect("attributes must not be empty");
+        // Common edits are always valid; type-specific edits generate values
+        // that satisfy the config so the mutator accepts them.
+        let change = match rng.random_range(0..3) {
+            0 => AttributeChange::SetName(gen_random_text(rng, 1..3)),
+            1 => AttributeChange::SetDescription(maybe(rng, 0.5, |rng| gen_random_text(rng, 2..6))),
+            _ => match &attribute.config {
+                AttributeConfig::Numeric(cfg) => {
+                    let default = maybe(rng, 0.7, |rng| {
+                        let lo = cfg.min.unwrap_or(0.0);
+                        let hi = cfg.max.unwrap_or(lo + 100.0);
+                        let v = if hi > lo { rng.random_range(lo..=hi) } else { lo };
+                        if cfg.integer { v.round() } else { v }
+                    });
+                    AttributeChange::Numeric(NumericChange::SetDefault(default))
+                }
+                AttributeConfig::Select(cfg) => {
+                    let default = if cfg.options.is_empty() {
+                        None
+                    } else {
+                        maybe(rng, 0.7, |rng| pick(&cfg.options[..], rng).unwrap().clone())
+                    };
+                    AttributeChange::Select(SelectChange::SetDefault(default))
+                }
+                AttributeConfig::Mass(_) => {
+                    let all = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
+                    let units: Vec<MassUnit> =
+                        all.iter().filter(|_| rng.random_bool(0.5)).cloned().collect();
+                    AttributeChange::Mass(MassChange::SetDefaultUnits(units))
+                }
+            },
+        };
+        UpdateAttribute {
+            actor_id: attribute.owner_id,
+            attribute_id: attribute.id,
+            change,
         }
     }
 }

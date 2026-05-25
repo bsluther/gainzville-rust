@@ -3,11 +3,14 @@ use gv_client::client::SqliteClient;
 use gv_sql::sqlite::SqliteQueryExecutor;
 use gv_core::{
     SYSTEM_ACTOR_ID,
-    actions::{AttachValue, CreateAttribute, CreateEntry, CreateValue, DeleteAttributeValue},
+    actions::{
+        AttachValue, AttributeChange, CreateAttribute, CreateEntry, CreateValue,
+        DeleteAttributeValue, MassChange, NumericChange, SelectChange, UpdateAttribute,
+    },
     models::{
         attribute::{
             Attribute, AttributeConfig, AttributeValue, MassConfig, MassMeasurement, MassUnit,
-            MassValue, NumericConfig, NumericValue, Value,
+            MassValue, NumericConfig, NumericValue, SelectConfig, Value,
         },
         entry::{Entry, Position, Temporal},
     },
@@ -472,4 +475,272 @@ async fn test_create_value_is_noop_when_value_exists(pool: SqlitePool) {
         }
         other => panic!("expected Numeric Exact, got {:?}", other),
     }
+}
+
+async fn read_attribute(client: &SqliteClient, id: Uuid) -> Attribute {
+    let mut connection = client.pool.acquire().await.unwrap();
+    SqliteQueryExecutor::new(&mut *connection)
+        .execute(FindAttributeById { attribute_id: id })
+        .await
+        .unwrap()
+        .expect("attribute should exist")
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_update_attribute_defaults(pool: SqlitePool) {
+    let sqlite_client = SqliteClient::from_pool(pool);
+
+    // --- Numeric: set default within bounds; reject out-of-bounds and non-integer.
+    let numeric = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: "Reps".to_string(),
+        description: None,
+        config: AttributeConfig::Numeric(NumericConfig {
+            min: Some(0.0),
+            max: Some(20.0),
+            integer: true,
+            default: None,
+        }),
+    };
+    sqlite_client
+        .run_action(CreateAttribute::from(numeric.clone()).into())
+        .await
+        .unwrap();
+
+    sqlite_client
+        .run_action(
+            UpdateAttribute {
+                actor_id: SYSTEM_ACTOR_ID,
+                attribute_id: numeric.id,
+                change: AttributeChange::Numeric(NumericChange::SetDefault(Some(8.0))),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        read_attribute(&sqlite_client, numeric.id).await.as_numeric().unwrap().default,
+        Some(8.0)
+    );
+
+    // Above max -> rejected.
+    assert!(
+        sqlite_client
+            .run_action(
+                UpdateAttribute {
+                    actor_id: SYSTEM_ACTOR_ID,
+                    attribute_id: numeric.id,
+                    change: AttributeChange::Numeric(NumericChange::SetDefault(Some(50.0))),
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "default above max must be rejected"
+    );
+    // Non-integer on an integer attribute -> rejected.
+    assert!(
+        sqlite_client
+            .run_action(
+                UpdateAttribute {
+                    actor_id: SYSTEM_ACTOR_ID,
+                    attribute_id: numeric.id,
+                    change: AttributeChange::Numeric(NumericChange::SetDefault(Some(3.5))),
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "non-integer default on integer attribute must be rejected"
+    );
+    // Default unchanged after rejected updates.
+    assert_eq!(
+        read_attribute(&sqlite_client, numeric.id).await.as_numeric().unwrap().default,
+        Some(8.0)
+    );
+
+    // --- Select: set default to an existing option; reject unknown option.
+    let select = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: "Outcome".to_string(),
+        description: None,
+        config: AttributeConfig::Select(SelectConfig {
+            options: vec!["Win".to_string(), "Loss".to_string()],
+            ordered: false,
+            default: None,
+        }),
+    };
+    sqlite_client
+        .run_action(CreateAttribute::from(select.clone()).into())
+        .await
+        .unwrap();
+    sqlite_client
+        .run_action(
+            UpdateAttribute {
+                actor_id: SYSTEM_ACTOR_ID,
+                attribute_id: select.id,
+                change: AttributeChange::Select(SelectChange::SetDefault(Some("Win".to_string()))),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        read_attribute(&sqlite_client, select.id).await.expect_select().unwrap().default,
+        Some("Win".to_string())
+    );
+    assert!(
+        sqlite_client
+            .run_action(
+                UpdateAttribute {
+                    actor_id: SYSTEM_ACTOR_ID,
+                    attribute_id: select.id,
+                    change: AttributeChange::Select(SelectChange::SetDefault(Some(
+                        "Draw".to_string()
+                    ))),
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "default not in options must be rejected"
+    );
+
+    // Type-mismatched change is rejected.
+    assert!(
+        sqlite_client
+            .run_action(
+                UpdateAttribute {
+                    actor_id: SYSTEM_ACTOR_ID,
+                    attribute_id: select.id,
+                    change: AttributeChange::Numeric(NumericChange::SetDefault(Some(1.0))),
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "numeric change on a select attribute must be rejected"
+    );
+
+    // --- Mass: replace default units; common SetName edit.
+    let mass = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: "Load".to_string(),
+        description: None,
+        config: AttributeConfig::Mass(MassConfig { default_units: vec![MassUnit::Kilogram] }),
+    };
+    sqlite_client
+        .run_action(CreateAttribute::from(mass.clone()).into())
+        .await
+        .unwrap();
+    sqlite_client
+        .run_action(
+            UpdateAttribute {
+                actor_id: SYSTEM_ACTOR_ID,
+                attribute_id: mass.id,
+                change: AttributeChange::Mass(MassChange::SetDefaultUnits(vec![
+                    MassUnit::Pound,
+                    MassUnit::Kilogram,
+                ])),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        read_attribute(&sqlite_client, mass.id).await.expect_mass().unwrap().default_units,
+        vec![MassUnit::Pound, MassUnit::Kilogram]
+    );
+
+    sqlite_client
+        .run_action(
+            UpdateAttribute {
+                actor_id: SYSTEM_ACTOR_ID,
+                attribute_id: mass.id,
+                change: AttributeChange::SetName("Weight".to_string()),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(read_attribute(&sqlite_client, mass.id).await.name, "Weight");
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
+    let sqlite_client = SqliteClient::from_pool(pool);
+
+    // --- No-op: re-applying the same value emits no deltas.
+    let numeric = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: "Reps".to_string(),
+        description: None,
+        config: AttributeConfig::Numeric(NumericConfig {
+            min: None,
+            max: None,
+            integer: false,
+            default: Some(5.0),
+        }),
+    };
+    sqlite_client
+        .run_action(CreateAttribute::from(numeric.clone()).into())
+        .await
+        .unwrap();
+
+    // Call the mutator directly so we can inspect the produced deltas.
+    let mutation = {
+        let mut conn = sqlite_client.pool.acquire().await.unwrap();
+        let mut executor = SqliteQueryExecutor::new(&mut *conn);
+        gv_core::mutators::update_attribute(
+            &mut executor,
+            UpdateAttribute {
+                actor_id: SYSTEM_ACTOR_ID,
+                attribute_id: numeric.id,
+                change: AttributeChange::Numeric(NumericChange::SetDefault(Some(5.0))),
+            },
+        )
+        .await
+        .unwrap()
+    };
+    assert!(
+        mutation.changes.is_empty(),
+        "setting the default to its current value must be a no-op"
+    );
+
+    // --- Mass dedupe: duplicates collapse, first-seen order preserved.
+    let mass = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: "Load".to_string(),
+        description: None,
+        config: AttributeConfig::Mass(MassConfig { default_units: vec![] }),
+    };
+    sqlite_client
+        .run_action(CreateAttribute::from(mass.clone()).into())
+        .await
+        .unwrap();
+    sqlite_client
+        .run_action(
+            UpdateAttribute {
+                actor_id: SYSTEM_ACTOR_ID,
+                attribute_id: mass.id,
+                change: AttributeChange::Mass(MassChange::SetDefaultUnits(vec![
+                    MassUnit::Kilogram,
+                    MassUnit::Pound,
+                    MassUnit::Kilogram,
+                    MassUnit::Gram,
+                ])),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        read_attribute(&sqlite_client, mass.id).await.expect_mass().unwrap().default_units,
+        vec![MassUnit::Kilogram, MassUnit::Pound, MassUnit::Gram]
+    );
 }
