@@ -200,6 +200,26 @@ impl QueryExecutor<FindAncestors> for PostgresQueryExecutor<'_> {
     }
 }
 
+impl QueryExecutor<FindActivityTemplateRoot> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: FindActivityTemplateRoot,
+    ) -> Result<<FindActivityTemplateRoot as Query>::Response> {
+        sqlx::query_as::<_, crate::rows::EntryRow>(
+            r#"
+            SELECT id, owner_id, activity_id, name, parent_id, frac_index, is_template, display_as_sets, is_sequence, is_complete, start_time, end_time, duration_ms
+            FROM entries
+            WHERE activity_id = $1 AND is_template = true AND parent_id IS NULL
+            "#,
+        )
+        .bind(crate::columns::UuidColumn(query.activity_id))
+        .fetch_optional(&mut *self.conn)
+        .await.db_err()?
+        .map(|e| e.to_entry())
+        .transpose()
+    }
+}
+
 impl QueryExecutor<FindEntryById> for PostgresQueryExecutor<'_> {
     async fn execute(
         &mut self,

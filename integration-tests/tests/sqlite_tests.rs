@@ -4,9 +4,9 @@ use gv_sql::sqlite::SqliteQueryExecutor;
 use gv_core::{
     SYSTEM_ACTOR_ID,
     actions::{
-        AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry, CreateValue,
-        DeleteAttributeValue, EntryChange, MassChange, MoveEntry, NumericChange, SelectChange,
-        UpdateAttribute, UpdateEntry,
+        AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
+        CreateEntryFromActivity, CreateValue, DeleteAttributeValue, EntryChange, MassChange,
+        MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateEntry,
     },
     models::{
         activity::{Activity, ActivityName},
@@ -16,7 +16,10 @@ use gv_core::{
         },
         entry::{Entry, Position, Temporal},
     },
-    queries::{FindAttributeById, FindDescendants, FindEntryById, FindValueByKey},
+    queries::{
+        AllEntries, FindAttributeById, FindDescendants, FindEntryById, FindValueByKey,
+        FindValuesForEntries,
+    },
     query_executor::QueryExecutor,
 };
 use sqlx::SqlitePool;
@@ -945,4 +948,143 @@ async fn test_update_entry_set_is_sequence(pool: SqlitePool) {
         .await
         .unwrap();
     assert_eq!(find(&sqlite_client, parent.id).await.map(|e| e.is_sequence), Some(true));
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool) {
+    let sqlite_client = SqliteClient::from_pool(pool);
+
+    // Attribute with a default to seed onto the template.
+    let reps = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: "Reps".to_string(),
+        description: None,
+        config: AttributeConfig::Numeric(NumericConfig {
+            min: None,
+            max: None,
+            integer: true,
+            default: Some(5.0),
+        }),
+    };
+    sqlite_client
+        .run_action(CreateAttribute::from(reps.clone()).into())
+        .await
+        .unwrap();
+
+    // Activity with a known sequence template root.
+    let activity = Activity {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: ActivityName::parse("Bench".to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    let template_root = Entry {
+        id: Uuid::new_v4(),
+        activity_id: Some(activity.id),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: None,
+        position: None,
+        is_template: true,
+        display_as_sets: false,
+        is_sequence: true,
+        is_complete: false,
+        temporal: Temporal::None,
+    };
+    sqlite_client
+        .run_action(
+            CreateActivity {
+                actor_id: SYSTEM_ACTOR_ID,
+                activity: activity.clone(),
+                template: vec![template_root.clone()],
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // A template child (scalar) with a seeded "Reps" value.
+    let template_child = Entry {
+        id: Uuid::new_v4(),
+        activity_id: None,
+        owner_id: SYSTEM_ACTOR_ID,
+        name: Some("Set".to_string()),
+        position: Some(Position {
+            parent_id: template_root.id,
+            frac_index: FractionalIndex::default(),
+        }),
+        is_template: true,
+        display_as_sets: false,
+        is_sequence: false,
+        is_complete: false,
+        temporal: Temporal::None,
+    };
+    sqlite_client
+        .run_action(CreateEntry::from(template_child.clone()).into())
+        .await
+        .unwrap();
+    sqlite_client
+        .run_action(
+            AttachValue {
+                actor_id: SYSTEM_ACTOR_ID,
+                entry_id: template_child.id,
+                attribute_id: reps.id,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // Instantiate the activity at a day root.
+    let start = sqlx::types::chrono::Utc::now();
+    sqlite_client
+        .run_action(
+            CreateEntryFromActivity {
+                actor_id: SYSTEM_ACTOR_ID,
+                activity_id: activity.id,
+                position: None,
+                temporal: Temporal::Start { start },
+                is_template: false,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // Read all entries; the instances are the non-template ones.
+    let all = {
+        let mut conn = sqlite_client.pool.acquire().await.unwrap();
+        SqliteQueryExecutor::new(&mut *conn).execute(AllEntries {}).await.unwrap()
+    };
+    let instances: Vec<&Entry> = all.iter().filter(|e| !e.is_template).collect();
+    assert_eq!(instances.len(), 2, "root + child instantiated");
+
+    let inst_root = instances.iter().find(|e| e.position.is_none()).expect("instance root");
+    assert_eq!(inst_root.activity_id, Some(activity.id));
+    assert!(inst_root.is_sequence, "structure copied from template");
+    assert_ne!(inst_root.id, template_root.id, "fresh id");
+    assert!(matches!(inst_root.temporal, Temporal::Start { .. }));
+
+    let inst_child = instances
+        .iter()
+        .find(|e| e.position.as_ref().map(|p| p.parent_id) == Some(inst_root.id))
+        .expect("instance child under instance root");
+    assert_ne!(inst_child.id, template_child.id);
+    assert!(!inst_child.is_template);
+
+    // The template's Reps value was copied onto the instantiated child.
+    let values = {
+        let mut conn = sqlite_client.pool.acquire().await.unwrap();
+        SqliteQueryExecutor::new(&mut *conn)
+            .execute(FindValuesForEntries { entry_ids: vec![inst_child.id] })
+            .await
+            .unwrap()
+    };
+    assert_eq!(values.len(), 1);
+    assert_eq!(values[0].attribute_id, reps.id);
+    match values[0].actual.clone().expect("seeded actual") {
+        AttributeValue::Numeric(NumericValue::Exact(v)) => assert_eq!(v, 5.0),
+        other => panic!("expected Numeric Exact 5.0, got {:?}", other),
+    }
 }

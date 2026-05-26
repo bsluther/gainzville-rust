@@ -157,7 +157,13 @@ The screen: library `ActivityDetailView` (currently "Attributes: Coming soon").
 ---
 
 ## Out of scope (noted)
-- Create-time template instantiation (consumes all three features).
+- ~~Create-time template instantiation (consumes all three features).~~
+  **Implemented:** `CreateEntryFromActivity` action + mutator deep-copies the
+  activity's template subtree (entries + values, fresh ids, `is_template`
+  cleared) via `instantiation::instantiate_subtree`; the Swift create flow routes
+  through it when an activity is chosen. Template `None` values copy verbatim
+  (activity-config precedence); structure (incl. `is_sequence`) comes from the
+  template.
 - "Create activity from a log entry" menu action (sequences, and anonymous scalars).
 - Additive-only enforcement for select options / numeric bounds (deferred with their
   read-only displays in Phase 2).

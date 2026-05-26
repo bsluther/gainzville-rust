@@ -6,6 +6,7 @@ pub mod delta;
 pub mod delta_executor;
 pub mod error;
 pub mod forest;
+pub mod instantiation;
 pub mod io;
 pub mod models;
 pub mod mutators;

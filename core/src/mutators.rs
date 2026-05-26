@@ -4,21 +4,23 @@ use uuid::Uuid;
 use crate::{
     actions::{
         Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateUser, CreateValue, DeleteAttributeValue, DeleteEntryRecursive, EntryChange,
-        MassChange, MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue,
-        UpdateEntry, UpdateEntryCompletion, ValueField,
+        CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
+        DeleteEntryRecursive, EntryChange, MassChange, MoveEntry, NumericChange, SelectChange,
+        UpdateAttribute, UpdateAttributeValue, UpdateEntry, UpdateEntryCompletion, ValueField,
     },
     delta::{AnyDelta, Delta},
     error::{DomainError, Result, ValidationError},
     forest::Forest,
+    instantiation::instantiate_subtree,
     models::{
         actor::{Actor, ActorKind},
         attribute::{AttributeConfig, Value},
         user::User,
     },
     queries::{
-        FindActivityById, FindAncestors, FindAttributeById, FindDescendants, FindEntryById,
-        FindUserById, FindUserByUsername, FindValueByKey, FindValuesForEntries, IsEmailRegistered,
+        FindActivityById, FindActivityTemplateRoot, FindAncestors, FindAttributeById,
+        FindDescendants, FindEntryById, FindUserById, FindUserByUsername, FindValueByKey,
+        FindValuesForEntries, IsEmailRegistered,
     },
     query_executor::AnyQueryExecutor,
 };
@@ -41,7 +43,10 @@ pub struct Mutation {
 /// Template entries live "outside the timeline": they may carry a duration but
 /// never a start or end time. Shared by `create_entry` and `move_entry` so the
 /// invariant is enforced on every write path that sets a template's temporal.
-fn validate_template_temporal(is_template: bool, temporal: &crate::models::entry::Temporal) -> Result<()> {
+fn validate_template_temporal(
+    is_template: bool,
+    temporal: &crate::models::entry::Temporal,
+) -> Result<()> {
     if is_template && (temporal.start().is_some() || temporal.end().is_some()) {
         return Err(DomainError::Consistency(
             "template entries cannot have a start or end time (duration only)".to_string(),
@@ -214,6 +219,112 @@ pub async fn create_entry(
         timestamp: Utc::now(),
         action: Action::CreateEntry(action),
         changes: vec![insert_entry.into()],
+    })
+}
+
+/// Instantiate an activity's template into a fresh log subtree. Finds the
+/// activity's template root, deep-copies the subtree (entries + values) with new
+/// ids and `is_template` cleared, and places the instantiated root at the given
+/// position/temporal. Emits all inserts in one mutation (FK checks are deferred
+/// to commit, so delta order doesn't matter).
+pub async fn create_entry_from_activity(
+    executor: &mut impl AnyQueryExecutor,
+    action: CreateEntryFromActivity,
+) -> Result<Mutation> {
+    let activity = executor
+        .execute(FindActivityById {
+            id: action.activity_id,
+        })
+        .await?
+        .ok_or_else(|| {
+            DomainError::Other(format!("activity '{}' not found", action.activity_id))
+        })?;
+
+    // Only the owner can instantiate their activities (for now).
+    if action.actor_id != activity.owner_id {
+        return Err(DomainError::Unauthorized(format!(
+            "actor '{}' is not authorized to instantiate activity owned by '{}'",
+            action.actor_id, activity.owner_id
+        )));
+    }
+
+    // Placement validation mirrors move_entry, applied to the instantiated root.
+    if let Some(position) = &action.position {
+        let parent = executor
+            .execute(FindEntryById {
+                entry_id: position.parent_id,
+            })
+            .await?
+            .ok_or_else(|| {
+                DomainError::Consistency("instantiation parent does not exist".to_string())
+            })?;
+        if !parent.is_sequence {
+            return Err(DomainError::Consistency(
+                "cannot instantiate into a non-sequence entry".to_string(),
+            ));
+        }
+        // A template tree and a log tree never mix: the instantiated subtree's
+        // kind must match the parent's (log into log, template into template).
+        if parent.is_template != action.is_template {
+            return Err(DomainError::Consistency(
+                "instantiated subtree must match its parent's template/log kind".to_string(),
+            ));
+        }
+    } else if !action.is_template
+        && action.temporal.start().is_none()
+        && action.temporal.end().is_none()
+    {
+        // Log roots must be placed on the timeline; template roots are exempt.
+        return Err(DomainError::Consistency(
+            "root entry must have defined start or end time".to_string(),
+        ));
+    }
+
+    // Template entries (root or child) never carry a start or end.
+    validate_template_temporal(action.is_template, &action.temporal)?;
+
+    let root = executor
+        .execute(FindActivityTemplateRoot {
+            activity_id: action.activity_id,
+        })
+        .await?
+        .ok_or_else(|| {
+            DomainError::Consistency(format!(
+                "activity '{}' has no template root",
+                action.activity_id
+            ))
+        })?;
+
+    let subtree = executor
+        .execute(FindDescendants { entry_id: root.id })
+        .await?;
+    let subtree_ids: Vec<Uuid> = subtree.iter().map(|e| e.id).collect();
+    let values = executor
+        .execute(FindValuesForEntries {
+            entry_ids: subtree_ids,
+        })
+        .await?;
+
+    let (entries, values) = instantiate_subtree(
+        root.id,
+        &subtree,
+        &values,
+        action.position.clone(),
+        action.temporal.clone(),
+        action.is_template,
+    );
+
+    let mut deltas: Vec<AnyDelta> = entries
+        .into_iter()
+        .map(|e| Delta::Insert { new: e }.into())
+        .collect();
+    deltas.extend(values.into_iter().map(|v| Delta::Insert { new: v }.into()));
+
+    Ok(Mutation {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        action: Action::CreateEntryFromActivity(action),
+        changes: deltas,
     })
 }
 
@@ -853,7 +964,11 @@ pub async fn update_entry(
                         entry_ids: descendant_ids,
                     })
                     .await?;
-                deltas.extend(descendants.into_iter().map(|e| Delta::Delete { old: e }.into()));
+                deltas.extend(
+                    descendants
+                        .into_iter()
+                        .map(|e| Delta::Delete { old: e }.into()),
+                );
                 deltas.extend(values.into_iter().map(|v| Delta::Delete { old: v }.into()));
             }
 

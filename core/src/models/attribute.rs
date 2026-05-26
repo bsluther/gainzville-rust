@@ -230,6 +230,18 @@ pub struct Value {
     pub actual: Option<AttributeValue>,
 }
 
+impl Value {
+    /// Copy a template value onto a new entry, re-keying to `entry_id` and
+    /// keeping the attribute, indices, plan, and actual. Mirrors
+    /// `Entry::from_template` for instantiation.
+    pub fn from_template(template: &Value, entry_id: Uuid) -> Value {
+        Value {
+            entry_id,
+            ..template.clone()
+        }
+    }
+}
+
 // Consider renaming AttributeValue -> TypeValue.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AttributeValue {

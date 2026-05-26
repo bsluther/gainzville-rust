@@ -1850,6 +1850,72 @@ public func FfiConverterTypeCreateEntry_lower(_ value: CreateEntry) -> RustBuffe
 }
 
 
+public struct CreateEntryFromActivity: Equatable, Hashable {
+    public var actorId: Uuid
+    public var activityId: Uuid
+    public var position: Position?
+    public var temporal: Temporal
+    public var isTemplate: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(actorId: Uuid, activityId: Uuid, position: Position?, temporal: Temporal, isTemplate: Bool) {
+        self.actorId = actorId
+        self.activityId = activityId
+        self.position = position
+        self.temporal = temporal
+        self.isTemplate = isTemplate
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CreateEntryFromActivity: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateEntryFromActivity: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateEntryFromActivity {
+        return
+            try CreateEntryFromActivity(
+                actorId: FfiConverterTypeUuid.read(from: &buf), 
+                activityId: FfiConverterTypeUuid.read(from: &buf), 
+                position: FfiConverterOptionTypePosition.read(from: &buf), 
+                temporal: FfiConverterTypeTemporal.read(from: &buf), 
+                isTemplate: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateEntryFromActivity, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.actorId, into: &buf)
+        FfiConverterTypeUuid.write(value.activityId, into: &buf)
+        FfiConverterOptionTypePosition.write(value.position, into: &buf)
+        FfiConverterTypeTemporal.write(value.temporal, into: &buf)
+        FfiConverterBool.write(value.isTemplate, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateEntryFromActivity_lift(_ buf: RustBuffer) throws -> CreateEntryFromActivity {
+    return try FfiConverterTypeCreateEntryFromActivity.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateEntryFromActivity_lower(_ value: CreateEntryFromActivity) -> RustBuffer {
+    return FfiConverterTypeCreateEntryFromActivity.lower(value)
+}
+
+
 public struct CreateUser: Equatable, Hashable {
     public var user: User
 
@@ -2315,6 +2381,56 @@ public func FfiConverterTypeFindActivityById_lift(_ buf: RustBuffer) throws -> F
 #endif
 public func FfiConverterTypeFindActivityById_lower(_ value: FindActivityById) -> RustBuffer {
     return FfiConverterTypeFindActivityById.lower(value)
+}
+
+
+public struct FindActivityTemplateRoot: Equatable, Hashable {
+    public var activityId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(activityId: Uuid) {
+        self.activityId = activityId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FindActivityTemplateRoot: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFindActivityTemplateRoot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindActivityTemplateRoot {
+        return
+            try FindActivityTemplateRoot(
+                activityId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FindActivityTemplateRoot, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.activityId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindActivityTemplateRoot_lift(_ buf: RustBuffer) throws -> FindActivityTemplateRoot {
+    return try FfiConverterTypeFindActivityTemplateRoot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFindActivityTemplateRoot_lower(_ value: FindActivityTemplateRoot) -> RustBuffer {
+    return FfiConverterTypeFindActivityTemplateRoot.lower(value)
 }
 
 
@@ -3932,6 +4048,8 @@ public enum Action: Equatable, Hashable {
     )
     case createEntry(CreateEntry
     )
+    case createEntryFromActivity(CreateEntryFromActivity
+    )
     case deleteEntryRecursive(DeleteEntryRecursive
     )
     case moveEntry(MoveEntry
@@ -3986,22 +4104,25 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         case 7: return .createEntry(try FfiConverterTypeCreateEntry.read(from: &buf)
         )
         
-        case 8: return .deleteEntryRecursive(try FfiConverterTypeDeleteEntryRecursive.read(from: &buf)
+        case 8: return .createEntryFromActivity(try FfiConverterTypeCreateEntryFromActivity.read(from: &buf)
         )
         
-        case 9: return .moveEntry(try FfiConverterTypeMoveEntry.read(from: &buf)
+        case 9: return .deleteEntryRecursive(try FfiConverterTypeDeleteEntryRecursive.read(from: &buf)
         )
         
-        case 10: return .updateEntryCompletion(try FfiConverterTypeUpdateEntryCompletion.read(from: &buf)
+        case 10: return .moveEntry(try FfiConverterTypeMoveEntry.read(from: &buf)
         )
         
-        case 11: return .updateAttributeValue(try FfiConverterTypeUpdateAttributeValue.read(from: &buf)
+        case 11: return .updateEntryCompletion(try FfiConverterTypeUpdateEntryCompletion.read(from: &buf)
         )
         
-        case 12: return .updateAttribute(try FfiConverterTypeUpdateAttribute.read(from: &buf)
+        case 12: return .updateAttributeValue(try FfiConverterTypeUpdateAttributeValue.read(from: &buf)
         )
         
-        case 13: return .updateEntry(try FfiConverterTypeUpdateEntry.read(from: &buf)
+        case 13: return .updateAttribute(try FfiConverterTypeUpdateAttribute.read(from: &buf)
+        )
+        
+        case 14: return .updateEntry(try FfiConverterTypeUpdateEntry.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -4047,33 +4168,38 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
             FfiConverterTypeCreateEntry.write(v1, into: &buf)
             
         
-        case let .deleteEntryRecursive(v1):
+        case let .createEntryFromActivity(v1):
             writeInt(&buf, Int32(8))
+            FfiConverterTypeCreateEntryFromActivity.write(v1, into: &buf)
+            
+        
+        case let .deleteEntryRecursive(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterTypeDeleteEntryRecursive.write(v1, into: &buf)
             
         
         case let .moveEntry(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeMoveEntry.write(v1, into: &buf)
             
         
         case let .updateEntryCompletion(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeUpdateEntryCompletion.write(v1, into: &buf)
             
         
         case let .updateAttributeValue(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeUpdateAttributeValue.write(v1, into: &buf)
             
         
         case let .updateAttribute(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeUpdateAttribute.write(v1, into: &buf)
             
         
         case let .updateEntry(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeUpdateEntry.write(v1, into: &buf)
             
         }
@@ -4112,6 +4238,8 @@ public enum AnyQuery: Equatable, Hashable {
     case findActivityById(FindActivityById
     )
     case allActivities(AllActivities
+    )
+    case findActivityTemplateRoot(FindActivityTemplateRoot
     )
     case allEntries(AllEntries
     )
@@ -4178,43 +4306,46 @@ public struct FfiConverterTypeAnyQuery: FfiConverterRustBuffer {
         case 6: return .allActivities(try FfiConverterTypeAllActivities.read(from: &buf)
         )
         
-        case 7: return .allEntries(try FfiConverterTypeAllEntries.read(from: &buf)
+        case 7: return .findActivityTemplateRoot(try FfiConverterTypeFindActivityTemplateRoot.read(from: &buf)
         )
         
-        case 8: return .entriesRootedInTimeInterval(try FfiConverterTypeEntriesRootedInTimeInterval.read(from: &buf)
+        case 8: return .allEntries(try FfiConverterTypeAllEntries.read(from: &buf)
         )
         
-        case 9: return .findAncestors(try FfiConverterTypeFindAncestors.read(from: &buf)
+        case 9: return .entriesRootedInTimeInterval(try FfiConverterTypeEntriesRootedInTimeInterval.read(from: &buf)
         )
         
-        case 10: return .findEntryById(try FfiConverterTypeFindEntryById.read(from: &buf)
+        case 10: return .findAncestors(try FfiConverterTypeFindAncestors.read(from: &buf)
         )
         
-        case 11: return .findEntryJoinById(try FfiConverterTypeFindEntryJoinById.read(from: &buf)
+        case 11: return .findEntryById(try FfiConverterTypeFindEntryById.read(from: &buf)
         )
         
-        case 12: return .findDescendants(try FfiConverterTypeFindDescendants.read(from: &buf)
+        case 12: return .findEntryJoinById(try FfiConverterTypeFindEntryJoinById.read(from: &buf)
         )
         
-        case 13: return .findAttributeById(try FfiConverterTypeFindAttributeById.read(from: &buf)
+        case 13: return .findDescendants(try FfiConverterTypeFindDescendants.read(from: &buf)
         )
         
-        case 14: return .allAttributes(try FfiConverterTypeAllAttributes.read(from: &buf)
+        case 14: return .findAttributeById(try FfiConverterTypeFindAttributeById.read(from: &buf)
         )
         
-        case 15: return .findAttributesByOwner(try FfiConverterTypeFindAttributesByOwner.read(from: &buf)
+        case 15: return .allAttributes(try FfiConverterTypeAllAttributes.read(from: &buf)
         )
         
-        case 16: return .findValueByKey(try FfiConverterTypeFindValueByKey.read(from: &buf)
+        case 16: return .findAttributesByOwner(try FfiConverterTypeFindAttributesByOwner.read(from: &buf)
         )
         
-        case 17: return .findValuesForEntry(try FfiConverterTypeFindValuesForEntry.read(from: &buf)
+        case 17: return .findValueByKey(try FfiConverterTypeFindValueByKey.read(from: &buf)
         )
         
-        case 18: return .findValuesForEntries(try FfiConverterTypeFindValuesForEntries.read(from: &buf)
+        case 18: return .findValuesForEntry(try FfiConverterTypeFindValuesForEntry.read(from: &buf)
         )
         
-        case 19: return .findAttributePairsForEntry(try FfiConverterTypeFindAttributePairsForEntry.read(from: &buf)
+        case 19: return .findValuesForEntries(try FfiConverterTypeFindValuesForEntries.read(from: &buf)
+        )
+        
+        case 20: return .findAttributePairsForEntry(try FfiConverterTypeFindAttributePairsForEntry.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -4255,68 +4386,73 @@ public struct FfiConverterTypeAnyQuery: FfiConverterRustBuffer {
             FfiConverterTypeAllActivities.write(v1, into: &buf)
             
         
-        case let .allEntries(v1):
+        case let .findActivityTemplateRoot(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterTypeFindActivityTemplateRoot.write(v1, into: &buf)
+            
+        
+        case let .allEntries(v1):
+            writeInt(&buf, Int32(8))
             FfiConverterTypeAllEntries.write(v1, into: &buf)
             
         
         case let .entriesRootedInTimeInterval(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeEntriesRootedInTimeInterval.write(v1, into: &buf)
             
         
         case let .findAncestors(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeFindAncestors.write(v1, into: &buf)
             
         
         case let .findEntryById(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeFindEntryById.write(v1, into: &buf)
             
         
         case let .findEntryJoinById(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeFindEntryJoinById.write(v1, into: &buf)
             
         
         case let .findDescendants(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeFindDescendants.write(v1, into: &buf)
             
         
         case let .findAttributeById(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeFindAttributeById.write(v1, into: &buf)
             
         
         case let .allAttributes(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
             FfiConverterTypeAllAttributes.write(v1, into: &buf)
             
         
         case let .findAttributesByOwner(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(16))
             FfiConverterTypeFindAttributesByOwner.write(v1, into: &buf)
             
         
         case let .findValueByKey(v1):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(17))
             FfiConverterTypeFindValueByKey.write(v1, into: &buf)
             
         
         case let .findValuesForEntry(v1):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(18))
             FfiConverterTypeFindValuesForEntry.write(v1, into: &buf)
             
         
         case let .findValuesForEntries(v1):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(19))
             FfiConverterTypeFindValuesForEntries.write(v1, into: &buf)
             
         
         case let .findAttributePairsForEntry(v1):
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(20))
             FfiConverterTypeFindAttributePairsForEntry.write(v1, into: &buf)
             
         }
@@ -4353,6 +4489,8 @@ public enum AnyQueryResponse: Equatable, Hashable {
     case allActorIds([Uuid]
     )
     case findActivityById(Activity?
+    )
+    case findActivityTemplateRoot(Entry?
     )
     case allActivities([Activity]
     )
@@ -4418,46 +4556,49 @@ public struct FfiConverterTypeAnyQueryResponse: FfiConverterRustBuffer {
         case 5: return .findActivityById(try FfiConverterOptionTypeActivity.read(from: &buf)
         )
         
-        case 6: return .allActivities(try FfiConverterSequenceTypeActivity.read(from: &buf)
+        case 6: return .findActivityTemplateRoot(try FfiConverterOptionTypeEntry.read(from: &buf)
         )
         
-        case 7: return .allEntries(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        case 7: return .allActivities(try FfiConverterSequenceTypeActivity.read(from: &buf)
         )
         
-        case 8: return .entriesRootedInTimeInterval(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        case 8: return .allEntries(try FfiConverterSequenceTypeEntry.read(from: &buf)
         )
         
-        case 9: return .findAncestors(try FfiConverterSequenceTypeUuid.read(from: &buf)
+        case 9: return .entriesRootedInTimeInterval(try FfiConverterSequenceTypeEntry.read(from: &buf)
         )
         
-        case 10: return .findEntryById(try FfiConverterOptionTypeEntry.read(from: &buf)
+        case 10: return .findAncestors(try FfiConverterSequenceTypeUuid.read(from: &buf)
         )
         
-        case 11: return .findEntryJoinById(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
+        case 11: return .findEntryById(try FfiConverterOptionTypeEntry.read(from: &buf)
         )
         
-        case 12: return .findDescendants(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        case 12: return .findEntryJoinById(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
         )
         
-        case 13: return .findAttributeById(try FfiConverterOptionTypeAttribute.read(from: &buf)
+        case 13: return .findDescendants(try FfiConverterSequenceTypeEntry.read(from: &buf)
         )
         
-        case 14: return .allAttributes(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        case 14: return .findAttributeById(try FfiConverterOptionTypeAttribute.read(from: &buf)
         )
         
-        case 15: return .findAttributesByOwner(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        case 15: return .allAttributes(try FfiConverterSequenceTypeAttribute.read(from: &buf)
         )
         
-        case 16: return .findValueByKey(try FfiConverterOptionTypeValue.read(from: &buf)
+        case 16: return .findAttributesByOwner(try FfiConverterSequenceTypeAttribute.read(from: &buf)
         )
         
-        case 17: return .findValuesForEntry(try FfiConverterSequenceTypeValue.read(from: &buf)
+        case 17: return .findValueByKey(try FfiConverterOptionTypeValue.read(from: &buf)
         )
         
-        case 18: return .findValuesForEntries(try FfiConverterSequenceTypeValue.read(from: &buf)
+        case 18: return .findValuesForEntry(try FfiConverterSequenceTypeValue.read(from: &buf)
         )
         
-        case 19: return .findAttributePairsForEntry(try FfiConverterSequenceTypeAttributePair.read(from: &buf)
+        case 19: return .findValuesForEntries(try FfiConverterSequenceTypeValue.read(from: &buf)
+        )
+        
+        case 20: return .findAttributePairsForEntry(try FfiConverterSequenceTypeAttributePair.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -4493,73 +4634,78 @@ public struct FfiConverterTypeAnyQueryResponse: FfiConverterRustBuffer {
             FfiConverterOptionTypeActivity.write(v1, into: &buf)
             
         
-        case let .allActivities(v1):
+        case let .findActivityTemplateRoot(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterOptionTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .allActivities(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterSequenceTypeActivity.write(v1, into: &buf)
             
         
         case let .allEntries(v1):
-            writeInt(&buf, Int32(7))
-            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .entriesRootedInTimeInterval(v1):
             writeInt(&buf, Int32(8))
             FfiConverterSequenceTypeEntry.write(v1, into: &buf)
             
         
-        case let .findAncestors(v1):
+        case let .entriesRootedInTimeInterval(v1):
             writeInt(&buf, Int32(9))
+            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .findAncestors(v1):
+            writeInt(&buf, Int32(10))
             FfiConverterSequenceTypeUuid.write(v1, into: &buf)
             
         
         case let .findEntryById(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterOptionTypeEntry.write(v1, into: &buf)
             
         
         case let .findEntryJoinById(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
             FfiConverterOptionTypeEntryJoin.write(v1, into: &buf)
             
         
         case let .findDescendants(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterSequenceTypeEntry.write(v1, into: &buf)
             
         
         case let .findAttributeById(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterOptionTypeAttribute.write(v1, into: &buf)
             
         
         case let .allAttributes(v1):
-            writeInt(&buf, Int32(14))
-            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
-            
-        
-        case let .findAttributesByOwner(v1):
             writeInt(&buf, Int32(15))
             FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
             
         
-        case let .findValueByKey(v1):
+        case let .findAttributesByOwner(v1):
             writeInt(&buf, Int32(16))
+            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
+            
+        
+        case let .findValueByKey(v1):
+            writeInt(&buf, Int32(17))
             FfiConverterOptionTypeValue.write(v1, into: &buf)
             
         
         case let .findValuesForEntry(v1):
-            writeInt(&buf, Int32(17))
-            FfiConverterSequenceTypeValue.write(v1, into: &buf)
-            
-        
-        case let .findValuesForEntries(v1):
             writeInt(&buf, Int32(18))
             FfiConverterSequenceTypeValue.write(v1, into: &buf)
             
         
-        case let .findAttributePairsForEntry(v1):
+        case let .findValuesForEntries(v1):
             writeInt(&buf, Int32(19))
+            FfiConverterSequenceTypeValue.write(v1, into: &buf)
+            
+        
+        case let .findAttributePairsForEntry(v1):
+            writeInt(&buf, Int32(20))
             FfiConverterSequenceTypeAttributePair.write(v1, into: &buf)
             
         }

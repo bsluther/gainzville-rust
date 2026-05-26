@@ -178,6 +178,14 @@ private struct EntryHeader: View {
 private struct EntryBody: View {
     let entry: Entry
     let attributes: [AttributePair]
+    @Environment(\.entryContext) private var entryContext
+
+    // The footer supplies the bottom padding: the +Entry button (sequences) or
+    // the completion checkbox (log scalars). A template scalar shows neither, so
+    // pad explicitly here — only in that case, to avoid stacking padding.
+    private var needsBottomPadding: Bool {
+        entryContext.isTemplate && !entry.isSequence
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.entrySpacing) {
@@ -190,6 +198,7 @@ private struct EntryBody: View {
         }
         .padding(.horizontal, GvSpacing.entrySpacing)
         .padding(.top, GvSpacing.entrySpacing)
+        .padding(.bottom, needsBottomPadding ? GvSpacing.entrySpacing : 0)
     }
 }
 

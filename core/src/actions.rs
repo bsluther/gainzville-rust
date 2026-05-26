@@ -16,6 +16,7 @@ pub enum Action {
     AttachValue(AttachValue),
     DeleteAttributeValue(DeleteAttributeValue),
     CreateEntry(CreateEntry),
+    CreateEntryFromActivity(CreateEntryFromActivity),
     DeleteEntryRecursive(DeleteEntryRecursive),
     MoveEntry(MoveEntry),
     UpdateEntryCompletion(UpdateEntryCompletion),
@@ -129,6 +130,29 @@ impl From<Entry> for CreateEntry {
             actor_id: entry.owner_id,
             entry: entry,
         }
+    }
+}
+
+/// Instantiate an activity's template into a new subtree. The mutator finds the
+/// activity's template root, deep-copies the subtree (entries + values) with
+/// fresh ids, and places the instantiated root at `position` with `temporal`.
+/// Structure (including `is_sequence`) comes from the template.
+///
+/// `is_template` sets the kind of the instantiated subtree and must match the
+/// parent's kind: `false` materializes into the log; `true` composes the
+/// activity into another template (instantiating under a template entry).
+#[derive(Debug, Clone)]
+pub struct CreateEntryFromActivity {
+    pub actor_id: Uuid,
+    pub activity_id: Uuid,
+    pub position: Option<Position>,
+    pub temporal: Temporal,
+    pub is_template: bool,
+}
+
+impl From<CreateEntryFromActivity> for Action {
+    fn from(value: CreateEntryFromActivity) -> Self {
+        Action::CreateEntryFromActivity(value)
     }
 }
 

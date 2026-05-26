@@ -3,9 +3,9 @@ use fractional_index::FractionalIndex;
 use gv_core::{
     actions::{
         Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateUser, CreateValue, DeleteAttributeValue, DeleteEntryRecursive, EntryChange,
-        MassChange, MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue,
-        UpdateEntry, UpdateEntryCompletion, ValueField,
+        CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
+        DeleteEntryRecursive, EntryChange, MassChange, MoveEntry, NumericChange, SelectChange,
+        UpdateAttribute, UpdateAttributeValue, UpdateEntry, UpdateEntryCompletion, ValueField,
     },
     models::{
         activity::{Activity, ActivityName},
@@ -22,7 +22,8 @@ use gv_core::{
     },
     queries::{
         AllActivities, AllActorIds, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse,
-        EntriesRootedInTimeInterval, FindActivityById, FindAncestors, FindAttributeById,
+        EntriesRootedInTimeInterval, FindActivityById, FindActivityTemplateRoot, FindAncestors,
+        FindAttributeById,
         FindAttributePairsForEntry, FindAttributesByOwner, FindDescendants, FindEntryById,
         FindEntryJoinById, FindUserById, FindUserByUsername, FindValueByKey, FindValuesForEntries,
         FindValuesForEntry, IsEmailRegistered,
@@ -336,6 +337,11 @@ pub struct FindActivityById {
 }
 
 #[uniffi::remote(Record)]
+pub struct FindActivityTemplateRoot {
+    pub activity_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
 pub struct AllActivities;
 
 #[uniffi::remote(Record)]
@@ -411,6 +417,7 @@ pub enum AnyQuery {
     // Activity
     FindActivityById(FindActivityById),
     AllActivities(AllActivities),
+    FindActivityTemplateRoot(FindActivityTemplateRoot),
     // Entry
     AllEntries(AllEntries),
     EntriesRootedInTimeInterval(EntriesRootedInTimeInterval),
@@ -438,6 +445,7 @@ pub enum AnyQueryResponse {
     AllActorIds(Vec<Uuid>),
     // Activity
     FindActivityById(Option<Activity>),
+    FindActivityTemplateRoot(Option<Entry>),
     AllActivities(Vec<Activity>),
     // Entry
     AllEntries(Vec<Entry>),
@@ -475,6 +483,15 @@ pub struct CreateActivity {
 pub struct CreateEntry {
     pub actor_id: Uuid,
     pub entry: Entry,
+}
+
+#[uniffi::remote(Record)]
+pub struct CreateEntryFromActivity {
+    pub actor_id: Uuid,
+    pub activity_id: Uuid,
+    pub position: Option<Position>,
+    pub temporal: Temporal,
+    pub is_template: bool,
 }
 
 #[uniffi::remote(Record)]
@@ -591,6 +608,7 @@ pub enum Action {
     AttachValue(AttachValue),
     DeleteAttributeValue(DeleteAttributeValue),
     CreateEntry(CreateEntry),
+    CreateEntryFromActivity(CreateEntryFromActivity),
     DeleteEntryRecursive(DeleteEntryRecursive),
     MoveEntry(MoveEntry),
     UpdateEntryCompletion(UpdateEntryCompletion),

@@ -219,11 +219,23 @@ class ForestViewModel: ObservableObject {
     func createRootEntry(activityId: String?, name: String?, isSequence: Bool, for logDay: LogDay) {
         guard let core else { return }
         let suggestedMs = core.forestSuggestedRootDayInsertionTime(dayStart: logDay.fromMs)
+        // With an activity, instantiate its template (structure + default values);
+        // the sheet's name/sequence are ignored since the template defines them.
+        if let activityId {
+            try? core.runAction(action: .createEntryFromActivity(CreateEntryFromActivity(
+                actorId: SYSTEM_ACTOR_ID,
+                activityId: activityId,
+                position: nil,
+                temporal: .start(start: suggestedMs),
+                isTemplate: false  // root entries created from the log are log entries
+            )))
+            return
+        }
         try? core.runAction(action: .createEntry(CreateEntry(
             actorId: SYSTEM_ACTOR_ID,
             entry: Entry(
                 id: UUID().uuidString,
-                activityId: activityId,
+                activityId: nil,
                 ownerId: SYSTEM_ACTOR_ID,
                 name: name,
                 position: nil,
@@ -239,11 +251,24 @@ class ForestViewModel: ObservableObject {
     func createChildEntry(in parent: Entry, activityId: String?, name: String?, isSequence: Bool) {
         guard let core else { return }
         guard let position = core.forestPositionAfterChildren(parentId: parent.id) else { return }
+        // With an activity, instantiate its template under this parent. The
+        // instantiated subtree's kind matches the parent: composing into a
+        // template yields template entries; into the log, log entries.
+        if let activityId {
+            try? core.runAction(action: .createEntryFromActivity(CreateEntryFromActivity(
+                actorId: SYSTEM_ACTOR_ID,
+                activityId: activityId,
+                position: position,
+                temporal: .none,
+                isTemplate: parent.isTemplate
+            )))
+            return
+        }
         try? core.runAction(action: .createEntry(CreateEntry(
             actorId: SYSTEM_ACTOR_ID,
             entry: Entry(
                 id: UUID().uuidString,
-                activityId: activityId,
+                activityId: nil,
                 ownerId: SYSTEM_ACTOR_ID,
                 name: name,
                 position: position,

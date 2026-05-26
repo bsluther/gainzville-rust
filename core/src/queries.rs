@@ -48,6 +48,7 @@ pub enum AnyQuery {
     // Activity
     FindActivityById(FindActivityById),
     AllActivities(AllActivities),
+    FindActivityTemplateRoot(FindActivityTemplateRoot),
     // Entry
     AllEntries(AllEntries),
     EntriesRootedInTimeInterval(EntriesRootedInTimeInterval),
@@ -76,6 +77,7 @@ pub enum AnyQueryResponse {
     // Activity
     FindActivityById(Option<Activity>),
     AllActivities(Vec<Activity>),
+    FindActivityTemplateRoot(Option<Entry>),
     // Entry
     AllEntries(Vec<Entry>),
     EntriesRootedInTimeInterval(Vec<Entry>),
@@ -127,6 +129,12 @@ impl From<FindActivityById> for AnyQuery {
 impl From<AllActivities> for AnyQuery {
     fn from(value: AllActivities) -> Self {
         AnyQuery::AllActivities(value)
+    }
+}
+
+impl From<FindActivityTemplateRoot> for AnyQuery {
+    fn from(value: FindActivityTemplateRoot) -> Self {
+        AnyQuery::FindActivityTemplateRoot(value)
     }
 }
 
@@ -234,6 +242,12 @@ define_query! {
 
 define_query! {
     pub struct AllActivities; => Vec<Activity>
+}
+
+define_query! {
+    /// The root template entry for an activity (parentless, `is_template`,
+    /// matching `activity_id`). `CreateActivity` guarantees exactly one.
+    pub struct FindActivityTemplateRoot { pub activity_id: Uuid } => Option<Entry>
 }
 
 // --- Entry ---

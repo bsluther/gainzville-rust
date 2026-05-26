@@ -32,6 +32,9 @@ impl PostgresServer {
             }
             Action::CreateUser(action) => mutators::create_user(&mut executor, action).await?,
             Action::CreateEntry(action) => mutators::create_entry(&mut executor, action).await?,
+            Action::CreateEntryFromActivity(action) => {
+                mutators::create_entry_from_activity(&mut executor, action).await?
+            }
             Action::MoveEntry(action) => mutators::move_entry(&mut executor, action).await?,
             Action::DeleteEntryRecursive(action) => {
                 mutators::delete_entry_recursive(&mut executor, action).await?

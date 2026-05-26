@@ -36,6 +36,29 @@ impl Entry {
             new: self.clone(),
         }
     }
+
+    /// Build an instance from a template entry: a fresh `id`, the given
+    /// `position`, `temporal`, and `is_template` kind, with `is_complete`
+    /// cleared. All other fields (owner, activity_id, name, display_as_sets,
+    /// is_sequence) are copied from the template. `is_template = false`
+    /// instantiates into the log; `true` composes the subtree into another
+    /// template. Used by template instantiation.
+    pub fn from_template(
+        template: &Entry,
+        new_id: Uuid,
+        position: Option<Position>,
+        temporal: Temporal,
+        is_template: bool,
+    ) -> Entry {
+        Entry {
+            id: new_id,
+            position,
+            temporal,
+            is_template,
+            is_complete: false,
+            ..template.clone()
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,11 +1,8 @@
 use std::sync::{Arc, LazyLock, Once};
 
 use chrono::{DateTime, Utc};
-use gv_client::{client::SqliteClient, query_store::QuerySubscription};
-use tokio::runtime::Runtime;
-use uuid::Uuid;
-
 use generation::{ArbitraryFrom, Opts, SimulationContext};
+use gv_client::{client::SqliteClient, query_store::QuerySubscription};
 use gv_core::{
     actions::{Action, CreateAttribute, CreateEntry, CreateValue},
     forest::Forest,
@@ -13,6 +10,9 @@ use gv_core::{
     queries::{AllActivities, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse},
     std_lib::StandardLibrary,
 };
+use tokio::runtime::Runtime;
+use tracing::info;
+use uuid::Uuid;
 
 use crate::types::FfiError;
 
@@ -94,16 +94,16 @@ impl GainzvilleCore {
     pub fn run_action(&self, action: Action) -> Result<(), FfiError> {
         RUNTIME
             .block_on(self.client.run_action(action))
-            .map_err(FfiError::from)
+            .map_err(|e| {
+                info!(error = %e, "run_action failed");
+                FfiError::from(e)
+            })
     }
 
     /// Subscribe to a query. Runs the initial query immediately, populates the
     /// cache, and returns a `FfiQuerySubscription` handle. Dropping the handle
     /// (Swift releasing the reference) auto-removes the query from the cache.
-    pub fn subscribe_query(
-        &self,
-        query: AnyQuery,
-    ) -> Result<Arc<FfiQuerySubscription>, FfiError> {
+    pub fn subscribe_query(&self, query: AnyQuery) -> Result<Arc<FfiQuerySubscription>, FfiError> {
         let subscription = RUNTIME
             .block_on(self.client.subscribe_query(query))
             .map_err(FfiError::from)?;
@@ -141,7 +141,10 @@ impl GainzvilleCore {
     /// unsubscribes automatically, same as `subscribe_query`.
     pub fn subscribe_forest(&self) -> Result<Arc<FfiQuerySubscription>, FfiError> {
         let subscription = RUNTIME
-            .block_on(self.client.subscribe_query(AnyQuery::AllEntries(AllEntries {})))
+            .block_on(
+                self.client
+                    .subscribe_query(AnyQuery::AllEntries(AllEntries {})),
+            )
             .map_err(FfiError::from)?;
         Ok(Arc::new(FfiQuerySubscription(subscription)))
     }
@@ -219,7 +222,9 @@ impl GainzvilleCore {
         &self,
         day_start: DateTime<Utc>,
     ) -> DateTime<Utc> {
-        let forest = self.forest_snapshot().unwrap_or_else(|| Forest::from(vec![]));
+        let forest = self
+            .forest_snapshot()
+            .unwrap_or_else(|| Forest::from(vec![]));
         forest.suggested_root_day_insertion_time(day_start)
     }
 
@@ -277,7 +282,10 @@ impl GainzvilleCore {
             }
             // Best-effort: a duplicate row from a prior call (or any other
             // mutator rejection) is silently skipped so seeding stays idempotent.
-            if RUNTIME.block_on(self.client.run_action(action.into())).is_ok() {
+            if RUNTIME
+                .block_on(self.client.run_action(action.into()))
+                .is_ok()
+            {
                 created += 1;
             }
         }
@@ -307,7 +315,11 @@ impl GainzvilleCore {
             let entry = Entry::arbitrary_from(
                 &mut rng,
                 &context,
-                (actor_ids.as_slice(), activities.as_slice(), entries.as_slice()),
+                (
+                    actor_ids.as_slice(),
+                    activities.as_slice(),
+                    entries.as_slice(),
+                ),
             );
             let action: CreateEntry = entry.clone().into();
             RUNTIME
@@ -324,7 +336,10 @@ impl GainzvilleCore {
     /// Read the AllEntries cache and wrap it in a Forest for synchronous traversal.
     /// Returns None if the forest has not been subscribed yet.
     fn forest_snapshot(&self) -> Option<Forest> {
-        match self.client.read_cached_query(AnyQuery::AllEntries(AllEntries {}))? {
+        match self
+            .client
+            .read_cached_query(AnyQuery::AllEntries(AllEntries {}))?
+        {
             AnyQueryResponse::AllEntries(entries) => Some(Forest::from(entries)),
             _ => None,
         }

@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use rand::Rng;
 use uuid::Uuid;
 
@@ -5,8 +6,9 @@ use crate::{Arbitrary, ArbitraryFrom, GenerationContext, gen_random_text, maybe,
 use gv_core::{
     actions::{
         Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateUser, CreateValue, DeleteAttributeValue, EntryChange, MassChange, MoveEntry,
-        NumericChange, SelectChange, UpdateAttribute, UpdateEntry, UpdateEntryCompletion,
+        CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue, EntryChange,
+        MassChange, MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateEntry,
+        UpdateEntryCompletion,
     },
     models::{
         activity::Activity,
@@ -52,6 +54,9 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
         if !entries.is_empty() {
             choices.push(10);
         }
+        if !activities.is_empty() {
+            choices.push(11);
+        }
         let choice = pick(&choices, rng).unwrap();
         match choice {
             0 => CreateUser::arbitrary(rng, context).into(),
@@ -65,6 +70,7 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
             8 => DeleteAttributeValue::arbitrary_from(rng, context, (entries, attributes)).into(),
             9 => UpdateAttribute::arbitrary_from(rng, context, attributes).into(),
             10 => UpdateEntry::arbitrary_from(rng, context, entries).into(),
+            11 => CreateEntryFromActivity::arbitrary_from(rng, context, activities).into(),
             _ => unreachable!(),
         }
     }
@@ -180,8 +186,8 @@ fn pick_owned_pair<'a, R: Rng>(
         .iter()
         .filter(|a| a.owner_id == entry.owner_id)
         .collect();
-    let attribute = pick(&owned_attrs[..], rng)
-        .expect("no attribute matches the picked entry's owner");
+    let attribute =
+        pick(&owned_attrs[..], rng).expect("no attribute matches the picked entry's owner");
     (entry, attribute)
 }
 
@@ -211,6 +217,27 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for DeleteAttributeValue {
             actor_id: entry.owner_id,
             entry_id: entry.id,
             attribute_id: attribute.id,
+        }
+    }
+}
+
+impl ArbitraryFrom<&[Activity]> for CreateEntryFromActivity {
+    fn arbitrary_from<R: Rng, C: GenerationContext>(
+        rng: &mut R,
+        context: &C,
+        activities: &[Activity],
+    ) -> Self {
+        let activity = pick(activities, rng).expect("activities must not be empty");
+        // Instantiate into the log at a day root; a Start temporal satisfies the
+        // root rule.
+        CreateEntryFromActivity {
+            actor_id: activity.owner_id,
+            activity_id: activity.id,
+            position: None,
+            temporal: Temporal::Start {
+                start: DateTime::<Utc>::arbitrary(rng, context),
+            },
+            is_template: false,
         }
     }
 }
@@ -247,7 +274,11 @@ impl ArbitraryFrom<&[Attribute]> for UpdateAttribute {
                     let default = maybe(rng, 0.7, |rng| {
                         let lo = cfg.min.unwrap_or(0.0);
                         let hi = cfg.max.unwrap_or(lo + 100.0);
-                        let v = if hi > lo { rng.random_range(lo..=hi) } else { lo };
+                        let v = if hi > lo {
+                            rng.random_range(lo..=hi)
+                        } else {
+                            lo
+                        };
                         if cfg.integer { v.round() } else { v }
                     });
                     AttributeChange::Numeric(NumericChange::SetDefault(default))
@@ -262,8 +293,11 @@ impl ArbitraryFrom<&[Attribute]> for UpdateAttribute {
                 }
                 AttributeConfig::Mass(_) => {
                     let all = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
-                    let units: Vec<MassUnit> =
-                        all.iter().filter(|_| rng.random_bool(0.5)).cloned().collect();
+                    let units: Vec<MassUnit> = all
+                        .iter()
+                        .filter(|_| rng.random_bool(0.5))
+                        .cloned()
+                        .collect();
                     AttributeChange::Mass(MassChange::SetDefaultUnits(units))
                 }
             },

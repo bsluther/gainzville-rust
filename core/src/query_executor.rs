@@ -2,7 +2,8 @@ use crate::{
     error::Result,
     queries::{
         AllActivities, AllActorIds, AllAttributes, AllEntries, EntriesRootedInTimeInterval,
-        FindActivityById, FindAncestors, FindAttributeById, FindAttributePairsForEntry,
+        FindActivityById, FindActivityTemplateRoot, FindAncestors, FindAttributeById,
+        FindAttributePairsForEntry,
         FindAttributesByOwner, FindDescendants, FindEntryById, FindEntryJoinById, FindUserById,
         FindUserByUsername, FindValueByKey, FindValuesForEntries, FindValuesForEntry,
         IsEmailRegistered, Query,
@@ -27,6 +28,7 @@ pub trait AnyQueryExecutor:
     + QueryExecutor<AllActorIds>
     + QueryExecutor<FindActivityById>
     + QueryExecutor<AllActivities>
+    + QueryExecutor<FindActivityTemplateRoot>
     + QueryExecutor<AllEntries>
     + QueryExecutor<EntriesRootedInTimeInterval>
     + QueryExecutor<FindAncestors>
@@ -50,6 +52,7 @@ impl<T> AnyQueryExecutor for T where
         + QueryExecutor<AllActorIds>
         + QueryExecutor<FindActivityById>
         + QueryExecutor<AllActivities>
+        + QueryExecutor<FindActivityTemplateRoot>
         + QueryExecutor<AllEntries>
         + QueryExecutor<EntriesRootedInTimeInterval>
         + QueryExecutor<FindAncestors>
