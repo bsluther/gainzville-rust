@@ -27,8 +27,11 @@ struct ActivitiesListView: View {
                         }
                         .padding(.vertical, GvSpacing.sm)
                     }
+                    .listRowBackground(Color.gvBackground)
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color.gvBackground)
             }
         }
         .toolbar {
