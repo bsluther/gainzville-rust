@@ -74,11 +74,13 @@ struct EntryView: View {
         // the card because AttributeRow falls back to stacking pills vertically
         // (via ViewThatFits) when they don't fit horizontally. (A flexible frame
         // alone does NOT cap — it grows to fit an oversized child — which is why
-        // the earlier maxWidth-only fix regressed.) `.clipped()` is a defensive
-        // rectangular backstop for any remaining horizontal overflow.
+        // the earlier maxWidth-only fix regressed.) Content overflow is clipped
+        // by the rounded clipShape inside entryContainerStyle; we deliberately do
+        // NOT add a rectangular .clipped() here — it would trim the border
+        // overlay's centered stroke on the straight edges but not at the corners
+        // (where the path curves inward), making the corners look ~2x too thick.
         .frame(maxWidth: .infinity, alignment: .leading)
         .entryContainerStyle(isSequence: entry.isSequence)
-        .clipped()
         // Tap-outside-to-clear inside an entry: the entry's colored background
         // swallows taps before they reach LogView's clear-background, so we
         // also clear at the entry level. AttributeRow's own .onTapGesture wins
