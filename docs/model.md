@@ -24,8 +24,9 @@ default and the default values for those attributes via templates (see Template 
 an activity is a sequence (see Scalar and Sequence Entries), the template specifies the activities 
 that make up the sequence.
 
-Activities configure default attributes for an entry of that activity, but a user is free to add and
-remove attributes for an particular entry.
+Activities configure default attributes for a newly created  entry of that activity, but a user is
+free to add and remove attributes for an existing entry, diverging from the template. Updating a
+template does *not* modify any existing entries.
 
 Activities are not designated as being scalar or sequences. This allows a user to associate either
 a scalar or sequence entry with an activity, e.g. a "Climbing" entry could be scalar to just say
@@ -53,6 +54,10 @@ An **activity template** (or **template entry**) is a configuration for creating
 activity. The template is an entry, the attached attribute values and/or child entries describe what
 a default instance of that activity looks like and, for sequences, the structure of the sequence.
 The `is_template` column of the entry denotes whether that entry is a template.
+
+When an entry of an activity is created, the activity's template is instantiated into the log by
+deep copying template entries and attribute values. The template completely determines the structure
+and attributes of the instantiated entry or entries (attribute defaults are ignored here).
 
 Any entry which is not a template is a **log entry**. A log entry represents something which has
 happened or is planned.
@@ -171,6 +176,13 @@ the tuple (entry_id, attribute_id).
 
 The owner of a value must be the same as the owner of the associated attribute and the described
 entry. To support this and avoid inconsistencies, values do not have an `owner_id` field.
+
+Users configure attributes at creation. Updates must be additive-only, eg you can add a value to
+a select attribute but not remove one, you can increase a max numeric bound but not decrease it;
+this prevents invalidating existing values. Users may update the default value for the attribute to
+any valid value. When a user adds an attribute value to an entry, the default attribute value is
+set as the initial value. Note that when an entry is created from an activity, the attrbute's
+default is ignored in favor of the activity template.
 
 #### Table Model
 Considering using JSON (or JSONB) storage to avoid one table for each attribute type and each value
