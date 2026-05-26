@@ -25,6 +25,21 @@ struct CreateEntrySheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: GvSpacing.xl) {
+                    #if os(macOS)
+                    // macOS shows the title as in-content text rather than via
+                    // .navigationTitle. The macOS navigation title bar is a
+                    // focus-reactive material strip whose color can't be made to
+                    // match the rest of the sheet chrome (toolbar materials sit
+                    // above any background we set — verified: presentationBackground,
+                    // containerBackground, and toolbarBackground all had no effect).
+                    // Dropping it leaves only the search + Cancel toolbar strips,
+                    // which share one consistent chrome color.
+                    Text("Create Entry")
+                        .font(.gvTitle)
+                        .fontWeight(.bold)
+                        .foregroundStyle(Color.gvTextPrimary)
+                        .padding(.top, GvSpacing.xl)
+                    #endif
                     scratchSection
                     librarySection
                 }
@@ -32,10 +47,13 @@ struct CreateEntrySheet: View {
                 .padding(.top, GvSpacing.lg)
                 .padding(.bottom, GvSpacing.xl)
             }
-            .searchable(text: $searchText, prompt: "Search activities")
             .background(Color.gvBackground)
-            .navigationTitle("Create Entry")
             #if os(iOS)
+            // iOS keeps the system search bar. macOS uses an in-content search
+            // field inside librarySection instead — .searchable forces the field
+            // into the toolbar strip flush to its edge, with no way to pad it.
+            .searchable(text: $searchText, prompt: "Search activities")
+            .navigationTitle("Create Entry")
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
@@ -46,6 +64,10 @@ struct CreateEntrySheet: View {
         }
         #if os(iOS)
         .presentationDetents([.large])
+        #else
+        // Fix the macOS sheet size so filtering the library list doesn't resize
+        // the whole sheet; the inner ScrollView absorbs overflow instead.
+        .frame(width: 480, height: 600)
         #endif
     }
 
@@ -54,6 +76,10 @@ struct CreateEntrySheet: View {
     private var librarySection: some View {
         VStack(alignment: .leading, spacing: GvSpacing.md) {
             sectionHeader("PICK FROM LIBRARY")
+
+            #if os(macOS)
+            macSearchField
+            #endif
 
             if filteredActivities.isEmpty {
                 Text(searchText.isEmpty ? "No activities in library." : "No matches.")
@@ -95,6 +121,29 @@ struct CreateEntrySheet: View {
         }
     }
 
+    #if os(macOS)
+    // In-content replacement for the toolbar .searchable on macOS. Styled to
+    // match the Entry name field (plain field, gvSurface fill, rounded border).
+    private var macSearchField: some View {
+        HStack(spacing: GvSpacing.md) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(Color.gvTextSecondary)
+            TextField("Search activities", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.gvBody)
+                .foregroundStyle(Color.gvTextPrimary)
+        }
+        .padding(.horizontal, GvSpacing.lg)
+        .padding(.vertical, GvSpacing.md)
+        .background(Color.gvSurface)
+        .clipShape(RoundedRectangle(cornerRadius: GvSpacing.entryScalarCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: GvSpacing.entryScalarCornerRadius)
+                .stroke(Color.entryScalarBorder, lineWidth: GvSpacing.entryScalarBorderWidth)
+        )
+    }
+    #endif
+
     // MARK: - Create from scratch
 
     private var scratchSection: some View {
@@ -106,6 +155,11 @@ struct CreateEntrySheet: View {
                     .font(.gvBody)
                     .foregroundStyle(Color.gvTextPrimary)
                 TextField("", text: $scratchName)
+                    // .plain strips the macOS NSTextField bezel/focus ring, which
+                    // otherwise draws a lighter filled rectangle inside our custom
+                    // gvSurface container. iOS has no such bezel, so this also
+                    // makes both platforms render only our background + border.
+                    .textFieldStyle(.plain)
                     .font(.gvBody)
                     .foregroundStyle(Color.gvTextPrimary)
                     .padding(.horizontal, GvSpacing.lg)

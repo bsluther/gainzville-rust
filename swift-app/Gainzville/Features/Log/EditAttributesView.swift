@@ -141,6 +141,13 @@ struct EditAttributesView: View {
             }
             .padding(.top, GvSpacing.md)
         }
+        // Opaque dark fill on both platforms. On iOS this is a NavigationLink
+        // destination pushed inside the entry-menu sheet, and pushed views get a
+        // translucent system backing over the sheet's presentationBackground —
+        // an opaque fill here is what overrides it to the correct gvBackground.
+        // It does cover the sheet's presentation border (so this screen has no
+        // border, unlike the menu), an accepted tradeoff: the border can't be
+        // kept without presenting this as its own sheet rather than a push.
         .background(Color.gvBackground)
         .navigationTitle("Edit Attributes")
         #if os(iOS)

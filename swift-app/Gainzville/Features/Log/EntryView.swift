@@ -409,6 +409,20 @@ private struct EntryMenuContent: View {
         }
         #if os(iOS)
         .presentationDetents([.medium, .large])
+        // Pin the corner radius so the manual border below matches the sheet
+        // edge, and supply the sheet's fill + border via presentationBackground.
+        // A plain dark fill (content .background or presentationBackground(Color))
+        // hides the native lighter rim, so we draw it ourselves with strokeBorder
+        // (inset fully inside, like the entry-card border). Applied at the sheet
+        // root so it's consistent across this menu and the pushed EditAttributesView.
+        .presentationCornerRadius(36)
+        .presentationBackground {
+            Color.gvBackground
+                .overlay(
+                    RoundedRectangle(cornerRadius: 36, style: .continuous)
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                )
+        }
         #endif
     }
 }
