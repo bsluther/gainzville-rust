@@ -39,21 +39,21 @@ pub fn instantiate_subtree(
     is_template: bool,
 ) -> (Vec<Entry>, Vec<Value>) {
     // Stable old-id -> new-id map for every entry in the subtree.
-    let id_map: HashMap<Uuid, Uuid> =
-        subtree.iter().map(|e| (e.id, Uuid::new_v4())).collect();
+    let id_map: HashMap<Uuid, Uuid> = subtree.iter().map(|e| (e.id, Uuid::new_v4())).collect();
 
     let entries = subtree
         .iter()
         .map(|e| {
             let new_id = id_map[&e.id];
             if e.id == root_id {
-                Entry::from_template(
-                    e,
-                    new_id,
-                    root_position.clone(),
-                    root_temporal.clone(),
-                    is_template,
+                // Merge template duration into root temporal.
+                let temporal = Temporal::parse(
+                    root_temporal.start(),
+                    root_temporal.end(),
+                    e.temporal.duration(),
                 )
+                .unwrap_or(root_temporal.clone());
+                Entry::from_template(e, new_id, root_position.clone(), temporal, is_template)
             } else {
                 let position = e.position.as_ref().map(|p| Position {
                     // Parent is within the subtree (descendants are connected),
@@ -118,14 +118,19 @@ mod tests {
         let root_id = Uuid::new_v4();
         let root = template_entry(root_id, None, true);
         let day_root = Uuid::new_v4();
-        let pos = Position { parent_id: day_root, frac_index: FractionalIndex::default() };
+        let pos = Position {
+            parent_id: day_root,
+            frac_index: FractionalIndex::default(),
+        };
 
         let (entries, _) = instantiate_subtree(
             root_id,
             &[root],
             &[],
             Some(pos.clone()),
-            Temporal::Start { start: chrono::Utc::now() },
+            Temporal::Start {
+                start: chrono::Utc::now(),
+            },
             false,
         );
 
@@ -149,8 +154,7 @@ mod tests {
             template_entry(grandchild_id, Some(child_id), false),
         ];
 
-        let (entries, _) =
-            instantiate_subtree(root_id, &subtree, &[], None, Temporal::None, false);
+        let (entries, _) = instantiate_subtree(root_id, &subtree, &[], None, Temporal::None, false);
 
         // Map each instance back to which template entry it came from by structure.
         let inst_root = entries.iter().find(|e| e.position.is_none()).unwrap();
@@ -171,7 +175,10 @@ mod tests {
         assert_ne!(inst_child.id, child_id);
         assert_ne!(inst_grandchild.id, grandchild_id);
         // Grandchild's parent is the *new* child id, not the template's.
-        assert_eq!(inst_grandchild.position.as_ref().unwrap().parent_id, inst_child.id);
+        assert_eq!(
+            inst_grandchild.position.as_ref().unwrap().parent_id,
+            inst_child.id
+        );
     }
 
     #[test]
@@ -190,7 +197,10 @@ mod tests {
 
         let inst_child = entries.iter().find(|e| e.position.is_some()).unwrap();
         assert_eq!(new_values.len(), 1);
-        assert_eq!(new_values[0].entry_id, inst_child.id, "value re-keyed to new child id");
+        assert_eq!(
+            new_values[0].entry_id, inst_child.id,
+            "value re-keyed to new child id"
+        );
         assert_eq!(new_values[0].attribute_id, attr);
     }
 
@@ -204,13 +214,19 @@ mod tests {
             template_entry(child_id, Some(root_id), false),
         ];
         let parent = Uuid::new_v4();
-        let pos = Position { parent_id: parent, frac_index: FractionalIndex::default() };
+        let pos = Position {
+            parent_id: parent,
+            frac_index: FractionalIndex::default(),
+        };
 
         let (entries, _) =
             instantiate_subtree(root_id, &subtree, &[], Some(pos), Temporal::None, true);
 
         assert_eq!(entries.len(), 2);
-        assert!(entries.iter().all(|e| e.is_template), "composed subtree stays template");
+        assert!(
+            entries.iter().all(|e| e.is_template),
+            "composed subtree stays template"
+        );
     }
 
     #[test]
@@ -224,7 +240,10 @@ mod tests {
             root_id,
             &subtree,
             &values,
-            Some(Position { parent_id: Uuid::new_v4(), frac_index: FractionalIndex::default() }),
+            Some(Position {
+                parent_id: Uuid::new_v4(),
+                frac_index: FractionalIndex::default(),
+            }),
             Temporal::None,
             false,
         );
