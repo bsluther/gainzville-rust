@@ -74,6 +74,15 @@ struct GainzvilleApp: App {
                 .environmentObject(logDayStore)
                 .environmentObject(dragState)
                 .environmentObject(attributeFocus)
+                #if os(macOS)
+                // The per-view `.background(Color.gvBackground)` modifiers paint
+                // the sidebar and detail correctly, but the bare window region
+                // around the toolbar isn't covered by any view and falls through
+                // to the (black) NSWindow content background. This fills that
+                // surface so the whole window reads as gvBackground. (The toolbar
+                // material still lightens it slightly — native macOS behavior.)
+                .containerBackground(Color.gvBackground, for: .window)
+                #endif
         }
         #if os(macOS)
         .defaultSize(width: 1100, height: 700)
