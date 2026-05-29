@@ -221,6 +221,7 @@ private struct DatePickerPill: View {
     let components: DatePickerComponents
     var onBeforeEdit: () -> Bool = { true }
     @State private var isPresenting = false
+    @State private var isTimeFocused = false
 
     private var displayText: String {
         guard let date else { return "" }
@@ -239,7 +240,7 @@ private struct DatePickerPill: View {
         #if os(macOS)
         if components == .hourAndMinute {
             if date != nil {
-                TimeFieldMacOS(selection: pickerDate)
+                TimeFieldMacOS(selection: pickerDate, isFocused: isTimeFocused, onFocusChange: { isTimeFocused = $0 })
                     .fixedSize()
                     .padding(.leading, GvSpacing.sm)
                     .padding(.trailing, GvSpacing.lg)
@@ -247,6 +248,10 @@ private struct DatePickerPill: View {
                     .frame(minHeight: GvSpacing.minAttributeHeight)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.gvSurface))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gvDivider, lineWidth: 1))
+                    .popover(isPresented: $isTimeFocused, arrowEdge: .top) {
+                        AttributeSheetBar(title: "Time", kind: .temporal, onDismiss: { isTimeFocused = false })
+                            .frame(width: 280)
+                    }
             } else {
                 Button {
                     guard onBeforeEdit() else { return }
@@ -418,11 +423,33 @@ private func durationWheelColumn(range: Range<Int>, label: String, selection: Bi
 #if os(macOS)
 /// macOS time field backed by NSDatePicker with transparent background,
 /// so custom pill styling can be applied without a double-box appearance.
+// NSDatePicker is AppKit, so there's no @FocusState; this subclass reports
+// first-responder changes so SwiftUI can drive a focus popover (GV-36).
+private final class FocusReportingDatePicker: NSDatePicker {
+    var onFocusChange: ((Bool) -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { DispatchQueue.main.async { [weak self] in self?.onFocusChange?(true) } }
+        return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { DispatchQueue.main.async { [weak self] in self?.onFocusChange?(false) } }
+        return resigned
+    }
+}
+
 private struct TimeFieldMacOS: NSViewRepresentable {
     @Binding var selection: Date
+    // SwiftUI's desired focus state. When it goes false (e.g. the popover was
+    // dismissed by clicking away) we resign the picker so editing actually ends.
+    var isFocused: Bool = false
+    var onFocusChange: (Bool) -> Void = { _ in }
 
-    func makeNSView(context: Context) -> NSDatePicker {
-        let picker = NSDatePicker()
+    func makeNSView(context: Context) -> FocusReportingDatePicker {
+        let picker = FocusReportingDatePicker()
         picker.datePickerStyle = .textField
         picker.datePickerElements = .hourMinuteSecond
         picker.isBezeled = false
@@ -431,11 +458,18 @@ private struct TimeFieldMacOS: NSViewRepresentable {
         picker.dateValue = selection
         picker.target = context.coordinator
         picker.action = #selector(Coordinator.dateChanged(_:))
+        picker.onFocusChange = onFocusChange
         return picker
     }
 
-    func updateNSView(_ picker: NSDatePicker, context: Context) {
+    func updateNSView(_ picker: FocusReportingDatePicker, context: Context) {
         if picker.dateValue != selection { picker.dateValue = selection }
+        picker.onFocusChange = onFocusChange
+        // SwiftUI ended focus (popover dismissed) but the field still holds first
+        // responder — resign it so the keyboard edit session actually ends.
+        if !isFocused, picker.window?.firstResponder === picker {
+            picker.window?.makeFirstResponder(nil)
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
