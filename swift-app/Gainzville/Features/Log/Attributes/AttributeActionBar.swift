@@ -18,12 +18,11 @@ struct AttributeActionBar: View {
     /// a plain text field elsewhere in the same container) — only the dismiss
     /// affordance shows, preserving the old keyboard-Done behavior.
     var kind: AttributeMenuKind?
-    /// Resign first responder. Only shown when `showsDismiss` is true — the iOS
-    /// keyboard bar, where there's no title row to host a close button. Sheet /
-    /// popover presentations put the dismiss in their header toolbar instead
-    /// (see AttributeSheetBar) and pass `showsDismiss: false`.
-    let onDismiss: () -> Void
-    var showsDismiss: Bool = true
+    /// Resign first responder. Supplied only by the iOS keyboard bar, where
+    /// there's no title row to host a close button; when set, a trailing dismiss
+    /// affordance is shown. Sheet / popover presentations put the dismiss in
+    /// their header toolbar instead (see AttributeSheetBar) and leave this nil.
+    var onDismiss: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: GvSpacing.md) {
@@ -42,7 +41,7 @@ struct AttributeActionBar: View {
                 .frame(maxHeight: .infinity)
             }
 
-            if showsDismiss {
+            if let onDismiss {
                 Button(action: onDismiss) {
                     Image(systemName: "keyboard.chevron.compact.down")
                         .foregroundStyle(Color.gvLoggedBlue)
@@ -61,7 +60,7 @@ struct AttributeActionBar: View {
     }
 
     // The buttons available for the focused attribute's kind. No-ops for the
-    // spike. Mirrors the conditions in AttributeMenuContent (AttributeRow.swift).
+    // spike.
     private var actions: [Action] {
         guard let kind else { return [] }
         var result: [Action] = []
@@ -79,7 +78,6 @@ struct AttributeActionBar: View {
             result.append(Action(label: "Range", icon: "arrow.left.and.right.square"))
         }
         if kind != .temporal {
-            // Alt icon to try: "rectangle.badge.minus", "trash.fill"
             result.append(Action(label: "Remove", icon: "trash.fill", color: Color.red))
         }
         return result
@@ -132,8 +130,9 @@ struct AttributeSheetBar: View {
                 #endif
                 .padding(.horizontal, GvSpacing.lg)
 
-                // Actions only; the close button is in the toolbar above.
-                AttributeActionBar(kind: kind, onDismiss: {}, showsDismiss: false)
+                // Actions only; the close button is in the toolbar above, so no
+                // inline dismiss affordance.
+                AttributeActionBar(kind: kind)
             }
             .frame(maxWidth: .infinity)
             GvMenuDivider()
@@ -156,19 +155,12 @@ struct AttributeKeyboardBar: ViewModifier {
                     UIApplication.shared.sendAction(
                         #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
-//                .background(.ultraThinMaterial, in: .capsule)
-//                .containerRelativeFrame(.horizontal)
-//                .frame(maxWidth: .infinity)
                 .glassEffect(.clear, in: .capsule)
-                .overlay(
-                          Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
-                      )
+                .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
                 .padding(.bottom, GvSpacing.lg)
-                
             }
-            // Hide the default background of the toolbar so can we pad away from the keyboard.
+            // Hide the default toolbar background so we can pad away from the keyboard.
             .sharedBackgroundVisibility(.hidden)
-            
         }
         #else
         content

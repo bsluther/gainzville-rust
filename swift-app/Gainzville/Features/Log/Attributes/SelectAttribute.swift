@@ -76,7 +76,6 @@ private struct SelectOptionsList: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .presentationDetents([.medium, .large])
         .presentationContentInteraction(.scrolls)
-//        .gvSheetChrome()
         #else
         VStack(spacing: 0) {
             AttributeSheetBar(title: title, kind: .select, onDismiss: { dismiss() })
@@ -113,7 +112,6 @@ private struct SelectOptionRow: View {
                 Text(option)
                     .font(.gvBody)
                     .foregroundStyle(Color.gvTextBright)
-//                    .foregroundStyle(Color.gvTextPrimary)
                 Spacer()
             }
             .overlay(alignment: .trailing) {

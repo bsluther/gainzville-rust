@@ -370,7 +370,10 @@ private struct DatePickerIOS: View {
             .padding()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.fraction(0.7), .large,])
+        // No content-fitting detent exists for iOS sheets, so the default height
+        // is hard-coded: 0.7 is the smallest fraction the graphical date picker
+        // fits in without clipping. `.large` lets it grow if needed.
+        .presentationDetents([.fraction(0.7), .large])
         .gvSheetChrome()
     }
 }
