@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 struct LogView: View {
     @EnvironmentObject var forestVM: ForestViewModel
     @EnvironmentObject var logDayStore: LogDayStore
-    @EnvironmentObject var attributeFocus: AttributeFocusModel
     @EnvironmentObject var dragState: DragState
     @State private var isCreatePresented = false
     @State private var pendingRootDrop: PendingRootDrop?
@@ -33,15 +32,6 @@ struct LogView: View {
                     #else
                     .frame(maxWidth: .infinity)
                     #endif
-                    // Tap-outside-to-clear: catches taps in horizontal padding,
-                    // between entries, and below the last entry. Row taps win
-                    // over this background because SwiftUI delivers to the
-                    // deepest gesture.
-                    .background(
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture { attributeFocus.focused = nil }
-                    )
                 }
                 // Blue background scoped to the scroll area (below the nav bar).
                 // Color.gvBackground on the outer view — a bare Color — extends
@@ -106,7 +96,7 @@ struct LogView: View {
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .gvKeyboardDoneButton()
+        .gvAttributeKeyboardBar()
     }
 
     private func handleDayRootDrop(_ entry: Entry) {

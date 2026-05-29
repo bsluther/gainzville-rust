@@ -16,6 +16,7 @@ extension Color {
     static var gvBackground: Color    { .gvNeutral1100 }
     static var gvSurface: Color       { .gvNeutral1000 }
     static var gvDivider: Color       { .gvNeutral200 }
+    static var gvTextBright: Color    { .gvNeutral300 }
     static var gvTextPrimary: Color   { .gvNeutral400 }
     static var gvTextSecondary: Color { .gvNeutral500 }
 

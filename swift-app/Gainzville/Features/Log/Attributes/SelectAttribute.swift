@@ -9,15 +9,10 @@ struct SelectAttribute: View {
     let pair: SelectAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
     @State private var isPresenting = false
-    @EnvironmentObject private var focusModel: AttributeFocusModel
-
-    private var focus: AttributeFocus {
-        .standard(entryId: entry.id, attrId: pair.attrId)
-    }
 
     var body: some View {
-        AttributeRow(label: pair.name, focus: focus, kind: .select) {
-            Button { focusModel.focused = focus; isPresenting = true } label: {
+        AttributeRow(label: pair.name) {
+            Button { isPresenting = true } label: {
                 Text(displayText.isEmpty ? gvEmptyPillText : displayText)
                     .frame(minWidth: GvSpacing.minAttributeInputWidth)
                     .gvAttributePill()
@@ -70,17 +65,23 @@ private struct SelectOptionsList: View {
     let options: [String]
     let selection: String?
     let onPick: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         #if os(iOS)
-        NavigationStack {
+        VStack(spacing: 0) {
+            AttributeSheetBar(title: title, kind: .select, onDismiss: { dismiss() })
             list
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .presentationDetents([.medium, .large])
+        .presentationContentInteraction(.scrolls)
         #else
-        list.padding(GvSpacing.md).frame(minWidth: 220)
+        VStack(spacing: 0) {
+            AttributeSheetBar(title: title, kind: .select, onDismiss: { dismiss() })
+            list
+        }
+        .frame(minWidth: 220)
         #endif
     }
 
@@ -110,7 +111,7 @@ private struct SelectOptionRow: View {
                 Spacer()
                 Text(option)
                     .font(.gvBody)
-                    .foregroundStyle(Color.gvTextPrimary)
+                    .foregroundStyle(Color.gvTextBright)
                 Spacer()
             }
             .overlay(alignment: .trailing) {

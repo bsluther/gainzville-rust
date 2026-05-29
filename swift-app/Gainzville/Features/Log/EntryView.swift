@@ -41,7 +41,6 @@ struct EntryView: View {
     @EnvironmentObject var forestVM: ForestViewModel
     @EnvironmentObject var coreEnv: CoreEnv
     @EnvironmentObject var dataChange: DataChange
-    @EnvironmentObject var attributeFocus: AttributeFocusModel
     @EnvironmentObject var dragState: DragState
     @StateObject private var vm = EntryViewModel()
     @State private var isExpanded = false
@@ -61,10 +60,7 @@ struct EntryView: View {
                 displayName: displayName,
                 activityName: vm.entryJoin?.activity?.name,
                 isExpanded: isExpanded,
-                onToggle: {
-                    attributeFocus.focused = nil
-                    isExpanded.toggle()
-                }
+                onToggle: { isExpanded.toggle() }
             )
             if isExpanded {
                 EntryBody(entry: entry, attributes: vm.entryJoin?.attributes ?? [])
@@ -81,16 +77,6 @@ struct EntryView: View {
         // (where the path curves inward), making the corners look ~2x too thick.
         .frame(maxWidth: .infinity, alignment: .leading)
         .entryContainerStyle(isSequence: entry.isSequence)
-        // Tap-outside-to-clear inside an entry: the entry's colored background
-        // swallows taps before they reach LogView's clear-background, so we
-        // also clear at the entry level. AttributeRow's own .onTapGesture wins
-        // for taps on rows (SwiftUI delivers to the deepest gesture); inner
-        // Buttons (header, ellipsis, footer +Entry, checkbox) consume their
-        // own taps without firing this one.
-        .contentShape(Rectangle())
-        .onTapGesture {
-            attributeFocus.focused = nil
-        }
         // Drop delegate: forwards to day-root for root scalars; forbids drops
         // (blocking the day-root indicator) for everything else. See
         // EntryDragDrop.swift for the full hit-test layering rationale.

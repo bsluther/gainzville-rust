@@ -40,7 +40,6 @@ struct TemporalAttribute: View {
     @State private var debounceTask: Task<Void, Never>?
     @State private var showConflictAlert = false
     @State private var pendingField: TemporalField?
-    @EnvironmentObject private var focusModel: AttributeFocusModel
     @Environment(\.entryContext) private var entryContext
 
     private var temporal: Temporal { entry.temporal }
@@ -50,7 +49,6 @@ struct TemporalAttribute: View {
             temporalHeader
             if isExpanded {
                 TemporalExpandedRows(
-                    entryId: entry.id,
                     editStart: $editStart,
                     editEnd: $editEnd,
                     editDurationMs: $editDurationMs,
@@ -111,8 +109,6 @@ struct TemporalAttribute: View {
     /// Called before a pill opens its editor. Returns true if the edit is allowed,
     /// false if a conflict alert has been raised instead.
     private func gateEdit(for field: TemporalField) -> Bool {
-        focusModel.focused = focusFor(field, entryId: entry.id)
-
         // Editing an already-set field is always allowed.
         switch field {
         case .start: if editStart != nil { return true }
@@ -190,7 +186,6 @@ struct TemporalAttribute: View {
 // MARK: - Expanded rows
 
 private struct TemporalExpandedRows: View {
-    let entryId: String
     @Binding var editStart: Date?
     @Binding var editEnd: Date?
     @Binding var editDurationMs: UInt32?
@@ -203,27 +198,19 @@ private struct TemporalExpandedRows: View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
             // Templates live outside the timeline: duration only, no start/end.
             if !entryContext.isTemplate {
-                AttributeRow(label: "Start", focus: focusFor(.start, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
+                AttributeRow(label: "Start", indent: GvSpacing.lg) {
                     DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart)
                     DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart)
                 }
-                AttributeRow(label: "End", focus: focusFor(.end, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
+                AttributeRow(label: "End", indent: GvSpacing.lg) {
                     DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd)
                     DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd)
                 }
             }
-            AttributeRow(label: "Duration", focus: focusFor(.duration, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
+            AttributeRow(label: "Duration", indent: GvSpacing.lg) {
                 DurationPickerPill(durationMs: $editDurationMs, onBeforeEdit: onBeforeEditDuration)
             }
         }
-    }
-}
-
-private func focusFor(_ field: TemporalField, entryId: String) -> AttributeFocus {
-    switch field {
-    case .start:    return .temporalStart(entryId: entryId)
-    case .end:      return .temporalEnd(entryId: entryId)
-    case .duration: return .temporalDuration(entryId: entryId)
     }
 }
 
@@ -234,6 +221,7 @@ private struct DatePickerPill: View {
     let components: DatePickerComponents
     var onBeforeEdit: () -> Bool = { true }
     @State private var isPresenting = false
+    @State private var isTimeFocused = false
 
     private var displayText: String {
         guard let date else { return "" }
@@ -252,7 +240,7 @@ private struct DatePickerPill: View {
         #if os(macOS)
         if components == .hourAndMinute {
             if date != nil {
-                TimeFieldMacOS(selection: pickerDate)
+                TimeFieldMacOS(selection: pickerDate, isFocused: isTimeFocused, onFocusChange: { isTimeFocused = $0 })
                     .fixedSize()
                     .padding(.leading, GvSpacing.sm)
                     .padding(.trailing, GvSpacing.lg)
@@ -260,6 +248,10 @@ private struct DatePickerPill: View {
                     .frame(minHeight: GvSpacing.minAttributeHeight)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.gvSurface))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gvDivider, lineWidth: 1))
+                    .popover(isPresented: $isTimeFocused, arrowEdge: .top) {
+                        AttributeSheetBar(title: "Time", kind: .temporal, onDismiss: { isTimeFocused = false })
+                            .frame(width: 280)
+                    }
             } else {
                 Button {
                     guard onBeforeEdit() else { return }
@@ -362,7 +354,8 @@ private struct DatePickerIOS: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            AttributeSheetBar(title: components == .date ? "Date" : "Time", kind: .temporal, onDismiss: { dismiss() })
             Group {
                 if components == .date {
                     DatePicker("", selection: $date, displayedComponents: components)
@@ -375,15 +368,13 @@ private struct DatePickerIOS: View {
                 }
             }
             .padding()
-            .navigationTitle(components == .date ? "Date" : "Time")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
         }
-        .presentationDetents([.medium])
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // No content-fitting detent exists for iOS sheets, so the default height
+        // is hard-coded: 0.7 is the smallest fraction the graphical date picker
+        // fits in without clipping. `.large` lets it grow if needed.
+        .presentationDetents([.fraction(0.7), .large])
+        .gvSheetChrome()
     }
 }
 
@@ -395,24 +386,21 @@ private struct DurationPickerIOS: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Title + action bar. No Cancel (editing is live); the bar's dismiss
+            // commits + closes — "Done ≡ dismiss".
+            AttributeSheetBar(title: "Duration", kind: .temporal, onDismiss: { onDone(); dismiss() })
+
             HStack(spacing: 0) {
                 durationWheelColumn(range: 0..<24, label: "Hours", selection: $hours)
                 durationWheelColumn(range: 0..<60, label: "Minutes", selection: $minutes)
                 durationWheelColumn(range: 0..<60, label: "Seconds", selection: $seconds)
             }
-            .navigationTitle("Duration")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { onDone(); dismiss() }
-                }
-            }
+            .padding(.top, GvSpacing.md)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .presentationDetents([.medium])
+        .gvSheetChrome()
     }
 }
 
@@ -438,11 +426,33 @@ private func durationWheelColumn(range: Range<Int>, label: String, selection: Bi
 #if os(macOS)
 /// macOS time field backed by NSDatePicker with transparent background,
 /// so custom pill styling can be applied without a double-box appearance.
+// NSDatePicker is AppKit, so there's no @FocusState; this subclass reports
+// first-responder changes so SwiftUI can drive a focus popover (GV-36).
+private final class FocusReportingDatePicker: NSDatePicker {
+    var onFocusChange: ((Bool) -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { DispatchQueue.main.async { [weak self] in self?.onFocusChange?(true) } }
+        return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { DispatchQueue.main.async { [weak self] in self?.onFocusChange?(false) } }
+        return resigned
+    }
+}
+
 private struct TimeFieldMacOS: NSViewRepresentable {
     @Binding var selection: Date
+    // SwiftUI's desired focus state. When it goes false (e.g. the popover was
+    // dismissed by clicking away) we resign the picker so editing actually ends.
+    var isFocused: Bool = false
+    var onFocusChange: (Bool) -> Void = { _ in }
 
-    func makeNSView(context: Context) -> NSDatePicker {
-        let picker = NSDatePicker()
+    func makeNSView(context: Context) -> FocusReportingDatePicker {
+        let picker = FocusReportingDatePicker()
         picker.datePickerStyle = .textField
         picker.datePickerElements = .hourMinuteSecond
         picker.isBezeled = false
@@ -451,11 +461,18 @@ private struct TimeFieldMacOS: NSViewRepresentable {
         picker.dateValue = selection
         picker.target = context.coordinator
         picker.action = #selector(Coordinator.dateChanged(_:))
+        picker.onFocusChange = onFocusChange
         return picker
     }
 
-    func updateNSView(_ picker: NSDatePicker, context: Context) {
+    func updateNSView(_ picker: FocusReportingDatePicker, context: Context) {
         if picker.dateValue != selection { picker.dateValue = selection }
+        picker.onFocusChange = onFocusChange
+        // SwiftUI ended focus (popover dismissed) but the field still holds first
+        // responder — resign it so the keyboard edit session actually ends.
+        if !isFocused, picker.window?.firstResponder === picker {
+            picker.window?.makeFirstResponder(nil)
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -470,10 +487,14 @@ private struct TimeFieldMacOS: NSViewRepresentable {
 private struct DatePickerMacOS: View {
     @Binding var date: Date
     let components: DatePickerComponents
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        CalendarPickerMacOS(selection: $date, components: components)
-            .padding(GvSpacing.md)
+        VStack(spacing: 0) {
+            AttributeSheetBar(title: components == .date ? "Date" : "Time", kind: .temporal, onDismiss: { dismiss() })
+            CalendarPickerMacOS(selection: $date, components: components)
+                .padding(GvSpacing.md)
+        }
     }
 }
 
@@ -485,15 +506,14 @@ private struct DurationPickerMacOS: View {
 
     var body: some View {
         VStack(spacing: GvSpacing.lg) {
+            AttributeSheetBar(title: "Duration", kind: .temporal, onDismiss: { onDone() })
             HStack(spacing: GvSpacing.xl) {
                 DurationStepperColumn(label: "Hours", value: $hours, range: 0...23)
                 DurationStepperColumn(label: "Minutes", value: $minutes, range: 0...59)
                 DurationStepperColumn(label: "Seconds", value: $seconds, range: 0...59)
             }
-            Button("Done") { onDone() }
-                .keyboardShortcut(.defaultAction)
         }
-        .padding(GvSpacing.lg)
+        .padding(.bottom, GvSpacing.lg)
         .frame(minWidth: 240)
     }
 }
