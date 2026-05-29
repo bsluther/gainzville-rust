@@ -13,5 +13,14 @@ enum AttributeFocus: Hashable {
 }
 
 final class AttributeFocusModel: ObservableObject {
+    // Tap-focus: which row shows the focused-state affordance (gear). Set by
+    // taps on any row; cleared by tap-outside.
     @Published var focused: AttributeFocus?
+
+    // Which attribute kind currently owns the keyboard (is first responder).
+    // Drives the container-level keyboard action bar. Set ONLY when a text
+    // field gains/loses keyboard focus — NOT by taps — so tapping another
+    // attribute's label while editing doesn't swap the bar out from under you.
+    // nil when no attribute field has the keyboard.
+    @Published var keyboardKind: AttributeMenuKind?
 }

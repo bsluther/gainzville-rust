@@ -18,7 +18,6 @@ struct AttributeRow<Content: View>: View {
     let indent: CGFloat
     private let content: Content
     @EnvironmentObject private var focusModel: AttributeFocusModel
-    @State private var isMenuPresented = false
 
     init(label: String, focus: AttributeFocus, kind: AttributeMenuKind, indent: CGFloat = 0, @ViewBuilder content: () -> Content) {
         self.label = label
@@ -28,36 +27,16 @@ struct AttributeRow<Content: View>: View {
         self.content = content()
     }
 
-    private var isFocused: Bool { focusModel.focused == focus }
-
     var body: some View {
         // Top alignment so that when value pills wrap to multiple lines the
-        // label/gear group stays anchored at the first row.
+        // label stays anchored at the first row.
         HStack(alignment: .top, spacing: 0) {
-            // Label + gear, sized to content, on the left.
+            // Label, sized to content, on the left.
             HStack(alignment: .center, spacing: 0) {
                 Text(label)
                     .font(.attrLabel)
                     .foregroundStyle(Color.entryTextSecondary)
                     .padding(.leading, indent)
-
-                // Reserved 20×20 slot — gear is always laid out, only its opacity
-                // toggles, so showing/hiding doesn't shift the row.
-                Button {
-                    focusModel.focused = focus
-                    isMenuPresented = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .foregroundStyle(Color.gvTextSecondary)
-                        .opacity(isFocused ? 1 : 0)
-                        .frame(width: 20, height: 20)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.leading, GvSpacing.sm)
-                .platformPopover(isPresented: $isMenuPresented) {
-                    AttributeMenuContent(kind: kind)
-                }
             }
             .frame(minHeight: GvSpacing.minAttributeHeight)
 
@@ -82,32 +61,6 @@ struct AttributeRow<Content: View>: View {
     }
 }
 
-private struct AttributeMenuContent: View {
-    let kind: AttributeMenuKind
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: GvSpacing.md) {
-                GvMenuRow("Clear", icon: "xmark.circle")
-
-                if kind != .temporal {
-                    GvMenuDivider()
-                    GvMenuRow("Remove attribute", icon: "trash", isDestructive: true)
-                }
-
-                if kind == .mass {
-                    GvMenuDivider()
-                    GvMenuRow("Pick units", icon: "ruler")
-                }
-            }
-            .padding(GvSpacing.md)
-        }
-        #if os(iOS)
-        .presentationDetents([.medium])
-        #endif
-    }
-}
-
 // Shared pill style for attribute value display across temporal and attribute
 // editors. Apply with `.gvAttributePill()`.
 extension View {
@@ -126,7 +79,18 @@ extension View {
             )
     }
 
-    /// Adds a global keyboard toolbar with a "Done" button to dismiss the keyboard.
+    /// Adds the shared attribute action bar above the keyboard (iOS). When an
+    /// attribute is focused the bar shows that attribute's controls; otherwise
+    /// it falls back to a lone dismiss button (the old "Done" behavior). Apply
+    /// once at the container level — only one `.keyboard` toolbar may exist, or
+    /// items duplicate across multiple text fields.
+    func gvAttributeKeyboardBar() -> some View {
+        modifier(AttributeKeyboardBar())
+    }
+
+    /// Adds a global keyboard toolbar with a "Done" button to dismiss the
+    /// keyboard. Used on surfaces with plain text fields and no entry-attribute
+    /// editing (e.g. the library attribute-config screens).
     @ViewBuilder
     func gvKeyboardDoneButton() -> some View {
         #if os(iOS)

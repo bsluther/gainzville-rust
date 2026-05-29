@@ -106,7 +106,7 @@ struct LogView: View {
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .gvKeyboardDoneButton()
+        .gvAttributeKeyboardBar()
     }
 
     private func handleDayRootDrop(_ entry: Entry) {

@@ -4,6 +4,29 @@ import AppKit
 #endif
 
 extension View {
+    /// iOS sheet chrome: a gvBackground fill with a hairline border drawn over
+    /// it. A plain opaque fill (content `.background` or `presentationBackground(Color)`)
+    /// hides the sheet's native lighter rim, so we draw our own border, matching
+    /// the entry-menu sheet (see EntryView). No-op on macOS (popover has its own
+    /// border).
+    func gvSheetChrome(cornerRadius: CGFloat = 36) -> some View {
+        #if os(iOS)
+        self
+            // Border drawn ON TOP of content so an opaque header band can't
+            // occlude it — drawing it behind (in presentationBackground) made it
+            // show only around the picker, where the content is transparent.
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                    .allowsHitTesting(false)
+            )
+            .presentationCornerRadius(cornerRadius)
+            .presentationBackground(Color.gvBackground)
+        #else
+        self
+        #endif
+    }
+
     /// Presents content as a sheet on iOS and a popover on macOS.
     /// Content may apply `.presentationDetents` — it's a no-op on macOS.
     func platformPopover<Content: View>(

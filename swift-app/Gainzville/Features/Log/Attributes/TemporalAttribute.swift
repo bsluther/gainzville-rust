@@ -362,7 +362,8 @@ private struct DatePickerIOS: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            AttributeSheetBar(title: components == .date ? "Date" : "Time", kind: .temporal, onDismiss: { dismiss() })
             Group {
                 if components == .date {
                     DatePicker("", selection: $date, displayedComponents: components)
@@ -375,15 +376,10 @@ private struct DatePickerIOS: View {
                 }
             }
             .padding()
-            .navigationTitle(components == .date ? "Date" : "Time")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
         }
-        .presentationDetents([.medium])
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .presentationDetents([.fraction(0.7), .large,])
+        .gvSheetChrome()
     }
 }
 
@@ -395,24 +391,21 @@ private struct DurationPickerIOS: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Title + action bar. No Cancel (editing is live); the bar's dismiss
+            // commits + closes — "Done ≡ dismiss".
+            AttributeSheetBar(title: "Duration", kind: .temporal, onDismiss: { onDone(); dismiss() })
+
             HStack(spacing: 0) {
                 durationWheelColumn(range: 0..<24, label: "Hours", selection: $hours)
                 durationWheelColumn(range: 0..<60, label: "Minutes", selection: $minutes)
                 durationWheelColumn(range: 0..<60, label: "Seconds", selection: $seconds)
             }
-            .navigationTitle("Duration")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { onDone(); dismiss() }
-                }
-            }
+            .padding(.top, GvSpacing.md)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .presentationDetents([.medium])
+        .gvSheetChrome()
     }
 }
 

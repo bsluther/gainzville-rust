@@ -28,8 +28,13 @@ struct NumericAttribute: View {
             }
             .onChange(of: editValue) { _, _ in scheduleDebounce() }
             .onChange(of: isKeyboardFocused) { _, focused in
-                if focused { focusModel.focused = focus }
-                if !focused { flushNow() }
+                if focused {
+                    focusModel.focused = focus
+                    focusModel.keyboardKind = .numeric
+                } else {
+                    focusModel.keyboardKind = nil
+                    flushNow()
+                }
             }
     }
 

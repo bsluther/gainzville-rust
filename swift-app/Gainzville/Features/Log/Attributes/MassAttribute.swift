@@ -35,8 +35,13 @@ struct MassAttribute: View {
         }
         .onChange(of: values) { _, _ in scheduleDebounce() }
         .onChange(of: focusedUnit) { _, newFocus in
-            if newFocus != nil { focusModel.focused = focus }
-            if newFocus == nil { flushNow() }
+            if newFocus != nil {
+                focusModel.focused = focus
+                focusModel.keyboardKind = .mass
+            } else {
+                focusModel.keyboardKind = nil
+                flushNow()
+            }
         }
     }
 
