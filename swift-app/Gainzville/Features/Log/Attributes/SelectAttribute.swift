@@ -9,15 +9,10 @@ struct SelectAttribute: View {
     let pair: SelectAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
     @State private var isPresenting = false
-    @EnvironmentObject private var focusModel: AttributeFocusModel
-
-    private var focus: AttributeFocus {
-        .standard(entryId: entry.id, attrId: pair.attrId)
-    }
 
     var body: some View {
-        AttributeRow(label: pair.name, focus: focus, kind: .select) {
-            Button { focusModel.focused = focus; isPresenting = true } label: {
+        AttributeRow(label: pair.name) {
+            Button { isPresenting = true } label: {
                 Text(displayText.isEmpty ? gvEmptyPillText : displayText)
                     .frame(minWidth: GvSpacing.minAttributeInputWidth)
                     .gvAttributePill()

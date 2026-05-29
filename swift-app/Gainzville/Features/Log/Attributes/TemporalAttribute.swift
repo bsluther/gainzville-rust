@@ -40,7 +40,6 @@ struct TemporalAttribute: View {
     @State private var debounceTask: Task<Void, Never>?
     @State private var showConflictAlert = false
     @State private var pendingField: TemporalField?
-    @EnvironmentObject private var focusModel: AttributeFocusModel
     @Environment(\.entryContext) private var entryContext
 
     private var temporal: Temporal { entry.temporal }
@@ -50,7 +49,6 @@ struct TemporalAttribute: View {
             temporalHeader
             if isExpanded {
                 TemporalExpandedRows(
-                    entryId: entry.id,
                     editStart: $editStart,
                     editEnd: $editEnd,
                     editDurationMs: $editDurationMs,
@@ -111,8 +109,6 @@ struct TemporalAttribute: View {
     /// Called before a pill opens its editor. Returns true if the edit is allowed,
     /// false if a conflict alert has been raised instead.
     private func gateEdit(for field: TemporalField) -> Bool {
-        focusModel.focused = focusFor(field, entryId: entry.id)
-
         // Editing an already-set field is always allowed.
         switch field {
         case .start: if editStart != nil { return true }
@@ -190,7 +186,6 @@ struct TemporalAttribute: View {
 // MARK: - Expanded rows
 
 private struct TemporalExpandedRows: View {
-    let entryId: String
     @Binding var editStart: Date?
     @Binding var editEnd: Date?
     @Binding var editDurationMs: UInt32?
@@ -203,27 +198,19 @@ private struct TemporalExpandedRows: View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
             // Templates live outside the timeline: duration only, no start/end.
             if !entryContext.isTemplate {
-                AttributeRow(label: "Start", focus: focusFor(.start, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
+                AttributeRow(label: "Start", indent: GvSpacing.lg) {
                     DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart)
                     DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart)
                 }
-                AttributeRow(label: "End", focus: focusFor(.end, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
+                AttributeRow(label: "End", indent: GvSpacing.lg) {
                     DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd)
                     DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd)
                 }
             }
-            AttributeRow(label: "Duration", focus: focusFor(.duration, entryId: entryId), kind: .temporal, indent: GvSpacing.lg) {
+            AttributeRow(label: "Duration", indent: GvSpacing.lg) {
                 DurationPickerPill(durationMs: $editDurationMs, onBeforeEdit: onBeforeEditDuration)
             }
         }
-    }
-}
-
-private func focusFor(_ field: TemporalField, entryId: String) -> AttributeFocus {
-    switch field {
-    case .start:    return .temporalStart(entryId: entryId)
-    case .end:      return .temporalEnd(entryId: entryId)
-    case .duration: return .temporalDuration(entryId: entryId)
     }
 }
 

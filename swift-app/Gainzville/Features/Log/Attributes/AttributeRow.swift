@@ -1,9 +1,7 @@
 import SwiftUI
 
 // Shared layout for attribute-style rows: label on the left, custom input on the
-// right, consistent min-height across temporal and attribute editors. The row
-// owns its focus state — pass the focus identifier and the row reads/writes the
-// shared AttributeFocusModel directly.
+// right, consistent min-height across temporal and attribute editors.
 enum AttributeMenuKind {
     case numeric
     case mass
@@ -13,16 +11,11 @@ enum AttributeMenuKind {
 
 struct AttributeRow<Content: View>: View {
     let label: String
-    let focus: AttributeFocus
-    let kind: AttributeMenuKind
     let indent: CGFloat
     private let content: Content
-    @EnvironmentObject private var focusModel: AttributeFocusModel
 
-    init(label: String, focus: AttributeFocus, kind: AttributeMenuKind, indent: CGFloat = 0, @ViewBuilder content: () -> Content) {
+    init(label: String, indent: CGFloat = 0, @ViewBuilder content: () -> Content) {
         self.label = label
-        self.focus = focus
-        self.kind = kind
         self.indent = indent
         self.content = content()
     }
@@ -54,10 +47,6 @@ struct AttributeRow<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(minHeight: GvSpacing.minAttributeHeight)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            focusModel.focused = focus
-        }
     }
 }
 

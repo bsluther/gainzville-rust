@@ -17,12 +17,8 @@ struct NumericAttribute: View {
     // field while it's focused, since macOS has no keyboard accessory.
     @State private var showActions = false
 
-    private var focus: AttributeFocus {
-        .standard(entryId: entry.id, attrId: pair.attrId)
-    }
-
     var body: some View {
-        AttributeRow(label: pair.name, focus: focus, kind: .numeric) { field }
+        AttributeRow(label: pair.name) { field }
             .onAppear { syncEditState() }
             .onChange(of: pair.actual) { _, _ in
                 // Skip while the user is editing — otherwise an upstream cache
@@ -32,7 +28,6 @@ struct NumericAttribute: View {
             .onChange(of: editValue) { _, _ in scheduleDebounce() }
             .onChange(of: isKeyboardFocused) { _, focused in
                 if focused {
-                    focusModel.focused = focus
                     focusModel.keyboardKind = .numeric
                 } else {
                     focusModel.keyboardKind = nil

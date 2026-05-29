@@ -18,12 +18,8 @@ struct MassAttribute: View {
     @FocusState private var focusedUnit: MassUnit?
     @EnvironmentObject private var focusModel: AttributeFocusModel
 
-    private var focus: AttributeFocus {
-        .standard(entryId: entry.id, attrId: pair.attrId)
-    }
-
     var body: some View {
-        AttributeRow(label: pair.name, focus: focus, kind: .mass) {
+        AttributeRow(label: pair.name) {
             ForEach(unitsToShow, id: \.self) { unit in
                 massField(unit: unit)
             }
@@ -36,7 +32,6 @@ struct MassAttribute: View {
         .onChange(of: values) { _, _ in scheduleDebounce() }
         .onChange(of: focusedUnit) { _, newFocus in
             if newFocus != nil {
-                focusModel.focused = focus
                 focusModel.keyboardKind = .mass
             } else {
                 focusModel.keyboardKind = nil
@@ -59,7 +54,7 @@ struct MassAttribute: View {
                 .gvAttributePill()
                 .fixedSize(horizontal: true, vertical: false)
                 .gvSelectAllOnFocus(isFocused: focusedUnit == unit)
-                .onSubmit { flushNow() }
+                .onSubmit { focusedUnit = nil }
             Text(unit.shortLabel)
                 // Monospaced + padded labels give every unit a consistent width
                 // so the pills line up across rows regardless of unit length.
@@ -67,6 +62,18 @@ struct MassAttribute: View {
                 .foregroundStyle(Color.entryTextSecondary)
                 .fixedSize(horizontal: true, vertical: false)
         }
+        // macOS (GV-36): anchor the action-bar popover to the focused unit field
+        // (driven directly off focusedUnit so the arrow points at the field, not
+        // the whole row). Closing it (click-away/Enter) ends editing.
+        #if os(macOS)
+        .popover(
+            isPresented: Binding(get: { focusedUnit == unit }, set: { if !$0 { focusedUnit = nil } }),
+            arrowEdge: .top
+        ) {
+            AttributeSheetBar(title: pair.name, kind: .mass, onDismiss: { focusedUnit = nil })
+                .frame(width: 280)
+        }
+        #endif
     }
 
     private func bindingFor(_ unit: MassUnit) -> Binding<String> {
