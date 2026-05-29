@@ -13,6 +13,9 @@ struct NumericAttribute: View {
     @State private var debounceTask: Task<Void, Never>?
     @FocusState private var isKeyboardFocused: Bool
     @EnvironmentObject private var focusModel: AttributeFocusModel
+    // macOS prototype (GV-36): show the action bar in a popover anchored to the
+    // field while it's focused, since macOS has no keyboard accessory.
+    @State private var showActions = false
 
     private var focus: AttributeFocus {
         .standard(entryId: entry.id, attrId: pair.attrId)
@@ -35,7 +38,18 @@ struct NumericAttribute: View {
                     focusModel.keyboardKind = nil
                     flushNow()
                 }
+                #if os(macOS)
+                showActions = focused
+                #endif
             }
+            #if os(macOS)
+            // The popover's lifecycle IS the editing session: when it closes for
+            // any reason (clicking an inert area outside the field dismisses the
+            // popover), end editing too so keyboard focus doesn't linger.
+            .onChange(of: showActions) { _, shown in
+                if !shown { isKeyboardFocused = false }
+            }
+            #endif
     }
 
     @ViewBuilder
@@ -52,7 +66,13 @@ struct NumericAttribute: View {
             .gvAttributePill()
             .fixedSize(horizontal: true, vertical: false)
             .gvSelectAllOnFocus(isFocused: isKeyboardFocused)
-            .onSubmit { flushNow() }
+            .onSubmit { isKeyboardFocused = false }
+            #if os(macOS)
+            .popover(isPresented: $showActions, arrowEdge: .top) {
+                AttributeSheetBar(title: pair.name, kind: .numeric, onDismiss: { isKeyboardFocused = false })
+                    .frame(width: 280)
+            }
+            #endif
     }
 
     // For range-valued attributes, show "min – max" as placeholder behind the

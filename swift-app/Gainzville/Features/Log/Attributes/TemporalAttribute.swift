@@ -463,10 +463,14 @@ private struct TimeFieldMacOS: NSViewRepresentable {
 private struct DatePickerMacOS: View {
     @Binding var date: Date
     let components: DatePickerComponents
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        CalendarPickerMacOS(selection: $date, components: components)
-            .padding(GvSpacing.md)
+        VStack(spacing: 0) {
+            AttributeSheetBar(title: components == .date ? "Date" : "Time", kind: .temporal, onDismiss: { dismiss() })
+            CalendarPickerMacOS(selection: $date, components: components)
+                .padding(GvSpacing.md)
+        }
     }
 }
 
@@ -478,15 +482,14 @@ private struct DurationPickerMacOS: View {
 
     var body: some View {
         VStack(spacing: GvSpacing.lg) {
+            AttributeSheetBar(title: "Duration", kind: .temporal, onDismiss: { onDone() })
             HStack(spacing: GvSpacing.xl) {
                 DurationStepperColumn(label: "Hours", value: $hours, range: 0...23)
                 DurationStepperColumn(label: "Minutes", value: $minutes, range: 0...59)
                 DurationStepperColumn(label: "Seconds", value: $seconds, range: 0...59)
             }
-            Button("Done") { onDone() }
-                .keyboardShortcut(.defaultAction)
         }
-        .padding(GvSpacing.lg)
+        .padding(.bottom, GvSpacing.lg)
         .frame(minWidth: 240)
     }
 }

@@ -83,7 +83,11 @@ private struct SelectOptionsList: View {
         .presentationContentInteraction(.scrolls)
 //        .gvSheetChrome()
         #else
-        list.padding(GvSpacing.md).frame(minWidth: 220)
+        VStack(spacing: 0) {
+            AttributeSheetBar(title: title, kind: .select, onDismiss: { dismiss() })
+            list
+        }
+        .frame(minWidth: 220)
         #endif
     }
 

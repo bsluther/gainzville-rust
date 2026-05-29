@@ -18,11 +18,12 @@ struct AttributeActionBar: View {
     /// a plain text field elsewhere in the same container) — only the dismiss
     /// affordance shows, preserving the old keyboard-Done behavior.
     var kind: AttributeMenuKind?
-    /// Right-pinned affordance: resignFirstResponder above the keyboard,
-    /// `dismiss()` inside a sheet — same role, "dismiss keyboard ≡ close sheet".
-    /// Uses the keyboard-dismiss glyph in both contexts; it's an imperfect
-    /// symbol for the sheet case but kept identical for now (GV-36).
+    /// Resign first responder. Only shown when `showsDismiss` is true — the iOS
+    /// keyboard bar, where there's no title row to host a close button. Sheet /
+    /// popover presentations put the dismiss in their header toolbar instead
+    /// (see AttributeSheetBar) and pass `showsDismiss: false`.
     let onDismiss: () -> Void
+    var showsDismiss: Bool = true
 
     var body: some View {
         HStack(spacing: GvSpacing.md) {
@@ -41,13 +42,15 @@ struct AttributeActionBar: View {
                 .frame(maxHeight: .infinity)
             }
 
-            Button(action: onDismiss) {
-                Image(systemName: "keyboard.chevron.compact.down")
-                    .foregroundStyle(Color.gvLoggedBlue)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
+            if showsDismiss {
+                Button(action: onDismiss) {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .foregroundStyle(Color.gvLoggedBlue)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         // Fixed height keeps the horizontal ScrollView from going vertically
         // greedy (which collapses the bar inside a free VStack, e.g. a sheet).
@@ -101,19 +104,38 @@ struct AttributeSheetBar: View {
 
     var body: some View {
         VStack(spacing: GvSpacing.md) {
-            // The whole header band (title + bar) is one neutral step lighter
-            // than the sheet body (gvSurface over gvBackground), with a bottom
-            // border, so it reads as a distinct header above the picker content.
             VStack(spacing: GvSpacing.md) {
-                Text(title)
-                    .font(.gvHeadline)
-                    .foregroundStyle(Color.gvTextPrimary)
-                    .padding(.top, GvSpacing.xl)
-                AttributeActionBar(kind: kind, onDismiss: onDismiss)
+                // Header toolbar: centered title with a trailing close button —
+                // the close lives here (top-right) rather than inline in the bar.
+                ZStack {
+                    Text(title)
+                        .font(.gvHeadline)
+                        .foregroundStyle(Color.gvTextPrimary)
+                    HStack {
+                        Spacer()
+                        Button(action: onDismiss) {
+                            Image(systemName: "xmark")
+                                .font(.title2)
+                                .foregroundStyle(Color.gvTextPrimary)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        #if os(iOS)
+                        .padding(.trailing, GvSpacing.lg)
+                        #endif
+                    }
+                }
+                #if os(macOS)
+                .padding(.top, GvSpacing.md)
+                #else
+                .padding(.top, GvSpacing.xl)
+                #endif
+                .padding(.horizontal, GvSpacing.lg)
+
+                // Actions only; the close button is in the toolbar above.
+                AttributeActionBar(kind: kind, onDismiss: {}, showsDismiss: false)
             }
             .frame(maxWidth: .infinity)
-//            .padding(.vertical, GvSpacing.lg)
-//            .background(Color.gvSurface)
             GvMenuDivider()
                 .padding(.bottom, GvSpacing.md)
         }
