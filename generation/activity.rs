@@ -1,17 +1,18 @@
+use rand::RngExt;
 use uuid::Uuid;
 
 use crate::{Arbitrary, ArbitraryFrom, gen_random_text, pick};
 use gv_core::models::activity::{Activity, ActivityName};
 
 impl Arbitrary for ActivityName {
-    fn arbitrary<R: rand::Rng, C: super::GenerationContext>(rng: &mut R, _context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: super::GenerationContext>(rng: &mut R, _context: &C) -> Self {
         ActivityName::parse(gen_random_text(rng, 1..5).to_string())
             .expect("failed to parse randomly generated text")
     }
 }
 
 impl ArbitraryFrom<&[Uuid]> for Activity {
-    fn arbitrary_from<R: rand::Rng, C: super::GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: super::GenerationContext>(
         rng: &mut R,
         context: &C,
         actor_ids: &[Uuid],

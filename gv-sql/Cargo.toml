@@ -27,4 +27,3 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 generation = { path = "../generation" }
 rand = { workspace = true }
-rand_chacha = { workspace = true }

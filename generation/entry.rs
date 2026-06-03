@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
-use rand::Rng;
+use rand::RngExt;
 use rand_distr::{Distribution, Normal};
 use uuid::Uuid;
 
@@ -15,7 +15,7 @@ use gv_core::{
 };
 
 impl Arbitrary for FractionalIndex {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         // Found the terminator in the fractional_index internals, seems to work.
         const TERMINATOR: u8 = 0b1000_0000;
         let n_bytes = rng.random_range(1..128);
@@ -32,7 +32,7 @@ impl Arbitrary for FractionalIndex {
 
 // TODO: should generate all Options variants probabilistically.
 impl Arbitrary for Entry {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
         Entry {
             owner_id: Uuid::arbitrary(rng, context),
             id: Uuid::arbitrary(rng, context),
@@ -54,7 +54,7 @@ impl Arbitrary for Entry {
 impl ArbitraryFrom<&[FractionalIndex]> for FractionalIndex {
     /// Given n fractional indices there are n+1 possible insertion positions: before the first
     /// element, between adjacent elements, and after the last element; generate one at random.
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         _context: &C,
         frac_indices: &[FractionalIndex],
@@ -85,7 +85,7 @@ impl ArbitraryFrom<&[Entry]> for Option<Position> {
     /// Generate an arbitrary position within the given entries with probability 0.5 of choosing a
     /// root position, otherwise a child position. If the provided entries slice is empty, always
     /// generates a root position (e.g. returns None).
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         entries: &[Entry],
@@ -116,7 +116,7 @@ impl ArbitraryFrom<&[Entry]> for Option<Position> {
 }
 // CONSIDER: taking Option<&[...]> to let the caller omit options.
 impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry])> for Entry {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         (actor_ids, activities, entries): (&[Uuid], &[Activity], &[Entry]),
@@ -162,14 +162,14 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry])> for Entry {
 
 /// Generate a random duration in milliseconds by sampling from a random distribution with mean
 /// 20 minutes and standard deviation 40 mins and setting all negatives values to 0.
-pub fn gen_random_exercise_duration_ms<R: Rng>(rng: &mut R) -> u32 {
+pub fn gen_random_exercise_duration_ms<R: RngExt>(rng: &mut R) -> u32 {
     let distribution = Normal::new(20. * 60_000., 40. * 60_000.).unwrap();
     (distribution.sample(rng) as f32).max(0.) as u32
 }
 
 // TODO: this doesn't enforce that start <= end. Should impl ArbitraryFrom<Range>
 impl Arbitrary for Temporal {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
         let t = match rng.random_range(0..=6) {
             0 => Temporal::None,
             1 => Temporal::Start {

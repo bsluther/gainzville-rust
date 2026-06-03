@@ -8,7 +8,7 @@ gv-core = { path = "../core" }
 generation = { path = "../generation" }
 
 anyhow.workspace = true
-rand_chacha.workspace = true
+rand = { workspace = true }
 serde.workspace = true
 uuid.workspace = true
 

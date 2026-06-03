@@ -8,7 +8,8 @@ use gv_core::{
     models::{activity::Activity, entry::Entry},
 };
 use ivm::types::{Id, IvmEntry};
-use rand_chacha::{ChaCha8Rng, rand_core::SeedableRng};
+use rand::SeedableRng;
+use rand::rngs::ChaCha8Rng;
 use uuid::Uuid;
 
 fn build_circuit(

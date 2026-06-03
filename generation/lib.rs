@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use gv_core::validation::{Email, Username};
-use rand::{Rng, rand_core};
+use rand::{Rng, RngExt};
 use rand_distr::{Distribution, Normal};
 use uuid::Uuid;
 
@@ -93,15 +93,15 @@ impl GenerationContext for SimulationContext {
 
 /// RNG is separate from the GenerationContext so we can borrow the GenerationContext as read-only.
 pub trait Arbitrary {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self;
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self;
 }
 
 pub trait ArbitraryFrom<T> {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(rng: &mut R, context: &C, t: T) -> Self;
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C, t: T) -> Self;
 }
 
 pub trait ArbitraryFromMaybe<T> {
-    fn arbitrary_from_maybe<R: Rng, C: GenerationContext>(
+    fn arbitrary_from_maybe<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         t: T,
@@ -111,7 +111,7 @@ pub trait ArbitraryFromMaybe<T> {
 }
 
 /// Generate `Some(f(rng))` with probability `p_some`, otherwise `None`.
-pub fn maybe<T, R: Rng>(rng: &mut R, p_some: f64, f: impl FnOnce(&mut R) -> T) -> Option<T> {
+pub fn maybe<T, R: RngExt>(rng: &mut R, p_some: f64, f: impl FnOnce(&mut R) -> T) -> Option<T> {
     if rng.random_bool(p_some) {
         Some(f(rng))
     } else {
@@ -120,7 +120,7 @@ pub fn maybe<T, R: Rng>(rng: &mut R, p_some: f64, f: impl FnOnce(&mut R) -> T) -
 }
 
 // Unifiormly pick an Some(element) from a slice; returns None if the slice is empty.
-pub fn pick<'a, T, R: Rng>(choices: &'a [T], rng: &mut R) -> Option<&'a T> {
+pub fn pick<'a, T, R: RngExt>(choices: &'a [T], rng: &mut R) -> Option<&'a T> {
     if choices.is_empty() {
         None
     } else {
@@ -128,22 +128,39 @@ pub fn pick<'a, T, R: Rng>(choices: &'a [T], rng: &mut R) -> Option<&'a T> {
     }
 }
 
-pub fn pick_index<R: Rng>(choices: usize, rng: &mut R) -> usize {
+pub fn pick_index<R: RngExt>(choices: usize, rng: &mut R) -> usize {
     rng.random_range(0..choices)
 }
 
-pub fn gen_random_name<R: Rng>(rng: &mut R, separator: &str) -> String {
-    anarchist_readable_name_generator_lib::readable_name_custom(separator, rng)
+/// Adapts a rand-0.10 RNG to the rand-0.9 `RngCore` that
+/// `anarchist-readable-name-generator-lib` (pinned to rand 0.9) expects. Both
+/// rand majors coexist in the tree; this newtype is the only bridge between them.
+struct Rand09<'a, R: ?Sized>(&'a mut R);
+
+impl<R: Rng + ?Sized> rand_core_0_9::RngCore for Rand09<'_, R> {
+    fn next_u32(&mut self) -> u32 {
+        self.0.next_u32()
+    }
+    fn next_u64(&mut self) -> u64 {
+        self.0.next_u64()
+    }
+    fn fill_bytes(&mut self, dst: &mut [u8]) {
+        self.0.fill_bytes(dst)
+    }
 }
 
-pub fn gen_random_text<R: Rng + rand::RngCore + rand_core::RngCore>(
+pub fn gen_random_name<R: RngExt>(rng: &mut R, separator: &str) -> String {
+    anarchist_readable_name_generator_lib::readable_name_custom(separator, Rand09(rng))
+}
+
+pub fn gen_random_text<R: RngExt>(
     rng: &mut R,
     range: std::ops::Range<usize>,
 ) -> String {
     let n = rng.random_range(range);
     let mut text = String::new();
     for i in 0..(n / 2) {
-        let s = anarchist_readable_name_generator_lib::readable_name_custom(" ", &mut *rng);
+        let s = anarchist_readable_name_generator_lib::readable_name_custom(" ", Rand09(&mut *rng));
         if i > 0 {
             text.push(' ');
         }
@@ -154,7 +171,7 @@ pub fn gen_random_text<R: Rng + rand::RngCore + rand_core::RngCore>(
             text.push(' ');
         }
         text.push_str(
-            anarchist_readable_name_generator_lib::readable_name_custom(" ", &mut *rng)
+            anarchist_readable_name_generator_lib::readable_name_custom(" ", Rand09(&mut *rng))
                 .split(' ')
                 .next()
                 .unwrap_or(""),
@@ -164,7 +181,7 @@ pub fn gen_random_text<R: Rng + rand::RngCore + rand_core::RngCore>(
 }
 
 impl Arbitrary for Email {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         let username = gen_random_name(rng, "-");
         let domain = gen_random_name(rng, "-");
         let tld = ".com";
@@ -174,19 +191,19 @@ impl Arbitrary for Email {
 }
 
 impl Arbitrary for Uuid {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         uuid::Builder::from_random_bytes(rng.random()).into_uuid()
     }
 }
 
 impl Arbitrary for Username {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         Username::parse(gen_random_name(rng, "-")).expect("generated username should be valid")
     }
 }
 
 impl Arbitrary for DateTime<Utc> {
-    fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
         let mean_ms = context.opts().time_mean.timestamp_millis() as f64;
         let std_ms = context.opts().time_std.num_milliseconds() as f64;
         let normal = Normal::new(mean_ms, std_ms).unwrap();

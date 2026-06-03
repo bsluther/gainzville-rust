@@ -14,7 +14,7 @@ use gv_core::{
 use gv_server::server::PostgresServer;
 use gv_sql::postgres::PostgresQueryExecutor;
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
+use rand::rngs::ChaCha8Rng;
 use sqlx::PgPool;
 use tracing::info;
 

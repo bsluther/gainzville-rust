@@ -19,11 +19,13 @@ Sources consulted:
   bridge we need: `hegel::extras::rand::randoms()` yields a `HegelRandom` RNG
   that is *backed by test-case data and shrinkable*. You `tc.draw(randoms())` to
   get an RNG and then call our existing `T::arbitrary(&mut rng, &ctx)` verbatim.
-- **The one real obstacle is a `rand` version skew, not a design mismatch.**
-  `generation` is on `rand 0.9.2`; hegel's rand bridge is on `rand 0.10`. The two
-  `Rng` traits are different types, so hegel's RNG won't satisfy our `R: rand::Rng`
-  bound directly. Resolve with either a ~20-line version-shim newtype (keep 0.9)
-  or a workspace `rand` 0.9→0.10 bump.
+- **The `rand` version skew is RESOLVED — the workspace was bumped to `rand 0.10.1`.**
+  `generation` (and the whole workspace) is now on `rand 0.10` (`RngExt` = the old
+  ext `Rng`), so hegel's `HegelRandom` — also on `rand 0.10` — satisfies our
+  `R: RngExt` bound directly via `rand_core`'s fallible→infallible adapter. **No
+  hegel-side shim is needed.** (The only residual cross-version bridge is a tiny
+  `rand 0.9` shim for `anarchist-readable-name-generator-lib`, internal to
+  `generation`.)
 - **The rand path must stay regardless of hegel.** DST and dev-seeds need fast,
   offline, seed-reproducible generation. Hegel's engine (Hypothesis-backed,
   shrinking-oriented, `uv`/server-assisted) is not built for that. So "rewrite
@@ -127,58 +129,29 @@ fn entry_round_trips(tc: TestCase) {
 The bridge is behind hegel's optional `rand` feature:
 `cargo add --dev hegeltest --features rand`.
 
-## The one real obstacle: `rand` 0.9 vs 0.10
+## The `rand` 0.9 vs 0.10 skew — RESOLVED (workspace bumped to 0.10)
 
-`HegelRandom` implements `TryRng` (fallible, `Error = Infallible`). Our trait
-bound is `R: rand::Rng` (infallible). Within a single `rand` version that gap is
-a one-call adapter — `rand_core` provides `TryRngCore::unwrap_mut()` /
-`unwrap_err()` to view an infallible `TryRng` as an `RngCore` (and `Rng` is a
-blanket impl over `RngCore`). So *conceptually* it's free.
+**Status: done.** The workspace was migrated from `rand 0.9.2` to **`rand 0.10.1`**
+(`rand_distr 0.5.1 → 0.6.0`; `rand_chacha` dropped — `ChaCha8Rng` now comes from
+rand's bundled `chacha20`, via `rand::rngs::ChaCha8Rng` behind the `chacha`
+feature). The 0.10 trait rename — `rand_core::RngCore → Rng`, and the old ext
+trait `rand::Rng → rand::RngExt` — was applied across `generation`, so every
+generator bound is now `R: RngExt`.
 
-The catch is the version skew:
+This dissolves the obstacle for hegel. `HegelRandom` is on `rand 0.10` — the same
+major as the workspace — so it satisfies our `R: RngExt` bound directly through
+`rand_core`'s fallible→infallible adapter (`TryRng::unwrap_mut`, now *within* a
+single major). **No hegel-side version shim is needed.** Earlier drafts weighed a
+0.10→0.9 shim (keep `generation` on 0.9) against a workspace bump; the bump was
+taken — the cleaner end state, and it makes the trait types align with hegel for
+free. To wire up PBT now you just `cargo add --dev hegeltest --features rand` and
+call `T::arbitrary(&mut rng, &ctx)` with `rng = tc.draw(randoms())`.
 
-| Crate | `rand` | `rand_core` |
-|-------|--------|-------------|
-| `generation` (this repo) | **0.9.2** | 0.9.3 |
-| hegel-rust rand bridge | **0.10** (optional) | (re-exported) |
-
-`rand` 0.9 → 0.10 is a breaking release: the `Rng`/`RngCore`/`TryRngCore` traits
-in 0.10 are a *different type* from the 0.9 ones. So `HegelRandom` satisfies
-`rand 0.10`'s `Rng`, while `Entry::arbitrary` wants `rand 0.9`'s `Rng`. They do
-not unify, and the `unwrap_mut()` adapter only bridges fallible→infallible
-*within the same major*, not across 0.9↔0.10.
-
-Two ways out:
-
-1. **Version-shim newtype (~20 LOC, keeps `generation` on 0.9).** Wrap hegel's
-   0.10 RNG and re-expose it as a `rand_core` 0.9 `RngCore` by forwarding
-   `next_u32`/`next_u64`/`fill_bytes` to the 0.10 `TryRng` methods (all
-   `Infallible`, so `.unwrap()` is total). Multiple `rand` majors already coexist
-   in our lock file (0.8.5 *and* 0.9.2 are both present today), so pulling in
-   hegel's 0.10 on the dev/test path is not a new kind of problem. This is the
-   lowest-friction option and isolates the skew to one file.
-
-   ```rust
-   // dev/test-only shim. hr: hegel's rand 0.10 RNG; exposes rand 0.9 RngCore.
-   struct Rng09<'a>(&'a mut hegel::extras::rand::HegelRandom);
-   impl rand_core::RngCore for Rng09<'_> {
-       fn next_u32(&mut self) -> u32 { self.0.try_next_u32().unwrap() }
-       fn next_u64(&mut self) -> u64 { self.0.try_next_u64().unwrap() }
-       fn fill_bytes(&mut self, d: &mut [u8]) { self.0.try_fill_bytes(d).unwrap() }
-   }
-   ```
-   (Exact method set/signatures to match `rand_core` 0.9.)
-
-2. **Bump the workspace `rand` to 0.10.** Then the trait types align and hegel's
-   RNG (via `unwrap_mut`) drives our impls with no shim. Cleaner end state, but a
-   0.9→0.10 migration touches every `rng.random_range(...)`/`random_bool(...)`
-   call site in `generation` and requires a `rand_distr` bump (currently
-   `rand_distr 0.5.1`, which pairs with `rand` 0.9 and is used for the Normal
-   sampling in `DateTime`/duration generation). Only worth it if we want the 0.10
-   migration for its own sake.
-
-Recommendation: start with the shim (option 1). It unblocks PBT today without a
-workspace-wide churn, and option 2 remains available later.
+One small residual, unrelated to hegel: `anarchist-readable-name-generator-lib`
+is pinned to `rand 0.9`, so `generation` carries a ~12-line `Rand09` newtype that
+adapts our 0.10 rng to a `rand 0.9` `RngCore` at the name-generator call sites.
+Both rand majors coexist in the lock file (as 0.8.5 and 0.9.2 already did); the
+bridge is isolated to one file in `generation`.
 
 ## Two integration tracks
 
@@ -382,8 +355,10 @@ highest-confidence PBT shape.
 
 ## Recommended sequence
 
-1. **Write the version shim** (`rand` 0.10 `HegelRandom` → `rand` 0.9 `RngCore`),
-   dev/test-only. ~20 lines, one file. This is the whole bridge.
+1. **~~Write the version shim~~ — done (workspace bumped to `rand 0.10.1`).** The
+   workspace is on the same `rand` major as `HegelRandom`, so our `R: RngExt`
+   impls take hegel's RNG with no shim. Just `cargo add --dev hegeltest --features
+   rand` on the dev/test path.
 2. **Convert `entry_round_trip_sqlite.rs`** as the reference Track-A migration
    (reuses `Entry::arbitrary` unchanged). Run it both with the default server
    backend and with `--features native` — that *is* the per-draw-cost spike, now
@@ -397,7 +372,7 @@ highest-confidence PBT shape.
    `#[hegel::state_machine]` with `Variables<Entry>`/`Variables<Attribute>` pools
    and `generation::model::Model` as the reference model, to validate the
    partial-reuse pattern before converting the rest.
-6. Decide on the workspace `rand` 0.10 bump separately, on its own merits; the
-   shim makes it non-blocking.
+6. ~~Decide on the workspace `rand` 0.10 bump separately~~ — done; the workspace is
+   on `rand 0.10.1`.
 
 Cross-reference: `docs/properties.md` (PBT strategy).

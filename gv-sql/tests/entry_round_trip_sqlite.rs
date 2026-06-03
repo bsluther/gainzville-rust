@@ -20,7 +20,7 @@ use gv_core::{
 };
 use gv_sql::sqlite::{SqliteDeltaExecutor, SqliteQueryExecutor};
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
+use rand::rngs::ChaCha8Rng;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 

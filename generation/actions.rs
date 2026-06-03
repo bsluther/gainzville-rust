@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use rand::Rng;
+use rand::RngExt;
 use uuid::Uuid;
 
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, gen_random_text, maybe, pick};
@@ -20,7 +20,7 @@ use gv_core::{
 };
 
 impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         (actor_ids, activities, entries, attributes): (
@@ -77,7 +77,7 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry], &[Attribute])> for Action {
 }
 
 impl Arbitrary for CreateUser {
-    fn arbitrary<R: rand::Rng, C: crate::GenerationContext>(rng: &mut R, context: &C) -> Self {
+    fn arbitrary<R: rand::RngExt, C: crate::GenerationContext>(rng: &mut R, context: &C) -> Self {
         User {
             actor_id: Uuid::arbitrary(rng, context),
             email: Email::arbitrary(rng, context),
@@ -89,7 +89,7 @@ impl Arbitrary for CreateUser {
 
 impl ArbitraryFrom<&[Uuid]> for CreateActivity {
     /// Generate an arbitrary activity owned by one of the provided uuids.
-    fn arbitrary_from<R: rand::Rng, C: super::GenerationContext>(
+    fn arbitrary_from<R: rand::RngExt, C: super::GenerationContext>(
         rng: &mut R,
         context: &C,
         actor_ids: &[Uuid],
@@ -99,7 +99,7 @@ impl ArbitraryFrom<&[Uuid]> for CreateActivity {
 }
 
 impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry])> for CreateEntry {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         (actor_ids, activities, entries): (&[Uuid], &[Activity], &[Entry]),
@@ -110,7 +110,7 @@ impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry])> for CreateEntry {
 
 /// Provided entries must be non-empty.
 impl ArbitraryFrom<&[Entry]> for MoveEntry {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         entries: &[Entry],
@@ -133,7 +133,7 @@ impl ArbitraryFrom<&[Entry]> for MoveEntry {
 }
 
 impl ArbitraryFrom<&[Uuid]> for CreateAttribute {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         actor_ids: &[Uuid],
@@ -144,7 +144,7 @@ impl ArbitraryFrom<&[Uuid]> for CreateAttribute {
 
 /// Provided entries must be non-empty.
 impl ArbitraryFrom<&[Entry]> for UpdateEntryCompletion {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         _context: &C,
         entries: &[Entry],
@@ -159,7 +159,7 @@ impl ArbitraryFrom<&[Entry]> for UpdateEntryCompletion {
 }
 
 impl ArbitraryFrom<(&[Entry], &[Attribute])> for CreateValue {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         (entries, attributes): (&[Entry], &[Attribute]),
@@ -176,7 +176,7 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for CreateValue {
 /// Pick an (entry, attribute) pair whose owners match, mirroring the constraint
 /// the attach/detach mutators enforce. Panics if no owned attribute exists for
 /// the picked entry — callers gate on owner overlap before generating.
-fn pick_owned_pair<'a, R: Rng>(
+fn pick_owned_pair<'a, R: RngExt>(
     rng: &mut R,
     entries: &'a [Entry],
     attributes: &'a [Attribute],
@@ -192,7 +192,7 @@ fn pick_owned_pair<'a, R: Rng>(
 }
 
 impl ArbitraryFrom<(&[Entry], &[Attribute])> for AttachValue {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         _context: &C,
         (entries, attributes): (&[Entry], &[Attribute]),
@@ -207,7 +207,7 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for AttachValue {
 }
 
 impl ArbitraryFrom<(&[Entry], &[Attribute])> for DeleteAttributeValue {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         _context: &C,
         (entries, attributes): (&[Entry], &[Attribute]),
@@ -222,7 +222,7 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for DeleteAttributeValue {
 }
 
 impl ArbitraryFrom<&[Activity]> for CreateEntryFromActivity {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         activities: &[Activity],
@@ -243,7 +243,7 @@ impl ArbitraryFrom<&[Activity]> for CreateEntryFromActivity {
 }
 
 impl ArbitraryFrom<&[Entry]> for UpdateEntry {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         _context: &C,
         entries: &[Entry],
@@ -258,7 +258,7 @@ impl ArbitraryFrom<&[Entry]> for UpdateEntry {
 }
 
 impl ArbitraryFrom<&[Attribute]> for UpdateAttribute {
-    fn arbitrary_from<R: Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         _context: &C,
         attributes: &[Attribute],

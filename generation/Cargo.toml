@@ -16,5 +16,8 @@ anarchist-readable-name-generator-lib = { workspace = true }
 chrono = { workspace = true }
 rustc-hash = { workspace = true }
 anyhow = { workspace = true }
-rand_distr = "0.5.1"
-rand_chacha = "0.9.0"
+# rand_distr 0.6 is the companion to rand 0.10.
+rand_distr = "0.6"
+# rand 0.9 RngCore, used only by the shim that adapts our 0.10 rng to the
+# rand-0.9-bound `anarchist-readable-name-generator-lib`.
+rand_core_0_9 = { package = "rand_core", version = "0.9" }

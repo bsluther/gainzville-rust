@@ -7,12 +7,13 @@ use gv_core::models::{
 };
 use uuid::Uuid;
 
+use rand::RngExt;
 use rand::seq::SliceRandom;
 
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, gen_random_text, maybe, pick};
 
 impl ArbitraryFrom<&[Uuid]> for Attribute {
-    fn arbitrary_from<R: rand::Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         actor_ids: &[Uuid],
@@ -30,7 +31,7 @@ impl ArbitraryFrom<&[Uuid]> for Attribute {
 }
 
 impl Arbitrary for AttributeConfig {
-    fn arbitrary<R: rand::Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
         match rng.random_range(0..=2) {
             0 => AttributeConfig::Numeric(NumericConfig::arbitrary(rng, context)),
             1 => AttributeConfig::Select(SelectConfig::arbitrary(rng, context)),
@@ -40,7 +41,7 @@ impl Arbitrary for AttributeConfig {
 }
 
 impl Arbitrary for NumericConfig {
-    fn arbitrary<R: rand::Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         let integer: bool = rng.random_bool(0.5);
 
         let rand_val = |rng: &mut R, lo: f64, hi: f64| -> f64 {
@@ -66,7 +67,7 @@ impl Arbitrary for NumericConfig {
 }
 
 impl Arbitrary for SelectConfig {
-    fn arbitrary<R: rand::Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         let n = rng.random_range(1..=8);
         let options: Vec<String> = (0..n).map(|_| gen_random_text(rng, 1..3)).collect();
         let ordered = rng.random_bool(0.5);
@@ -80,7 +81,7 @@ impl Arbitrary for SelectConfig {
 }
 
 impl Arbitrary for MassConfig {
-    fn arbitrary<R: rand::Rng, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         let all_units = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
         let n = rng.random_range(1..=all_units.len());
         let mut units: Vec<MassUnit> = all_units.to_vec();
@@ -93,7 +94,7 @@ impl Arbitrary for MassConfig {
 }
 
 impl ArbitraryFrom<(&[Entry], &[Attribute])> for Value {
-    fn arbitrary_from<R: rand::Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         (entries, attributes): (&[Entry], &[Attribute]),
@@ -131,7 +132,7 @@ impl ArbitraryFrom<(&[Entry], &[Attribute])> for Value {
 }
 
 impl ArbitraryFrom<&AttributeConfig> for AttributeValue {
-    fn arbitrary_from<R: rand::Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         context: &C,
         config: &AttributeConfig,
@@ -151,7 +152,7 @@ impl ArbitraryFrom<&AttributeConfig> for AttributeValue {
 }
 
 impl ArbitraryFrom<&NumericConfig> for NumericValue {
-    fn arbitrary_from<R: rand::Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         _context: &C,
         config: &NumericConfig,
@@ -176,7 +177,7 @@ impl ArbitraryFrom<&NumericConfig> for NumericValue {
 }
 
 impl ArbitraryFrom<&SelectConfig> for SelectValue {
-    fn arbitrary_from<R: rand::Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         _context: &C,
         config: &SelectConfig,
@@ -202,7 +203,7 @@ impl ArbitraryFrom<&SelectConfig> for SelectValue {
 }
 
 impl ArbitraryFrom<&MassConfig> for MassValue {
-    fn arbitrary_from<R: rand::Rng, C: GenerationContext>(
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
         rng: &mut R,
         _context: &C,
         _config: &MassConfig,
