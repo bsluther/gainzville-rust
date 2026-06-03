@@ -60,7 +60,6 @@ impl Opts {
 // pub struct WorkloadProfile {}
 
 pub struct SimulationContext {
-    // rng: rand_chacha::ChaCha8Rng
     opts: Opts,
     model: Model,
 }
@@ -92,6 +91,7 @@ impl GenerationContext for SimulationContext {
     }
 }
 
+/// RNG is separate from the GenerationContext so we can borrow the GenerationContext as read-only.
 pub trait Arbitrary {
     fn arbitrary<R: Rng, C: GenerationContext>(rng: &mut R, context: &C) -> Self;
 }
