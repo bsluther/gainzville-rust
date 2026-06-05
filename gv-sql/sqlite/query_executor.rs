@@ -28,23 +28,22 @@ impl QueryExecutor<IsEmailRegistered> for SqliteQueryExecutor<'_> {
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE email = ?")
             .bind(crate::columns::EmailColumn(query.email))
             .fetch_one(&mut *self.conn)
-            .await.db_err()?;
+            .await
+            .db_err()?;
 
         Ok(count > 0)
     }
 }
 
 impl QueryExecutor<FindUserById> for SqliteQueryExecutor<'_> {
-    async fn execute(
-        &mut self,
-        query: FindUserById,
-    ) -> Result<<FindUserById as Query>::Response> {
+    async fn execute(&mut self, query: FindUserById) -> Result<<FindUserById as Query>::Response> {
         let row = sqlx::query_as::<_, crate::rows::UserRow>(
             "SELECT actor_id, username, email FROM users WHERE actor_id = ?",
         )
         .bind(crate::columns::UuidColumn(query.actor_id))
         .fetch_optional(&mut *self.conn)
-        .await.db_err()?;
+        .await
+        .db_err()?;
 
         Ok(row.map(User::from))
     }
@@ -60,20 +59,19 @@ impl QueryExecutor<FindUserByUsername> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UsernameColumn(query.username))
         .fetch_optional(&mut *self.conn)
-        .await.db_err()?;
+        .await
+        .db_err()?;
 
         Ok(row.map(User::from))
     }
 }
 
 impl QueryExecutor<AllActorIds> for SqliteQueryExecutor<'_> {
-    async fn execute(
-        &mut self,
-        _query: AllActorIds,
-    ) -> Result<<AllActorIds as Query>::Response> {
+    async fn execute(&mut self, _query: AllActorIds) -> Result<<AllActorIds as Query>::Response> {
         let actor_ids = sqlx::query_scalar("SELECT id FROM actors")
             .fetch_all(&mut *self.conn)
-            .await.db_err()?;
+            .await
+            .db_err()?;
         Ok(actor_ids)
     }
 }
@@ -104,7 +102,8 @@ impl QueryExecutor<AllActivities> for SqliteQueryExecutor<'_> {
             "SELECT id, owner_id, source_activity_id, name, description FROM activities",
         )
         .fetch_all(&mut *self.conn)
-        .await.db_err()?;
+        .await
+        .db_err()?;
         Ok(rows.into_iter().map(Activity::from).collect())
     }
 }
@@ -112,13 +111,11 @@ impl QueryExecutor<AllActivities> for SqliteQueryExecutor<'_> {
 // --- Entry ---
 
 impl QueryExecutor<AllEntries> for SqliteQueryExecutor<'_> {
-    async fn execute(
-        &mut self,
-        _query: AllEntries,
-    ) -> Result<<AllEntries as Query>::Response> {
+    async fn execute(&mut self, _query: AllEntries) -> Result<<AllEntries as Query>::Response> {
         sqlx::query_as::<_, crate::rows::EntryRow>("SELECT * FROM entries")
             .fetch_all(&mut *self.conn)
-            .await.db_err()?
+            .await
+            .db_err()?
             .into_iter()
             .map(|r| r.to_entry())
             .collect()
@@ -146,7 +143,8 @@ impl QueryExecutor<EntriesRootedInTimeInterval> for SqliteQueryExecutor<'_> {
         .bind(crate::columns::DateTimeColumn(query.from))
         .bind(crate::columns::DateTimeColumn(query.to))
         .fetch_all(&mut *self.conn)
-        .await.db_err()?
+        .await
+        .db_err()?
         .into_iter()
         .map(|r| r.to_entry())
         .collect()
@@ -175,7 +173,8 @@ impl QueryExecutor<FindAncestors> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
-        .await.db_err()?;
+        .await
+        .db_err()?;
 
         if results.is_empty() {
             return Err(DomainError::Other("entry not found".to_string()));
@@ -264,7 +263,8 @@ impl QueryExecutor<FindEntryJoinById> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_optional(&mut *self.conn)
-        .await.db_err()?;
+        .await
+        .db_err()?;
 
         match row {
             None => Ok(None),
@@ -299,7 +299,8 @@ impl QueryExecutor<FindDescendants> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
-        .await.db_err()?
+        .await
+        .db_err()?
         .into_iter()
         .map(|e| e.to_entry())
         .collect()
@@ -333,7 +334,8 @@ impl QueryExecutor<AllAttributes> for SqliteQueryExecutor<'_> {
             "SELECT id, owner_id, name, description, data_type, config FROM attributes",
         )
         .fetch_all(&mut *self.conn)
-        .await.db_err()?
+        .await
+        .db_err()?
         .into_iter()
         .map(|row| row.to_attribute())
         .collect()
@@ -412,7 +414,8 @@ impl QueryExecutor<FindValuesForEntries> for SqliteQueryExecutor<'_> {
         builder
             .build_query_as::<crate::rows::ValueRow>()
             .fetch_all(&mut *self.conn)
-            .await.db_err()?
+            .await
+            .db_err()?
             .into_iter()
             .map(|row| row.to_value())
             .collect()
@@ -440,7 +443,8 @@ impl QueryExecutor<FindAttributePairsForEntry> for SqliteQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
-        .await.db_err()?
+        .await
+        .db_err()?
         .into_iter()
         .map(|row| row.to_attribute_pair())
         .collect()
@@ -451,4 +455,81 @@ impl QueryExecutor<FindAttributePairsForEntry> for SqliteQueryExecutor<'_> {
 struct AncestorRow {
     id: Uuid,
     parent_id: Option<Uuid>,
+}
+
+impl QueryExecutor<SnapshotAll> for SqliteQueryExecutor<'_> {
+    async fn execute(&mut self, _query: SnapshotAll) -> Result<<SnapshotAll as Query>::Response> {
+        // One transaction so the snapshot is a consistent point-in-time read across all tables.
+        use sqlx::Connection;
+        let mut tx = self.conn.begin().await.db_err()?;
+
+        let actors = sqlx::query_as::<_, crate::rows::ActorRow>(
+            "SELECT id, actor_kind, created_at FROM actors",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(|r| r.to_actor())
+        .collect::<Result<Vec<_>>>()?;
+
+        let users = sqlx::query_as::<_, crate::rows::UserRow>(
+            "SELECT actor_id, username, email FROM users",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(User::from)
+        .collect();
+
+        let activities = sqlx::query_as::<_, crate::rows::ActivityRow>(
+            "SELECT id, owner_id, source_activity_id, name, description FROM activities",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(Activity::from)
+        .collect();
+
+        let attributes = sqlx::query_as::<_, crate::rows::AttributeRow>(
+            "SELECT id, owner_id, name, description, data_type, config FROM attributes",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(|r| r.to_attribute())
+        .collect::<Result<Vec<_>>>()?;
+
+        let entries = sqlx::query_as::<_, crate::rows::EntryRow>("SELECT * FROM entries")
+            .fetch_all(&mut *tx)
+            .await
+            .db_err()?
+            .into_iter()
+            .map(|r| r.to_entry())
+            .collect::<Result<Vec<_>>>()?;
+
+        let values = sqlx::query_as::<_, crate::rows::ValueRow>(
+            "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(|r| r.to_value())
+        .collect::<Result<Vec<_>>>()?;
+
+        tx.commit().await.db_err()?;
+
+        Ok(Snapshot {
+            users,
+            actors,
+            activities,
+            attributes,
+            entries,
+            values,
+        })
+    }
 }

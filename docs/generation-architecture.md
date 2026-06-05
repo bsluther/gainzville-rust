@@ -131,42 +131,64 @@ generated today; left out of scope, can be added later.)
   stronger provenance-based shrinking on one hot handle is worth a native rewrap. The
   `Model`'s other hegel role — reference **oracle** — is unaffected.
 
-## Decision 4 — `pick_sorted` (the one concrete picker requirement)
+## Decision 4 — the `Model` is RNG-free; picking lives in the generation layer
 
-Picking from `HashMap<Uuid, V>` requires imposing an order to index into. **Pick from a
-Uuid-sorted view, not raw hash-iteration order:**
+Generators never touch the `Model`'s storage (`model.entries`, …) directly, and the `Model`
+never sees an RNG. The split:
 
-```rust
-fn pick_sorted<'a, V, R: Rng>(map: &'a HashMap<Uuid, V>, rng: &mut R) -> Option<&'a V>;
-```
+- **`Model`: RNG-free read accessors.** `actors()`, `entries()`, `activities()`, … return
+  `impl Iterator<Item = &T>`; domain-meaningful *queries* (e.g. `sequence_entries()`,
+  `attributes_owned_by(owner)`) are also RNG-free `.filter(...)` accessors, added as needed.
+  No `rng`, no sampling, no distribution. This keeps the `Model` a pure, deterministic object
+  — exactly what its *other* role needs (the reference **oracle**, an `AnyDeltaExecutor`).
+  Putting picking on the `Model` would conflate "what the state is" with "which one we chose,
+  how often" and contaminate the oracle.
+- **Generation owns all randomness.** The existing `pick`/`maybe`/`random_range`, or
+  `rand::seq::IteratorRandom::choose`, consume the `Model`'s accessors. The *distribution*
+  lives here, never on the `Model`.
 
-- **Primary reason — reproducibility across builds.** `FxHashMap` uses a fixed-seed hasher,
-  so iteration order is deterministic *within a binary* (seeds reproduce today). But hash
-  order is an implementation detail; a `rustc-hash`/`hashbrown`/compiler bump can reshuffle it,
-  breaking reproduction from old logged seeds. Uuids are seed-determined, so a sorted view
-  makes `index → entity` a pure function of the key set — durable across builds. (Sorting does
-  not bias the distribution; Uuids are random, so it's a stable relabeling.) This matches the
-  existing "log the seed, reproduce later" workflow (`test_arbitrary_actions` logs `seed=`).
-- **Secondary — shrink stability.** Under `HegelRandom`, the pick index is a shrinkable draw
-  minimized toward 0; a stable ordering makes index 0 a consistent target. (Stronger *semantic*
-  shrinking would use insertion/creation order — index 0 = earliest entity — which needs an
-  ordered structure; a future upgrade if shrink quality demands it.)
-- **Cost** is negligible at test-gen scale; cache a sorted `Vec<Uuid>` only if a picker gets hot.
+**There is no `pick_sorted`.** An earlier draft proposed picking from a Uuid-sorted view for
+reproducibility; that reasoning doesn't hold:
 
-Other model helpers (`pick_actor_id`, `pick_entry`, `pick_activity`, `pick_attribute`,
-`pick_sequence_entry`, owner-matched `pick_owned_pair` with a value-generatable filter,
-forest-children lookup for positions) are written **as needed**, all routed through
-`pick_sorted`.
+- **Cross-build reproducibility was the weak part.** A `rustc-hash`/`hashbrown` bump lands in
+  `Cargo.lock`, which is committed — so "reproduce across a hashmap-order change" *is*
+  "reproduce across a commit," never a reasonable expectation (any source change can alter the
+  code path). When actually debugging you sit on a pinned commit + lockfile.
+- **Within-build reproducibility — the only reasonable kind — is already free.** `FxHashMap`
+  uses a fixed-seed hasher (no per-process randomization), so for a given seed → insertion
+  sequence, iteration order is deterministic across runs of the same binary, and picks consume
+  the RNG identically regardless of order. So raw hash-order picking reproduces fine — and is
+  cheaper than sorting.
+
+**Ordering is a `Model` storage detail, swappable behind the accessors.** Today it's a
+`HashMap` (hash order). The one residual reason to ever impose an order is *future, hegel-only*:
+shrink **convergence** — as hegel minimizes a command sequence it removes entities, and a stable
+order keeps `index → entity` from reshuffling as the pool shrinks. If that bites, swap the
+backing to insertion order (`IndexMap`/seq-counter) behind the accessor — **no generator
+changes** — and insertion order (index 0 = earliest entity) is the meaningful shrink target,
+strictly better than the Uuid-sort once floated.
+
+**Picking mechanics (generation side).** `IteratorRandom::choose(rng)` avoids a `collect()`:
+for an exact-size iterator (an *unfiltered* accessor over `HashMap::values()`) it does a single
+`random_range + nth` — one RNG draw, no allocation. For a *filtered* accessor the `size_hint`
+isn't exact, so `choose` uses reservoir sampling (one draw per element): still uniform and
+allocation-free, but more draws — marginally worse for hegel shrink granularity and
+server-backend IPC. A `collect()` + single `random_range` is the one-draw alternative there; at
+test-gen volumes the difference is negligible, so it's a defer-able call. Domain helpers
+(`sequence_entries`, owner-matched pairs with a value-generatable filter, forest-children for
+positions) are written **as needed** — as RNG-free `Model` queries, with the pick done in
+generation.
 
 ## Files & migration
 
 - **`generation/lib.rs`** — make `Arbitrary` model-aware (it already takes `&C`); delete
   `ArbitraryFromMaybe`. Add a way for a harness to set/mutate the model between steps
   (`SimulationContext::model_mut` / constructor).
-- **`generation/model.rs`** — add `pick_sorted` + helpers as needed; add `Model::from_world(...)`
-  to build the maps from query results. Actors arrive as bare `Uuid`s (`AllActorIds`), so
-  `from_world` fabricates minimal placeholder `Actor` records (generators read keys only); add
-  an `AllActors` query instead only if/when a real need appears.
+- **`generation/model.rs`** — add RNG-free read accessors (`entries()`, `activities()`, …, plus
+  domain queries like `sequence_entries()`) as needed; **no picking/RNG on `Model`** (Decision 4).
+  Add `Model::from_world(...)` to build the maps from query results. Actors arrive as bare
+  `Uuid`s (`AllActorIds`), so `from_world` fabricates minimal placeholder `Actor` records
+  (generators read keys only); add an `AllActors` query instead only if/when a real need appears.
 - **`generation/actions.rs`** — convert the ~11 world-state impls from `ArbitraryFrom<slices>`
   to model-reading `Arbitrary`; rewrite `Action`'s `choices` gating per the table; remove the
   `.expect(...)` panics (replace with model reads + valid-degenerate/fabricate).

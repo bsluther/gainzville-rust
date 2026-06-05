@@ -20,7 +20,7 @@ impl PostgresServer {
     }
 
     #[instrument(skip(self), level = "info", err(level = "warn"))]
-    pub async fn run_action(&self, action: Action) -> Result<()> {
+    pub async fn run_action(&self, action: Action) -> Result<mutators::Mutation> {
         // Begin Postgres transaction.
         let mut tx = self.pool.begin().await.db_err()?;
         let mut executor = PostgresQueryExecutor::new(&mut tx);
@@ -70,7 +70,7 @@ impl PostgresServer {
 
         let mut delta_executor = PostgresDeltaExecutor::new(&mut *tx);
         // Apply deltas.
-        for delta in mx.changes {
+        for delta in mx.changes.iter().cloned() {
             // delta.apply_delta(&mut tx).await?;
             delta_executor.apply_any_delta(delta).await?;
         }
@@ -81,7 +81,7 @@ impl PostgresServer {
         // TODO: send mutation to service (or add to a pending_mutations queue).
         // sync_service.append_applied_mutation(mx);
 
-        Ok(())
+        Ok(mx)
     }
 }
 

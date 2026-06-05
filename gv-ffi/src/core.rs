@@ -1,13 +1,13 @@
 use std::sync::{Arc, LazyLock, Once};
 
 use chrono::{DateTime, Utc};
-use generation::{ArbitraryFrom, Opts, SimulationContext};
+use generation::{Arbitrary, Opts, SimulationContext};
 use gv_client::{client::SqliteClient, query_store::QuerySubscription};
 use gv_core::{
     actions::{Action, CreateAttribute, CreateEntry, CreateValue},
     forest::Forest,
     models::entry::{Entry, Position},
-    queries::{AllActivities, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse},
+    queries::{AllEntries, AnyQuery, AnyQueryResponse, SnapshotAll},
     std_lib::StandardLibrary,
 };
 use tokio::runtime::Runtime;
@@ -94,6 +94,7 @@ impl GainzvilleCore {
     pub fn run_action(&self, action: Action) -> Result<(), FfiError> {
         RUNTIME
             .block_on(self.client.run_action(action))
+            .map(|_| ())
             .map_err(|e| {
                 info!(error = %e, "run_action failed");
                 FfiError::from(e)
@@ -252,17 +253,14 @@ impl GainzvilleCore {
     /// entry and one attribute; does nothing otherwise. Pairs are deduplicated so
     /// repeat calls converge instead of erroring on PK conflicts.
     pub fn dev_create_arbitrary_values(&self, count: u32) -> Result<(), FfiError> {
-        let attributes = RUNTIME
-            .block_on(self.client.run_query(AllAttributes {}))
+        let snapshot = RUNTIME
+            .block_on(self.client.run_query(SnapshotAll))
             .map_err(FfiError::from)?;
-        let entries: Vec<Entry> = RUNTIME
-            .block_on(self.client.run_query(AllEntries {}))
-            .map_err(FfiError::from)?;
-        if attributes.is_empty() || entries.is_empty() {
+        if snapshot.entries.is_empty() || snapshot.attributes.is_empty() {
             return Ok(());
         }
-
-        let context = SimulationContext::with_opts(Opts::time_now_tight_std());
+        let mut context = SimulationContext::with_opts(Opts::time_now_tight_std());
+        context.load_snapshot(snapshot);
         let mut rng = rand::rng();
         let mut seen: std::collections::HashSet<(uuid::Uuid, uuid::Uuid)> =
             std::collections::HashSet::new();
@@ -272,11 +270,7 @@ impl GainzvilleCore {
         let mut created = 0u32;
         while created < count && attempts < max_attempts {
             attempts += 1;
-            let action = CreateValue::arbitrary_from(
-                &mut rng,
-                &context,
-                (entries.as_slice(), attributes.as_slice()),
-            );
+            let action = CreateValue::arbitrary(&mut rng, &context);
             if !seen.insert((action.value.entry_id, action.value.attribute_id)) {
                 continue;
             }
@@ -293,40 +287,28 @@ impl GainzvilleCore {
     }
 
     /// Create `count` arbitrary entries drawn from the current activities and entries in the DB.
-    /// Entries are clustered around the current time. Requires at least one activity to exist;
-    /// does nothing if there are none.
+    /// Entries are clustered around the current time.
     pub fn dev_create_arbitrary_entries(&self, count: u32) -> Result<(), FfiError> {
-        let activities = RUNTIME
-            .block_on(self.client.run_query(AllActivities {}))
+        // Hydrate the simulation model from the live DB so generated entries
+        // draw from the activities/entries currently present.
+        let mut context = SimulationContext::with_opts(Opts::time_now_tight_std());
+        let snapshot = RUNTIME
+            .block_on(self.client.run_query(SnapshotAll))
             .map_err(FfiError::from)?;
-        if activities.is_empty() {
-            return Ok(());
-        }
+        context.load_snapshot(snapshot);
 
-        let mut entries: Vec<Entry> = RUNTIME
-            .block_on(self.client.run_query(AllEntries {}))
-            .map_err(FfiError::from)?;
-
-        let actor_ids = vec![self.actor_id];
-        let context = SimulationContext::with_opts(Opts::time_now_tight_std());
         let mut rng = rand::rng();
 
         for _ in 0..count {
-            let entry = Entry::arbitrary_from(
-                &mut rng,
-                &context,
-                (
-                    actor_ids.as_slice(),
-                    activities.as_slice(),
-                    entries.as_slice(),
-                ),
-            );
+            let entry = Entry::arbitrary(&mut rng, &context);
             let action: CreateEntry = entry.clone().into();
-            RUNTIME
+            let mx = RUNTIME
                 .block_on(self.client.run_action(action.into()))
                 .map_err(FfiError::from)?;
-            // Include the new entry so subsequent entries can nest inside it.
-            entries.push(entry);
+            // Update the model.
+            RUNTIME
+                .block_on(context.apply_mutation(mx))
+                .map_err(FfiError::from)?;
         }
         Ok(())
     }

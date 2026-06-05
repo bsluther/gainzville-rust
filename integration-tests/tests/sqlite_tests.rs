@@ -1,12 +1,10 @@
 use fractional_index::FractionalIndex;
 use gv_client::client::SqliteClient;
-use gv_sql::sqlite::SqliteQueryExecutor;
 use gv_core::{
-    SYSTEM_ACTOR_ID,
     actions::{
-        AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateEntryFromActivity, CreateValue, DeleteAttributeValue, EntryChange, MassChange,
-        MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateEntry,
+        Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
+        CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue, EntryChange,
+        MassChange, MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateEntry,
     },
     models::{
         activity::{Activity, ActivityName},
@@ -15,19 +13,44 @@ use gv_core::{
             MassValue, NumericConfig, NumericValue, SelectConfig, Value,
         },
         entry::{Entry, Position, Temporal},
+        user::User,
     },
     queries::{
         AllEntries, FindAttributeById, FindDescendants, FindEntryById, FindValueByKey,
         FindValuesForEntries,
     },
     query_executor::QueryExecutor,
+    validation::{Email, Username},
 };
+use gv_sql::sqlite::SqliteQueryExecutor;
 use sqlx::SqlitePool;
 use uuid::Uuid;
+
+async fn run_actions(client: &SqliteClient, actions: impl IntoIterator<Item = Action>) {
+    for action in actions {
+        client.run_action(action).await.unwrap();
+    }
+}
+
+async fn create_user(client: &SqliteClient) -> User {
+    let id = Uuid::new_v4();
+    let user = User {
+        actor_id: id,
+        username: Username::parse(format!("u{}", id.simple())).unwrap(),
+        email: Email::parse(format!("{}@test.com", id.simple())).unwrap(),
+    };
+    client
+        .run_action(CreateUser::from(user.clone()).into())
+        .await
+        .unwrap();
+    user
+}
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_find_descendants(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
+
+    let user = create_user(&sqlite_client).await;
 
     let a: Entry = Entry {
         activity_id: None,
@@ -37,7 +60,7 @@ async fn test_find_descendants(pool: SqlitePool) {
         is_complete: false,
         is_template: false,
         name: None,
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         position: None,
         temporal: Temporal::None,
     };
@@ -50,7 +73,7 @@ async fn test_find_descendants(pool: SqlitePool) {
         is_complete: false,
         is_template: false,
         name: None,
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         position: Some(Position {
             parent_id: a.id.clone(),
             frac_index: FractionalIndex::default(),
@@ -58,14 +81,14 @@ async fn test_find_descendants(pool: SqlitePool) {
         temporal: Temporal::None,
     };
 
-    sqlite_client
-        .run_action(CreateEntry::from(a.clone()).into())
-        .await
-        .unwrap();
-    sqlite_client
-        .run_action(CreateEntry::from(b.clone()).into())
-        .await
-        .unwrap();
+    run_actions(
+        &sqlite_client,
+        [
+            CreateEntry::from(a.clone()).into(),
+            CreateEntry::from(b.clone()).into(),
+        ],
+    )
+    .await;
 
     let (a_descs, b_descs) = {
         let mut connection = sqlite_client.pool.acquire().await.unwrap();
@@ -88,6 +111,8 @@ async fn test_find_descendants(pool: SqlitePool) {
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_create_attribute_and_value(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
+    let user = create_user(&sqlite_client).await;
+    let user_id = user.actor_id.clone();
 
     // Create an attribute with a numeric config.
     let config = AttributeConfig::Numeric(NumericConfig {
@@ -98,7 +123,7 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
     });
     let attribute = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: "Weight".to_string(),
         description: None,
         config,
@@ -128,7 +153,7 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
         id: Uuid::new_v4(),
         activity_id: None,
         name: None,
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user_id,
         position: None,
         display_as_sets: false,
         is_sequence: false,
@@ -151,7 +176,7 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
         actual: Some(AttributeValue::Numeric(NumericValue::Exact(140.0))),
     };
     let create_value = CreateValue {
-        actor_id: SYSTEM_ACTOR_ID,
+        actor_id: user_id,
         value: value.clone(),
     };
     sqlite_client.run_action(create_value.into()).await.unwrap();
@@ -185,11 +210,13 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_attach_and_detach_value(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
+    let user = create_user(&sqlite_client).await;
+    let user_id = user.actor_id.clone();
 
     // Numeric attribute with a scalar default of 5.0.
     let attribute = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user_id,
         name: "Reps".to_string(),
         description: None,
         config: AttributeConfig::Numeric(NumericConfig {
@@ -208,7 +235,7 @@ async fn test_attach_and_detach_value(pool: SqlitePool) {
         id: Uuid::new_v4(),
         activity_id: None,
         name: None,
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user_id,
         position: None,
         display_as_sets: false,
         is_sequence: false,
@@ -236,7 +263,7 @@ async fn test_attach_and_detach_value(pool: SqlitePool) {
     sqlite_client
         .run_action(
             AttachValue {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user_id,
                 entry_id: entry.id,
                 attribute_id: attribute.id,
             }
@@ -256,7 +283,7 @@ async fn test_attach_and_detach_value(pool: SqlitePool) {
     sqlite_client
         .run_action(
             AttachValue {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user_id,
                 entry_id: entry.id,
                 attribute_id: attribute.id,
             }
@@ -270,7 +297,7 @@ async fn test_attach_and_detach_value(pool: SqlitePool) {
     sqlite_client
         .run_action(
             DeleteAttributeValue {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user_id,
                 entry_id: entry.id,
                 attribute_id: attribute.id,
             }
@@ -284,7 +311,7 @@ async fn test_attach_and_detach_value(pool: SqlitePool) {
     sqlite_client
         .run_action(
             DeleteAttributeValue {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user_id,
                 entry_id: entry.id,
                 attribute_id: attribute.id,
             }
@@ -295,13 +322,16 @@ async fn test_attach_and_detach_value(pool: SqlitePool) {
     assert!(read_value().await.is_none());
 }
 
-/// Helper: create a bare scalar entry owned by SYSTEM_ACTOR_ID.
-async fn seed_entry(client: &SqliteClient) -> Entry {
+/// Helper: create a user and a bare scalar entry owned by that user.
+async fn seed_entry(client: &SqliteClient) -> (User, Entry) {
+    let user = create_user(&client).await;
+    let user_id = user.actor_id.clone();
+
     let entry = Entry {
         id: Uuid::new_v4(),
         activity_id: None,
         name: None,
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user_id,
         position: None,
         display_as_sets: false,
         is_sequence: false,
@@ -313,17 +343,20 @@ async fn seed_entry(client: &SqliteClient) -> Entry {
         .run_action(CreateEntry::from(entry.clone()).into())
         .await
         .unwrap();
-    entry
+    (user, entry)
 }
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_attach_mass_seeds_default_units(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
 
+    let (user, entry) = seed_entry(&sqlite_client).await;
+    let user_id = user.actor_id.clone();
+
     // Mass attribute with two default units.
     let attribute = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user_id,
         name: "Load".to_string(),
         description: None,
         config: AttributeConfig::Mass(MassConfig {
@@ -334,12 +367,11 @@ async fn test_attach_mass_seeds_default_units(pool: SqlitePool) {
         .run_action(CreateAttribute::from(attribute.clone()).into())
         .await
         .unwrap();
-    let entry = seed_entry(&sqlite_client).await;
 
     sqlite_client
         .run_action(
             AttachValue {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user_id,
                 entry_id: entry.id,
                 attribute_id: attribute.id,
             }
@@ -362,8 +394,14 @@ async fn test_attach_mass_seeds_default_units(pool: SqlitePool) {
 
     // Both plan and actual seed a zero-magnitude measurement per default unit.
     let expected = vec![
-        MassMeasurement { unit: MassUnit::Kilogram, value: 0.0 },
-        MassMeasurement { unit: MassUnit::Pound, value: 0.0 },
+        MassMeasurement {
+            unit: MassUnit::Kilogram,
+            value: 0.0,
+        },
+        MassMeasurement {
+            unit: MassUnit::Pound,
+            value: 0.0,
+        },
     ];
     for field in [value.plan, value.actual] {
         match field.expect("seeded mass present") {
@@ -376,24 +414,26 @@ async fn test_attach_mass_seeds_default_units(pool: SqlitePool) {
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_attach_mass_empty_units_seeds_none(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
+    let (user, entry) = seed_entry(&sqlite_client).await;
 
     let attribute = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: "Load".to_string(),
         description: None,
-        config: AttributeConfig::Mass(MassConfig { default_units: vec![] }),
+        config: AttributeConfig::Mass(MassConfig {
+            default_units: vec![],
+        }),
     };
     sqlite_client
         .run_action(CreateAttribute::from(attribute.clone()).into())
         .await
         .unwrap();
-    let entry = seed_entry(&sqlite_client).await;
 
     sqlite_client
         .run_action(
             AttachValue {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 entry_id: entry.id,
                 attribute_id: attribute.id,
             }
@@ -420,10 +460,11 @@ async fn test_attach_mass_empty_units_seeds_none(pool: SqlitePool) {
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_create_value_is_noop_when_value_exists(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
+    let (user, entry) = seed_entry(&sqlite_client).await;
 
     let attribute = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: "Reps".to_string(),
         description: None,
         config: AttributeConfig::Numeric(NumericConfig {
@@ -437,7 +478,6 @@ async fn test_create_value_is_noop_when_value_exists(pool: SqlitePool) {
         .run_action(CreateAttribute::from(attribute.clone()).into())
         .await
         .unwrap();
-    let entry = seed_entry(&sqlite_client).await;
 
     let make_value = |actual: f64| Value {
         entry_id: entry.id,
@@ -451,14 +491,22 @@ async fn test_create_value_is_noop_when_value_exists(pool: SqlitePool) {
     // First create wins.
     sqlite_client
         .run_action(
-            CreateValue { actor_id: SYSTEM_ACTOR_ID, value: make_value(100.0) }.into(),
+            CreateValue {
+                actor_id: user.actor_id,
+                value: make_value(100.0),
+            }
+            .into(),
         )
         .await
         .unwrap();
     // Second create for the same key is a no-op (must not error or overwrite).
     sqlite_client
         .run_action(
-            CreateValue { actor_id: SYSTEM_ACTOR_ID, value: make_value(200.0) }.into(),
+            CreateValue {
+                actor_id: user.actor_id,
+                value: make_value(200.0),
+            }
+            .into(),
         )
         .await
         .unwrap();
@@ -494,11 +542,12 @@ async fn read_attribute(client: &SqliteClient, id: Uuid) -> Attribute {
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_update_attribute_defaults(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
+    let user = create_user(&sqlite_client).await;
 
     // --- Numeric: set default within bounds; reject out-of-bounds and non-integer.
     let numeric = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: "Reps".to_string(),
         description: None,
         config: AttributeConfig::Numeric(NumericConfig {
@@ -516,7 +565,7 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
     sqlite_client
         .run_action(
             UpdateAttribute {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 attribute_id: numeric.id,
                 change: AttributeChange::Numeric(NumericChange::SetDefault(Some(8.0))),
             }
@@ -525,7 +574,11 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
         .await
         .unwrap();
     assert_eq!(
-        read_attribute(&sqlite_client, numeric.id).await.as_numeric().unwrap().default,
+        read_attribute(&sqlite_client, numeric.id)
+            .await
+            .as_numeric()
+            .unwrap()
+            .default,
         Some(8.0)
     );
 
@@ -534,7 +587,7 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
         sqlite_client
             .run_action(
                 UpdateAttribute {
-                    actor_id: SYSTEM_ACTOR_ID,
+                    actor_id: user.actor_id,
                     attribute_id: numeric.id,
                     change: AttributeChange::Numeric(NumericChange::SetDefault(Some(50.0))),
                 }
@@ -549,7 +602,7 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
         sqlite_client
             .run_action(
                 UpdateAttribute {
-                    actor_id: SYSTEM_ACTOR_ID,
+                    actor_id: user.actor_id,
                     attribute_id: numeric.id,
                     change: AttributeChange::Numeric(NumericChange::SetDefault(Some(3.5))),
                 }
@@ -561,14 +614,18 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
     );
     // Default unchanged after rejected updates.
     assert_eq!(
-        read_attribute(&sqlite_client, numeric.id).await.as_numeric().unwrap().default,
+        read_attribute(&sqlite_client, numeric.id)
+            .await
+            .as_numeric()
+            .unwrap()
+            .default,
         Some(8.0)
     );
 
     // --- Select: set default to an existing option; reject unknown option.
     let select = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: "Outcome".to_string(),
         description: None,
         config: AttributeConfig::Select(SelectConfig {
@@ -584,7 +641,7 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
     sqlite_client
         .run_action(
             UpdateAttribute {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 attribute_id: select.id,
                 change: AttributeChange::Select(SelectChange::SetDefault(Some("Win".to_string()))),
             }
@@ -593,14 +650,18 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
         .await
         .unwrap();
     assert_eq!(
-        read_attribute(&sqlite_client, select.id).await.expect_select().unwrap().default,
+        read_attribute(&sqlite_client, select.id)
+            .await
+            .expect_select()
+            .unwrap()
+            .default,
         Some("Win".to_string())
     );
     assert!(
         sqlite_client
             .run_action(
                 UpdateAttribute {
-                    actor_id: SYSTEM_ACTOR_ID,
+                    actor_id: user.actor_id,
                     attribute_id: select.id,
                     change: AttributeChange::Select(SelectChange::SetDefault(Some(
                         "Draw".to_string()
@@ -618,7 +679,7 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
         sqlite_client
             .run_action(
                 UpdateAttribute {
-                    actor_id: SYSTEM_ACTOR_ID,
+                    actor_id: user.actor_id,
                     attribute_id: select.id,
                     change: AttributeChange::Numeric(NumericChange::SetDefault(Some(1.0))),
                 }
@@ -632,10 +693,12 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
     // --- Mass: replace default units; common SetName edit.
     let mass = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: "Load".to_string(),
         description: None,
-        config: AttributeConfig::Mass(MassConfig { default_units: vec![MassUnit::Kilogram] }),
+        config: AttributeConfig::Mass(MassConfig {
+            default_units: vec![MassUnit::Kilogram],
+        }),
     };
     sqlite_client
         .run_action(CreateAttribute::from(mass.clone()).into())
@@ -644,7 +707,7 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
     sqlite_client
         .run_action(
             UpdateAttribute {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 attribute_id: mass.id,
                 change: AttributeChange::Mass(MassChange::SetDefaultUnits(vec![
                     MassUnit::Pound,
@@ -656,14 +719,18 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
         .await
         .unwrap();
     assert_eq!(
-        read_attribute(&sqlite_client, mass.id).await.expect_mass().unwrap().default_units,
+        read_attribute(&sqlite_client, mass.id)
+            .await
+            .expect_mass()
+            .unwrap()
+            .default_units,
         vec![MassUnit::Pound, MassUnit::Kilogram]
     );
 
     sqlite_client
         .run_action(
             UpdateAttribute {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 attribute_id: mass.id,
                 change: AttributeChange::SetName("Weight".to_string()),
             }
@@ -677,11 +744,12 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
+    let user = create_user(&sqlite_client).await;
 
     // --- No-op: re-applying the same value emits no deltas.
     let numeric = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: "Reps".to_string(),
         description: None,
         config: AttributeConfig::Numeric(NumericConfig {
@@ -703,7 +771,7 @@ async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
         gv_core::mutators::update_attribute(
             &mut executor,
             UpdateAttribute {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 attribute_id: numeric.id,
                 change: AttributeChange::Numeric(NumericChange::SetDefault(Some(5.0))),
             },
@@ -719,10 +787,12 @@ async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
     // --- Mass dedupe: duplicates collapse, first-seen order preserved.
     let mass = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: "Load".to_string(),
         description: None,
-        config: AttributeConfig::Mass(MassConfig { default_units: vec![] }),
+        config: AttributeConfig::Mass(MassConfig {
+            default_units: vec![],
+        }),
     };
     sqlite_client
         .run_action(CreateAttribute::from(mass.clone()).into())
@@ -731,7 +801,7 @@ async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
     sqlite_client
         .run_action(
             UpdateAttribute {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 attribute_id: mass.id,
                 change: AttributeChange::Mass(MassChange::SetDefaultUnits(vec![
                     MassUnit::Kilogram,
@@ -745,7 +815,11 @@ async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
         .await
         .unwrap();
     assert_eq!(
-        read_attribute(&sqlite_client, mass.id).await.expect_mass().unwrap().default_units,
+        read_attribute(&sqlite_client, mass.id)
+            .await
+            .expect_mass()
+            .unwrap()
+            .default_units,
         vec![MassUnit::Kilogram, MassUnit::Pound, MassUnit::Gram]
     );
 }
@@ -753,10 +827,11 @@ async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_template_temporal_rules(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
+    let user = create_user(&sqlite_client).await;
 
     let activity = Activity {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: ActivityName::parse("Squat".to_string()).unwrap(),
         description: None,
         source_activity_id: None,
@@ -769,7 +844,7 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
     let template_entry = |temporal: Temporal| Entry {
         id: Uuid::new_v4(),
         activity_id: Some(activity.id),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: None,
         position: None,
         is_template: true,
@@ -783,8 +858,10 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
     assert!(
         sqlite_client
             .run_action(
-                CreateEntry::from(template_entry(Temporal::Start { start: sqlx::types::chrono::Utc::now() }))
-                    .into(),
+                CreateEntry::from(template_entry(Temporal::Start {
+                    start: sqlx::types::chrono::Utc::now()
+                }))
+                .into(),
             )
             .await
             .is_err(),
@@ -792,7 +869,9 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
     );
     // ...but duration-only and None are allowed.
     sqlite_client
-        .run_action(CreateEntry::from(template_entry(Temporal::Duration { duration: 60_000 })).into())
+        .run_action(
+            CreateEntry::from(template_entry(Temporal::Duration { duration: 60_000 })).into(),
+        )
         .await
         .unwrap();
     let none_template = template_entry(Temporal::None);
@@ -807,7 +886,7 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
     sqlite_client
         .run_action(
             MoveEntry {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 entry_id: none_template_id,
                 position: None,
                 temporal: Temporal::None,
@@ -822,10 +901,12 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
         sqlite_client
             .run_action(
                 MoveEntry {
-                    actor_id: SYSTEM_ACTOR_ID,
+                    actor_id: user.actor_id,
                     entry_id: none_template_id,
                     position: None,
-                    temporal: Temporal::Start { start: sqlx::types::chrono::Utc::now() },
+                    temporal: Temporal::Start {
+                        start: sqlx::types::chrono::Utc::now()
+                    },
                 }
                 .into(),
             )
@@ -838,14 +919,16 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
     let log_root = Entry {
         id: Uuid::new_v4(),
         activity_id: None,
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: None,
         position: None,
         is_template: false,
         display_as_sets: false,
         is_sequence: false,
         is_complete: false,
-        temporal: Temporal::Start { start: sqlx::types::chrono::Utc::now() },
+        temporal: Temporal::Start {
+            start: sqlx::types::chrono::Utc::now(),
+        },
     };
     sqlite_client
         .run_action(CreateEntry::from(log_root.clone()).into())
@@ -855,7 +938,7 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
         sqlite_client
             .run_action(
                 MoveEntry {
-                    actor_id: SYSTEM_ACTOR_ID,
+                    actor_id: user.actor_id,
                     entry_id: log_root.id,
                     position: None,
                     temporal: Temporal::None,
@@ -871,25 +954,28 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_update_entry_set_is_sequence(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
+    let user = create_user(&sqlite_client).await;
 
     // A sequence root with one child.
     let parent = Entry {
         id: Uuid::new_v4(),
         activity_id: None,
         name: None,
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         position: None,
         display_as_sets: false,
         is_sequence: true,
         is_complete: false,
         is_template: false,
-        temporal: Temporal::Start { start: sqlx::types::chrono::Utc::now() },
+        temporal: Temporal::Start {
+            start: sqlx::types::chrono::Utc::now(),
+        },
     };
     let child = Entry {
         id: Uuid::new_v4(),
         activity_id: None,
         name: None,
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         position: Some(Position {
             parent_id: parent.id,
             frac_index: FractionalIndex::default(),
@@ -921,7 +1007,7 @@ async fn test_update_entry_set_is_sequence(pool: SqlitePool) {
     sqlite_client
         .run_action(
             UpdateEntry {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 entry_id: parent.id,
                 change: EntryChange::SetIsSequence(false),
             }
@@ -929,7 +1015,10 @@ async fn test_update_entry_set_is_sequence(pool: SqlitePool) {
         )
         .await
         .unwrap();
-    assert_eq!(find(&sqlite_client, parent.id).await.map(|e| e.is_sequence), Some(false));
+    assert_eq!(
+        find(&sqlite_client, parent.id).await.map(|e| e.is_sequence),
+        Some(false)
+    );
     assert!(
         find(&sqlite_client, child.id).await.is_none(),
         "child must be deleted on scalar conversion"
@@ -939,7 +1028,7 @@ async fn test_update_entry_set_is_sequence(pool: SqlitePool) {
     sqlite_client
         .run_action(
             UpdateEntry {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 entry_id: parent.id,
                 change: EntryChange::SetIsSequence(true),
             }
@@ -947,17 +1036,21 @@ async fn test_update_entry_set_is_sequence(pool: SqlitePool) {
         )
         .await
         .unwrap();
-    assert_eq!(find(&sqlite_client, parent.id).await.map(|e| e.is_sequence), Some(true));
+    assert_eq!(
+        find(&sqlite_client, parent.id).await.map(|e| e.is_sequence),
+        Some(true)
+    );
 }
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool) {
     let sqlite_client = SqliteClient::from_pool(pool);
+    let user = create_user(&sqlite_client).await;
 
     // Attribute with a default to seed onto the template.
     let reps = Attribute {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: "Reps".to_string(),
         description: None,
         config: AttributeConfig::Numeric(NumericConfig {
@@ -975,7 +1068,7 @@ async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool)
     // Activity with a known sequence template root.
     let activity = Activity {
         id: Uuid::new_v4(),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: ActivityName::parse("Bench".to_string()).unwrap(),
         description: None,
         source_activity_id: None,
@@ -983,7 +1076,7 @@ async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool)
     let template_root = Entry {
         id: Uuid::new_v4(),
         activity_id: Some(activity.id),
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: None,
         position: None,
         is_template: true,
@@ -995,7 +1088,7 @@ async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool)
     sqlite_client
         .run_action(
             CreateActivity {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 activity: activity.clone(),
                 template: vec![template_root.clone()],
             }
@@ -1008,7 +1101,7 @@ async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool)
     let template_child = Entry {
         id: Uuid::new_v4(),
         activity_id: None,
-        owner_id: SYSTEM_ACTOR_ID,
+        owner_id: user.actor_id,
         name: Some("Set".to_string()),
         position: Some(Position {
             parent_id: template_root.id,
@@ -1027,7 +1120,7 @@ async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool)
     sqlite_client
         .run_action(
             AttachValue {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 entry_id: template_child.id,
                 attribute_id: reps.id,
             }
@@ -1041,7 +1134,7 @@ async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool)
     sqlite_client
         .run_action(
             CreateEntryFromActivity {
-                actor_id: SYSTEM_ACTOR_ID,
+                actor_id: user.actor_id,
                 activity_id: activity.id,
                 position: None,
                 temporal: Temporal::Start { start },
@@ -1055,12 +1148,18 @@ async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool)
     // Read all entries; the instances are the non-template ones.
     let all = {
         let mut conn = sqlite_client.pool.acquire().await.unwrap();
-        SqliteQueryExecutor::new(&mut *conn).execute(AllEntries {}).await.unwrap()
+        SqliteQueryExecutor::new(&mut *conn)
+            .execute(AllEntries {})
+            .await
+            .unwrap()
     };
     let instances: Vec<&Entry> = all.iter().filter(|e| !e.is_template).collect();
     assert_eq!(instances.len(), 2, "root + child instantiated");
 
-    let inst_root = instances.iter().find(|e| e.position.is_none()).expect("instance root");
+    let inst_root = instances
+        .iter()
+        .find(|e| e.position.is_none())
+        .expect("instance root");
     assert_eq!(inst_root.activity_id, Some(activity.id));
     assert!(inst_root.is_sequence, "structure copied from template");
     assert_ne!(inst_root.id, template_root.id, "fresh id");
@@ -1077,7 +1176,9 @@ async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool)
     let values = {
         let mut conn = sqlite_client.pool.acquire().await.unwrap();
         SqliteQueryExecutor::new(&mut *conn)
-            .execute(FindValuesForEntries { entry_ids: vec![inst_child.id] })
+            .execute(FindValuesForEntries {
+                entry_ids: vec![inst_child.id],
+            })
             .await
             .unwrap()
     };

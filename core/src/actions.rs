@@ -141,6 +141,9 @@ impl From<Entry> for CreateEntry {
 /// `is_template` sets the kind of the instantiated subtree and must match the
 /// parent's kind: `false` materializes into the log; `true` composes the
 /// activity into another template (instantiating under a template entry).
+/// NOTE: this API cannot express actor A creating an entry for actor B, eg a coach creating an
+/// entry for a client. That will need to be corrected, but deferring as the design for
+/// collaboration is nascent.
 #[derive(Debug, Clone)]
 pub struct CreateEntryFromActivity {
     pub actor_id: Uuid,

@@ -16,6 +16,7 @@ use gv_core::{
     error::{DomainError, Result},
     models::{
         activity::Activity,
+        actor::{Actor, ActorKind},
         attribute::{Attribute, AttributeConfig, AttributeValue, Value},
         attribute_pair::AttributePair,
         entry::{Entry, Position, Temporal},
@@ -55,6 +56,42 @@ impl From<UserRow> for User {
             username: row.username.0,
             email: row.email.0,
         }
+    }
+}
+
+// --- Actor ---
+
+#[derive(Debug, Clone, PartialEq, FromRow)]
+pub struct ActorRow {
+    pub id: UuidColumn,
+    pub actor_kind: String,
+    pub created_at: DateTimeColumn,
+}
+
+impl From<Actor> for ActorRow {
+    fn from(actor: Actor) -> Self {
+        ActorRow {
+            id: UuidColumn(actor.actor_id),
+            actor_kind: actor.actor_kind.to_string(),
+            created_at: DateTimeColumn(actor.created_at),
+        }
+    }
+}
+
+impl ActorRow {
+    pub fn to_actor(self) -> Result<Actor> {
+        let actor_kind = match self.actor_kind.as_str() {
+            "system" => ActorKind::System,
+            "user" => ActorKind::User,
+            other => {
+                return Err(DomainError::Other(format!("unknown actor_kind: {other}")));
+            }
+        };
+        Ok(Actor {
+            actor_id: self.id.0,
+            actor_kind,
+            created_at: self.created_at.0,
+        })
     }
 }
 

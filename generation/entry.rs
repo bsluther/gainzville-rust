@@ -1,53 +1,74 @@
 use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
 use rand::RngExt;
+use rand::seq::IteratorRandom;
 use rand_distr::{Distribution, Normal};
 use uuid::Uuid;
 
-use crate::{Arbitrary, ArbitraryFrom, GenerationContext, pick};
+use crate::{Arbitrary, ArbitraryFrom, GenerationContext, arbitrary_actor_id, gen_random_name};
 use gv_core::{
-    SYSTEM_ACTOR_ID,
     forest::Forest,
-    models::{
-        activity::Activity,
-        entry::{Entry, Position, Temporal},
-    },
+    models::entry::{Entry, Position, Temporal},
 };
+
+impl Arbitrary for Entry {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+        let model = context.model();
+        let choose_anonymous = rng.random_bool(0.1);
+        let activity_choice = if choose_anonymous {
+            None
+        } else {
+            model.activities().choose(rng)
+        };
+
+        let owner_id = activity_choice
+            // If we chose an activity, the entry is owned by the activity's owner.
+            .map(|a| a.owner_id)
+            .unwrap_or_else(|| arbitrary_actor_id(rng, context));
+
+        let name = if activity_choice.is_none() {
+            Some(gen_random_name(rng, " "))
+        } else {
+            if rng.random_bool(0.5) {
+                Some(gen_random_name(rng, " "))
+            } else {
+                None
+            }
+        };
+
+        let is_sequence = rng.random_bool(0.5);
+        let is_complete = if is_sequence {
+            false
+        } else {
+            rng.random_bool(0.5)
+        };
+
+        Entry {
+            owner_id: owner_id,
+            activity_id: activity_choice.map(|a| a.id),
+            id: Uuid::arbitrary(rng, context),
+            name,
+            display_as_sets: rng.random_bool(0.5),
+            is_sequence,
+            is_complete,
+            is_template: false,
+            position: Option::<Position>::arbitrary(rng, context),
+            temporal: Temporal::arbitrary(rng, context),
+        }
+    }
+}
 
 impl Arbitrary for FractionalIndex {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         // Found the terminator in the fractional_index internals, seems to work.
         const TERMINATOR: u8 = 0b1000_0000;
         let n_bytes = rng.random_range(1..128);
-        let mut bytes = Vec::<u8>::new();
-        for _ in 0..n_bytes - 1 {
-            bytes.push(rng.random())
-        }
-        bytes.push(TERMINATOR);
-
+        let mut bytes = vec![0u8; n_bytes];
+        let last = n_bytes - 1;
+        rng.fill(&mut bytes[..last]);
+        bytes[last] = TERMINATOR;
         FractionalIndex::from_bytes(bytes.to_vec())
             .expect("bytes should be a valid fractional index")
-    }
-}
-
-// TODO: should generate all Options variants probabilistically.
-impl Arbitrary for Entry {
-    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
-        Entry {
-            owner_id: Uuid::arbitrary(rng, context),
-            id: Uuid::arbitrary(rng, context),
-            activity_id: Some(Uuid::arbitrary(rng, context)),
-            name: None,
-            display_as_sets: rng.random_bool(0.5),
-            is_sequence: rng.random_bool(0.5),
-            is_complete: rng.random_bool(0.5),
-            is_template: rng.random_bool(0.5),
-            position: Some(Position {
-                parent_id: Uuid::arbitrary(rng, context),
-                frac_index: FractionalIndex::arbitrary(rng, context),
-            }),
-            temporal: Temporal::arbitrary(rng, context),
-        }
     }
 }
 
@@ -81,82 +102,28 @@ impl ArbitraryFrom<&[FractionalIndex]> for FractionalIndex {
         FractionalIndex::new(predecessor, successor).unwrap()
     }
 }
-impl ArbitraryFrom<&[Entry]> for Option<Position> {
-    /// Generate an arbitrary position within the given entries with probability 0.5 of choosing a
-    /// root position, otherwise a child position. If the provided entries slice is empty, always
-    /// generates a root position (e.g. returns None).
-    fn arbitrary_from<R: RngExt, C: GenerationContext>(
-        rng: &mut R,
-        context: &C,
-        entries: &[Entry],
-    ) -> Self {
+
+impl Arbitrary for Option<Position> {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+        let model = context.model();
         if rng.random_bool(0.5) {
             // Choose a root position half the time.
             return None;
         }
-        let sequence_entries: Vec<&Entry> = entries.into_iter().filter(|e| e.is_sequence).collect();
-        if sequence_entries.is_empty() {
-            // If there are no possible parents, choose a root position.
-            return None;
-        }
-
+        // TODO: consider using p_valid to choose invalid, non-sequence parents.
+        let parent = model.entries().filter(|e| e.is_sequence).choose(rng)?;
         // Choose a child position.
-        let parent_choice = pick(&sequence_entries, rng)?;
-        let forest = Forest::from(entries.to_vec());
+        let entries: Vec<Entry> = model.entries().cloned().collect();
+        let forest = Forest::from(entries);
         let sibling_findices: Vec<FractionalIndex> = forest
-            .children(parent_choice.id)
+            .children(parent.id)
             .iter()
             .filter_map(|e| e.frac_index().cloned())
             .collect();
         Some(Position {
-            parent_id: parent_choice.id,
+            parent_id: parent.id,
             frac_index: FractionalIndex::arbitrary_from(rng, context, &sibling_findices),
         })
-    }
-}
-// CONSIDER: taking Option<&[...]> to let the caller omit options.
-impl ArbitraryFrom<(&[Uuid], &[Activity], &[Entry])> for Entry {
-    fn arbitrary_from<R: RngExt, C: GenerationContext>(
-        rng: &mut R,
-        context: &C,
-        (actor_ids, activities, entries): (&[Uuid], &[Activity], &[Entry]),
-    ) -> Self {
-        let choose_anonymous = rng.random_bool(0.1);
-        let activity_choice = if choose_anonymous || activities.is_empty() {
-            None
-        } else {
-            Some(pick(&activities, rng).unwrap())
-        };
-
-        let owner_id = activity_choice
-            // If we chose an actvitity, make the genereted activity owned by the activity's owner.
-            // - Once library's are implemented, should relax ths condition and just pick any valid
-            // owner (i.e. allow creating an entry of another user's activity).
-            .map(|a| a.owner_id)
-            .unwrap_or_else(|| {
-                // Choose from the provided actor ids.
-                pick(actor_ids, rng)
-                    // If there are no actors, default to SYSTEM actor.
-                    .unwrap_or_else(|| &SYSTEM_ACTOR_ID)
-                    .clone()
-            });
-
-        Entry {
-            owner_id: owner_id,
-            activity_id: activity_choice.map(|a| a.id),
-            id: Uuid::arbitrary(rng, context),
-            name: if choose_anonymous {
-                Some(format!("Entry {}", rng.random::<u32>() % 1000))
-            } else {
-                None
-            },
-            display_as_sets: rng.random_bool(0.5),
-            is_sequence: rng.random_bool(0.5),
-            is_complete: rng.random_bool(0.5),
-            is_template: false,
-            position: Option::<Position>::arbitrary_from(rng, context, entries),
-            temporal: Temporal::arbitrary(rng, context),
-        }
     }
 }
 
@@ -288,19 +255,5 @@ mod tests {
             error < epsilon,
             "observed count should be within the given epsilon of the expected count"
         );
-    }
-
-    #[test]
-    fn test_arbitary_position_from_entries() {
-        // Nor there yet, I think I need more building blocks first.
-        let mut rng = rand::rng();
-        let context = SimulationContext::default();
-        let entry = Entry::arbitrary(&mut rng, &context);
-        println!("{:?}", entry);
-        let entries: Vec<Entry> = (0..100)
-            .map(|_| Entry::arbitrary(&mut rng, &context))
-            .collect();
-
-        let _position = Option::<Position>::arbitrary_from(&mut rng, &context, entries.as_slice());
     }
 }

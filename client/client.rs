@@ -1,11 +1,15 @@
 use gv_core::delta_executor::AnyDeltaExecutor;
 use gv_core::error::DbErr;
 use gv_core::{
-    actions::{Action, CreateActivity},
+    DEFAULT_USER_ID,
+    actions::{Action, CreateActivity, CreateUser},
     error::Result,
-    models::activity::{Activity, ActivityName},
+    models::{
+        activity::{Activity, ActivityName},
+        user::User,
+    },
     mutators,
-    queries::{AnyQuery, AnyQueryResponse, Query},
+    queries::{AnyQuery, AnyQueryResponse, FindUserById, Query},
     query_executor::QueryExecutor,
 };
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
@@ -35,7 +39,28 @@ impl SqliteClient {
             .db_err()?;
         let client = Self::from_pool(pool);
         client.run_migrations().await?;
+        client.seed_default_user().await?;
         Ok(client)
+    }
+
+    /// Seed the single default user into a fresh database. Idempotent: a no-op if
+    /// the user already exists, so it's safe to call on every launch alongside
+    /// migrations. This replaces the system actor that migrations used to insert;
+    /// a temporary stand-in until an auth module lands (see [`DEFAULT_USER_ID`]).
+    async fn seed_default_user(&self) -> Result<()> {
+        let existing = {
+            let mut conn = self.pool.acquire().await.db_err()?;
+            SqliteQueryExecutor::new(&mut *conn)
+                .execute(FindUserById {
+                    actor_id: DEFAULT_USER_ID,
+                })
+                .await?
+        };
+        if existing.is_none() {
+            let action: Action = CreateUser::from(User::default_user()).into();
+            self.run_action(action).await?;
+        }
+        Ok(())
     }
 
     pub fn from_pool(pool: SqlitePool) -> Self {
@@ -67,7 +92,7 @@ impl SqliteClient {
     }
 
     #[instrument(skip_all)]
-    pub async fn run_action(&self, action: Action) -> Result<()> {
+    pub async fn run_action(&self, action: Action) -> Result<mutators::Mutation> {
         debug!("Began running action = {:?}", action);
         debug!(
             "Active broadcast receivers: {}",
@@ -127,7 +152,7 @@ impl SqliteClient {
         //     delta.apply_delta(&mut tx).await?;
         // }
         let mut delta_executor = SqliteDeltaExecutor::new(&mut *tx);
-        for delta in mx.changes {
+        for delta in mx.changes.iter().cloned() {
             delta_executor.apply_any_delta(delta).await?;
         }
         // Commit the transaction.
@@ -140,7 +165,7 @@ impl SqliteClient {
         // TODO: send mutation to service (or to a pending_mutations queue).
         // sync_service.append_applied_mutation(mx);
 
-        Ok(())
+        Ok(mx)
     }
 
     pub async fn run_query<Q: Query>(&self, query: Q) -> Result<Q::Response>

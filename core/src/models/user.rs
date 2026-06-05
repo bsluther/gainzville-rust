@@ -1,4 +1,5 @@
 use crate::{
+    constants::DEFAULT_USER_ID,
     delta::Delta,
     validation::{Email, Username},
 };
@@ -12,6 +13,18 @@ pub struct User {
 }
 
 impl User {
+    /// The single default user seeded into a fresh database, standing in for the
+    /// authenticated user until an auth module lands. See [`DEFAULT_USER_ID`].
+    pub fn default_user() -> Self {
+        User {
+            actor_id: DEFAULT_USER_ID,
+            username: Username::parse("default".to_string())
+                .expect("default username should be valid"),
+            email: Email::parse("default@gainzville.net".to_string())
+                .expect("default email should be valid"),
+        }
+    }
+
     pub fn update(&self) -> UserUpdater {
         UserUpdater {
             old: self.clone(),

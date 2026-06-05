@@ -14,12 +14,16 @@ pub struct Activity {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ActivityName(String);
 impl ActivityName {
+    /// Maximum length, in characters, of a (trimmed) activity name.
+    pub const MAX_LEN: usize = 50;
+
     pub fn parse(str: String) -> Result<ActivityName> {
         let trimmed = str.trim();
-        match str.len() {
-            0 | 50.. => Err(ValidationError::InvalidActivityName(trimmed.to_string()).into()),
-            _ => Ok(ActivityName(trimmed.to_string())),
+        let len = trimmed.chars().count();
+        if len == 0 || len > Self::MAX_LEN {
+            return Err(ValidationError::InvalidActivityName(trimmed.to_string()).into());
         }
+        Ok(ActivityName(trimmed.to_string()))
     }
 
     pub fn to_string(&self) -> String {

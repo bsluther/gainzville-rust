@@ -41,8 +41,3 @@ CREATE TABLE IF NOT EXISTS entries (
     CONSTRAINT entry_parent_frac_index_together
         CHECK ((parent_id IS NULL) = (frac_index IS NULL))
 );
-
--- Insert system actor (using OR IGNORE to make this idempotent)
--- UUID eee9e6ae-6531-4580-8356-427604a0dc02 as BLOB
-INSERT OR IGNORE INTO actors (id, actor_kind)
-VALUES (X'eee9e6ae653145808356427604a0dc02', 'system');

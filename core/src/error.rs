@@ -1,3 +1,14 @@
+// Idea: consistency errors are violations of properties. Things like
+// "sequence entries cannot be marked complete"
+// "root entry must have defined start or end time"
+// "template entries cannot have a start or end time (duration only)"
+// "activity '0b7ed4a1-29c4-418c-94d5-9a5c73c633bd' has no template root"
+// - All of thse are error msgs from mutators, good starting point for assembling Properties.
+// Make a Property enum! Put it in the Consistency variant.
+// That may also help with differentiating errors where the system correctly caught a violation vs.
+// unexpected bad behavior.
+// It also should help line things up to assert those properties in PBT, DST, etc.
+
 #[derive(thiserror::Error, Debug)]
 pub enum DomainError {
     #[error("Database error: {0}")]

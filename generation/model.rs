@@ -10,19 +10,23 @@ use gv_core::{
         entry::Entry,
         user::User,
     },
+    mutators::Mutation,
+    queries::Snapshot,
     std_lib::StandardLibrary,
 };
 use rustc_hash::FxHashMap as HashMap;
-use std::hash::Hash;
+use std::{collections::HashSet, hash::Hash};
+use tracing::error;
 use uuid::Uuid;
 
+#[derive(Debug, PartialEq)]
 pub struct Model {
-    pub actors: HashMap<Uuid, Actor>,
-    pub users: HashMap<Uuid, User>,
-    pub entries: HashMap<Uuid, Entry>,
-    pub activities: HashMap<Uuid, Activity>,
-    pub attributes: HashMap<Uuid, Attribute>,
-    pub values: HashMap<ValuePrimaryKey, Value>,
+    actors: HashMap<Uuid, Actor>,
+    users: HashMap<Uuid, User>,
+    entries: HashMap<Uuid, Entry>,
+    activities: HashMap<Uuid, Activity>,
+    attributes: HashMap<Uuid, Attribute>,
+    values: HashMap<ValuePrimaryKey, Value>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -41,6 +45,35 @@ impl Model {
             attributes: HashMap::default(),
             values: HashMap::default(),
         }
+    }
+
+    pub fn actors(&self) -> impl Iterator<Item = &Actor> {
+        self.actors.values()
+    }
+
+    pub fn users(&self) -> impl Iterator<Item = &User> {
+        self.users.values()
+    }
+
+    pub fn entries(&self) -> impl Iterator<Item = &Entry> {
+        self.entries.values()
+    }
+
+    /// Look up a single entry by id.
+    pub fn entry(&self, id: Uuid) -> Option<&Entry> {
+        self.entries.get(&id)
+    }
+
+    pub fn activities(&self) -> impl Iterator<Item = &Activity> {
+        self.activities.values()
+    }
+
+    pub fn attributes(&self) -> impl Iterator<Item = &Attribute> {
+        self.attributes.values()
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &Value> {
+        self.values.values()
     }
 }
 
@@ -72,6 +105,54 @@ impl Model {
         }
 
         Ok(())
+    }
+
+    /// Build a fresh model from a full-database snapshot.
+    pub fn from_snapshot(snapshot: Snapshot) -> Self {
+        Model {
+            actors: Self::map_of(snapshot.actors),
+            users: Self::map_of(snapshot.users),
+            activities: Self::map_of(snapshot.activities),
+            attributes: Self::map_of(snapshot.attributes),
+            entries: Self::map_of(snapshot.entries),
+            values: Self::map_of(snapshot.values),
+        }
+    }
+
+    /// Helper to build a hash map from a set of entities. Entities must all have distinct ID's.
+    fn map_of<E: Entity>(items: Vec<E>) -> HashMap<E::PrimaryKey, E> {
+        let mut map = HashMap::default();
+        for item in items {
+            let kind = item.kind();
+            assert!(
+                (map.insert(item.primary_key(), item)).is_none(),
+                "duplicate {kind} primary key in snapshot"
+            )
+        }
+        map
+    }
+
+    pub async fn apply_mutation(&mut self, mx: Mutation) -> gv_core::error::Result<()> {
+        for delta in mx.changes.clone() {
+            self.apply_any_delta(delta).await?;
+        }
+        if !self.all_activities_have_one_template_root() {
+            error!(
+                ?mx,
+                "Property violated: all activities must have exactly one template root."
+            );
+        }
+        Ok(())
+    }
+
+    pub fn all_activities_have_one_template_root(&self) -> bool {
+        let mut seen = HashSet::new();
+        let unique = self
+            .entries()
+            .filter(|e| e.is_template && e.parent_id().is_none())
+            .filter_map(|e| e.activity_id) // TODO: activity_id being None here is a violation of another property, all root templates must correspond to an activity.
+            .all(|activity_id| seen.insert(activity_id));
+        unique && self.activities().all(|a| seen.contains(&a.id))
     }
 }
 
@@ -146,8 +227,14 @@ impl Entity for Value {
 }
 
 pub struct ModelDeltaExecutor {}
-impl AnyDeltaExecutor for Model {
-    async fn apply_any_delta(&mut self, delta: AnyDelta) -> gv_core::error::Result<()> {
+
+impl Model {
+    /// Apply a delta to the in-memory model synchronously. The model is pure
+    /// in-memory state with no IO, so this can't fail — invariant breaches panic
+    /// rather than return an error. The async `AnyDeltaExecutor::apply_any_delta`
+    /// trait method delegates here; sync callers can use this directly to avoid
+    /// the async tax the DB-backed executors require.
+    pub fn apply_any_delta_sync(&mut self, delta: AnyDelta) {
         match delta {
             AnyDelta::Actor(delta) => hash_map_apply(delta, &mut self.actors),
             AnyDelta::User(delta) => hash_map_apply(delta, &mut self.users),
@@ -156,49 +243,76 @@ impl AnyDeltaExecutor for Model {
             AnyDelta::Attribute(delta) => hash_map_apply(delta, &mut self.attributes),
             AnyDelta::Value(delta) => hash_map_apply(delta, &mut self.values),
         }
+    }
+}
+
+impl AnyDeltaExecutor for Model {
+    async fn apply_any_delta(&mut self, delta: AnyDelta) -> gv_core::error::Result<()> {
+        self.apply_any_delta_sync(delta);
         Ok(())
     }
 }
-fn hash_map_apply<E: Entity>(delta: Delta<E>, map: &mut HashMap<E::PrimaryKey, E>) {
+
+fn hash_map_apply<E: Entity + std::fmt::Debug>(
+    delta: Delta<E>,
+    map: &mut HashMap<E::PrimaryKey, E>,
+) {
     match delta {
         Delta::Insert { new } => {
-            assert!(
-                !map.contains_key(&new.primary_key()),
-                "tried to insert {} that already exists",
-                new.kind()
-            );
+            if let Some(existing) = map.get(&new.primary_key()) {
+                panic!(
+                    "tried to insert {} that already exists:\n  \
+                     new:       {:?}\n  model has: {:?}",
+                    new.kind(),
+                    new,
+                    existing,
+                );
+            }
             map.insert(new.primary_key(), new);
         }
         Delta::Update { old, new } => {
             assert!(
                 old.primary_key() == new.primary_key(),
-                "update old and new must share a primary key"
+                "update old and new must share a primary key for {}:\n  \
+                 old: {:?}\n  new: {:?}",
+                old.kind(),
+                old,
+                new,
             );
             let existing = map.get(&new.primary_key());
             assert!(
                 existing.is_some(),
-                "tried to update {} that does not exist",
-                old.kind()
+                "tried to update {} that does not exist:\n  delta.old: {:?}",
+                old.kind(),
+                old,
             );
             assert!(
                 existing.unwrap() == &old,
-                "update delta's old value does not match existing"
+                "update delta's old value does not match existing {}:\n  \
+                 delta.old: {:?}\n  model has: {:?}",
+                old.kind(),
+                old,
+                existing.unwrap(),
             );
             map.insert(new.primary_key(), new);
         }
-        Delta::Delete { old } => {
-            if let Some(existing) = map.get(&old.primary_key()) {
+        Delta::Delete { old } => match map.get(&old.primary_key()) {
+            Some(existing) => {
                 assert!(
                     existing == &old,
-                    "existng value must match delete delta's old value"
+                    "delete delta's old value does not match existing {}:\n  \
+                     delta.old: {:?}\n  model has: {:?}",
+                    old.kind(),
+                    old,
+                    existing,
                 );
                 map.remove(&old.primary_key());
-            } else {
-                assert!(
-                    false,
-                    "tried to apply delete delta for entity that does not exist"
-                );
             }
-        }
+            None => panic!(
+                "tried to delete {} that does not exist:\n  delta.old: {:?}",
+                old.kind(),
+                old,
+            ),
+        },
     };
 }

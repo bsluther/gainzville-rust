@@ -442,3 +442,80 @@ struct AncestorRow {
     id: Uuid,
     parent_id: Option<Uuid>,
 }
+
+impl QueryExecutor<SnapshotAll> for PostgresQueryExecutor<'_> {
+    async fn execute(&mut self, _query: SnapshotAll) -> Result<<SnapshotAll as Query>::Response> {
+        // One transaction so the snapshot is a consistent point-in-time read across all tables.
+        use sqlx::Connection;
+        let mut tx = self.conn.begin().await.db_err()?;
+
+        let actors = sqlx::query_as::<_, crate::rows::ActorRow>(
+            "SELECT id, actor_kind, created_at FROM actors",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(|r| r.to_actor())
+        .collect::<Result<Vec<_>>>()?;
+
+        let users = sqlx::query_as::<_, crate::rows::UserRow>(
+            "SELECT actor_id, username, email FROM users",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(User::from)
+        .collect();
+
+        let activities = sqlx::query_as::<_, crate::rows::ActivityRow>(
+            "SELECT id, owner_id, source_activity_id, name, description FROM activities",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(Activity::from)
+        .collect();
+
+        let attributes = sqlx::query_as::<_, crate::rows::AttributeRow>(
+            "SELECT id, owner_id, name, description, data_type, config FROM attributes",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(|r| r.to_attribute())
+        .collect::<Result<Vec<_>>>()?;
+
+        let entries = sqlx::query_as::<_, crate::rows::EntryRow>("SELECT * FROM entries")
+            .fetch_all(&mut *tx)
+            .await
+            .db_err()?
+            .into_iter()
+            .map(|r| r.to_entry())
+            .collect::<Result<Vec<_>>>()?;
+
+        let values = sqlx::query_as::<_, crate::rows::ValueRow>(
+            "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(|r| r.to_value())
+        .collect::<Result<Vec<_>>>()?;
+
+        tx.commit().await.db_err()?;
+
+        Ok(Snapshot {
+            users,
+            actors,
+            activities,
+            attributes,
+            entries,
+            values,
+        })
+    }
+}

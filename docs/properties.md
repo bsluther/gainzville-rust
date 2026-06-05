@@ -11,6 +11,9 @@ Template and log entry trees must be disjoint.
 The activity associated with an entry has the same owner as the entry.
 - This checks that Copy-On-Add is being used.
 
+All root templates must have a defined `activity_id`.
+All activities must have exactly one root template entry `e`.
+
 ### Attributes
 All values have an associated attribute.
 The attribute associated with a value has the same owner as the value.

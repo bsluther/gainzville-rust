@@ -859,8 +859,7 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     
     /**
      * Create `count` arbitrary entries drawn from the current activities and entries in the DB.
-     * Entries are clustered around the current time. Requires at least one activity to exist;
-     * does nothing if there are none.
+     * Entries are clustered around the current time.
      */
     func devCreateArbitraryEntries(count: UInt32) throws 
     
@@ -1044,8 +1043,7 @@ public convenience init(dbPath: String, actorId: Uuid, listener: CoreListener)th
     
     /**
      * Create `count` arbitrary entries drawn from the current activities and entries in the DB.
-     * Entries are clustered around the current time. Requires at least one activity to exist;
-     * does nothing if there are none.
+     * Entries are clustered around the current time.
      */
 open func devCreateArbitraryEntries(count: UInt32)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
     uniffi_gv_ffi_fn_method_gainzvillecore_dev_create_arbitrary_entries(
@@ -6759,7 +6757,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_corelistener_on_data_changed() != 48934) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_create_arbitrary_entries() != 3929) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_create_arbitrary_entries() != 25273) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_create_arbitrary_values() != 24982) {

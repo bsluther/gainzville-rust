@@ -35,6 +35,3 @@ CREATE TABLE IF NOT EXISTS entries (
     CONSTRAINT entry_parent_frac_index_together
         CHECK ((parent_id IS NULL) = (frac_index IS NULL))
 );
-
--- Insert system actor.
-INSERT INTO actors (id, actor_kind) VALUES ('eee9e6ae-6531-4580-8356-427604a0dc02', 'system');

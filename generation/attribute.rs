@@ -7,22 +7,22 @@ use gv_core::models::{
 };
 use uuid::Uuid;
 
-use rand::RngExt;
-use rand::seq::SliceRandom;
+use rand::seq::{IndexedRandom, SliceRandom};
+use rand::{RngExt, seq::IteratorRandom};
 
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, gen_random_text, maybe, pick};
 
-impl ArbitraryFrom<&[Uuid]> for Attribute {
-    fn arbitrary_from<R: RngExt, C: GenerationContext>(
-        rng: &mut R,
-        context: &C,
-        actor_ids: &[Uuid],
-    ) -> Self {
+impl Arbitrary for Attribute {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+        let owner_id = context
+            .model()
+            .actors()
+            .choose(rng)
+            .map(|a| a.actor_id)
+            .unwrap_or_else(|| Uuid::arbitrary(rng, context));
         Attribute {
             id: Uuid::arbitrary(rng, context),
-            owner_id: pick(&actor_ids, rng)
-                .expect("owner_ids must not be empty")
-                .clone(),
+            owner_id,
             name: gen_random_text(rng, 1..5).to_string(),
             description: maybe(rng, 0.5, |rng| gen_random_text(rng, 1..8).to_string()),
             config: AttributeConfig::arbitrary(rng, context),
@@ -93,36 +93,55 @@ impl Arbitrary for MassConfig {
     }
 }
 
-impl ArbitraryFrom<(&[Entry], &[Attribute])> for Value {
-    fn arbitrary_from<R: RngExt, C: GenerationContext>(
-        rng: &mut R,
-        context: &C,
-        (entries, attributes): (&[Entry], &[Attribute]),
-    ) -> Self {
-        // Pick a (entry, attribute) pair whose owners match — `create_value`
-        // requires `entry.owner_id == attribute.owner_id`, so picking
-        // independently from both lists frequently produces values that the
-        // mutator then rejects.
-        let entry = pick(entries, rng).expect("entries must not be empty");
-        let owned_attrs: Vec<&Attribute> = attributes
-            .iter()
-            .filter(|a| a.owner_id == entry.owner_id)
+impl Arbitrary for Value {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+        let model = context.model();
+
+        // `create_value` requires `entry.owner_id == attribute.owner_id`, so we
+        // need an owner-matched (entry, attribute) pair. Prefer real references —
+        // fabricating only what the model can't supply keeps the value legal
+        // against a Model that enforces FK/owner invariants:
+        //   - entry: prefer one whose owner also owns an attribute (so we can
+        //     form a full real pair), else any entry, else a fabricated id.
+        //   - attribute: the chosen entry's owner-matched attribute if one
+        //     exists, else a fabricated id + config.
+        let eligible: Vec<&Entry> = model
+            .entries()
+            .filter(|e| model.attributes().any(|a| a.owner_id == e.owner_id))
             .collect();
-        let attribute = pick(&owned_attrs[..], rng).expect(
-            "no attribute matches the picked entry's owner; \
-             ensure attributes and entries share at least one owner",
-        );
-        let plan = maybe(rng, 0.5, |rng| {
-            AttributeValue::arbitrary_from(rng, context, &attribute.config)
+        let entry = eligible
+            .choose(rng)
+            .copied()
+            .or_else(|| model.entries().choose(rng));
+
+        let entry_id = entry
+            .map(|e| e.id)
+            .unwrap_or_else(|| Uuid::arbitrary(rng, context));
+
+        let attribute = entry.and_then(|e| {
+            model
+                .attributes()
+                .filter(|a| a.owner_id == e.owner_id)
+                .choose(rng)
         });
-        // TEMPORARY - always generate an actual value for UI development.
+        let (attribute_id, config) = match attribute {
+            Some(a) => (a.id, a.config.clone()),
+            None => (
+                Uuid::arbitrary(rng, context),
+                AttributeConfig::arbitrary(rng, context),
+            ),
+        };
+
+        let plan = maybe(rng, 0.5, |rng| {
+            AttributeValue::arbitrary_from(rng, context, &config)
+        });
         let actual = maybe(rng, 0.5, |rng| {
-            AttributeValue::arbitrary_from(rng, context, &attribute.config)
+            AttributeValue::arbitrary_from(rng, context, &config)
         });
         // TODO: generate appropriate index_float / index_string based on attribute config.
         Value {
-            entry_id: entry.id,
-            attribute_id: attribute.id,
+            entry_id,
+            attribute_id,
             index_float: None,
             index_string: None,
             plan,

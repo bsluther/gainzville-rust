@@ -1815,6 +1815,7 @@ dependencies = [
  "rand_core 0.9.3",
  "rand_distr",
  "rustc-hash",
+ "tracing",
  "uuid",
 ]
 

@@ -1,6 +1,15 @@
 use chrono::{DateTime, Duration, Utc};
-use gv_core::validation::{Email, Username};
-use rand::{Rng, RngExt};
+use gv_core::{
+    SYSTEM_ACTOR_ID,
+    delta::Delta,
+    delta_executor::AnyDeltaExecutor,
+    error::Result,
+    models::actor::{Actor, ActorKind},
+    mutators::Mutation,
+    queries::Snapshot,
+    validation::{Email, Username},
+};
+use rand::{Rng, RngExt, seq::IteratorRandom};
 use rand_distr::{Distribution, Normal};
 use uuid::Uuid;
 
@@ -79,6 +88,31 @@ impl SimulationContext {
             model: Model::empty(),
         }
     }
+
+    pub async fn seed_system(&mut self) -> Result<()> {
+        let system_actor = Actor {
+            actor_id: SYSTEM_ACTOR_ID,
+            actor_kind: ActorKind::System,
+            created_at: DateTime::parse_from_rfc3339("2026-01-01T12:00:00Z")
+                .unwrap()
+                .to_utc(),
+        };
+
+        let insert_system_actor: Delta<Actor> = Delta::Insert { new: system_actor };
+        self.model
+            .apply_any_delta(insert_system_actor.into())
+            .await?;
+        Ok(())
+    }
+
+    pub async fn apply_mutation(&mut self, mx: Mutation) -> Result<()> {
+        self.model.apply_mutation(mx).await
+    }
+
+    // Replace the existing model with a snapshot of the database.
+    pub fn load_snapshot(&mut self, snapshot: Snapshot) {
+        self.model = Model::from_snapshot(snapshot);
+    }
 }
 
 impl GenerationContext for SimulationContext {
@@ -132,6 +166,18 @@ pub fn pick_index<R: RngExt>(choices: usize, rng: &mut R) -> usize {
     rng.random_range(0..choices)
 }
 
+/// A real actor's id when the model has any, otherwise a fabricated one — the
+/// recurring "owner from the model, else generated" primitive shared by the
+/// actor-owned `Arbitrary` impls.
+pub fn arbitrary_actor_id<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Uuid {
+    context
+        .model()
+        .actors()
+        .choose(rng)
+        .map(|a| a.actor_id)
+        .unwrap_or_else(|| Uuid::arbitrary(rng, context))
+}
+
 /// Adapts a rand-0.10 RNG to the rand-0.9 `RngCore` that
 /// `anarchist-readable-name-generator-lib` (pinned to rand 0.9) expects. Both
 /// rand majors coexist in the tree; this newtype is the only bridge between them.
@@ -153,10 +199,7 @@ pub fn gen_random_name<R: RngExt>(rng: &mut R, separator: &str) -> String {
     anarchist_readable_name_generator_lib::readable_name_custom(separator, Rand09(rng))
 }
 
-pub fn gen_random_text<R: RngExt>(
-    rng: &mut R,
-    range: std::ops::Range<usize>,
-) -> String {
+pub fn gen_random_text<R: RngExt>(rng: &mut R, range: std::ops::Range<usize>) -> String {
     let n = rng.random_range(range);
     let mut text = String::new();
     for i in 0..(n / 2) {

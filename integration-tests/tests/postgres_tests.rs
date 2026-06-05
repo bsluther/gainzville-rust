@@ -1,15 +1,10 @@
 use fractional_index::FractionalIndex;
-use generation::{Arbitrary, ArbitraryFrom, SimulationContext};
+use generation::{Arbitrary, GenerationContext, SimulationContext, model::Model};
 use gv_core::{
-    actions::{Action, CreateActivity, CreateAttribute, CreateEntry, CreateUser, MoveEntry},
-    models::{
-        activity::Activity,
-        attribute::Attribute,
-        entry::{Entry, Position, Temporal},
-    },
-    queries::{AllActivities, AllActorIds, AllAttributes, AllEntries},
+    actions::{Action, CreateActivity, CreateEntry, CreateUser, MoveEntry},
+    models::entry::{Entry, Position, Temporal},
+    queries::{AllActorIds, SnapshotAll},
     query_executor::QueryExecutor,
-    std_lib,
 };
 use gv_server::server::PostgresServer;
 use gv_sql::postgres::PostgresQueryExecutor;
@@ -97,92 +92,61 @@ async fn test_arbitrary_create_user(pool: PgPool) {
 
 #[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
 async fn test_arbitrary_create_entry(pool: PgPool) {
+    // YOU ARE HERE
+    // Fixed up the test, but it fails with eg called `Result::unwrap()` on an `Err` value: Consistency("child entry must match its parent's template/log kind").
+    // Problem: that's the system working as it should and preventing an invalid parenting. But how
+    // do we differentiate between a correct failure and incorrect one?
+    // We need properties...
     let server = PostgresServer::new(pool);
-    let mut tx = server
-        .pool
-        .begin()
-        .await
-        .expect("begin transaction should not fail");
     let mut rng = rand::rng();
-    let context = SimulationContext::default();
+    let mut context = SimulationContext::default();
 
-    let actor_ids = PostgresQueryExecutor::new(&mut *tx)
-        .execute(AllActorIds {})
+    let mx = server
+        .run_action(CreateUser::arbitrary(&mut rng, &context).into())
         .await
         .unwrap();
-    let activities = (0..100)
-        .map(|_| Activity::arbitrary_from(&mut rng, &context, &actor_ids))
-        .collect::<Vec<_>>();
-    let entries = (0..100).fold(vec![], |mut acc, _| {
-        let entry = Entry::arbitrary_from(&mut rng, &context, (&actor_ids, &activities, &acc));
-        acc.push(entry);
-        acc
-    });
+    context.apply_mutation(mx).await.unwrap();
 
-    for activity in activities {
-        let create_activity: CreateActivity = activity.into();
-        server.run_action(create_activity.into()).await.unwrap();
+    for _ in 0..100 {
+        let mx = server
+            .run_action(CreateActivity::arbitrary(&mut rng, &context).into())
+            .await
+            .unwrap();
+        context.apply_mutation(mx).await.unwrap();
     }
 
-    for entry in entries {
-        let create_entry: CreateEntry = entry.into();
-        server.run_action(create_entry.into()).await.unwrap();
+    for _ in 0..100 {
+        let mx = server
+            .run_action(CreateEntry::arbitrary(&mut rng, &context).into())
+            .await
+            .unwrap();
+        context.apply_mutation(mx).await.unwrap();
     }
 }
 
 #[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
 async fn test_arbitrary_actions(pool: PgPool) {
-    let _ = tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(tracing::Level::WARN)
-        .with_test_writer()
+    use tracing_subscriber::{
+        filter::{LevelFilter, Targets},
+        fmt,
+        prelude::*,
+    };
+    // Only this test's own logs; silence the internal crates' span/event spam.
+    let filter = Targets::new()
+        .with_target("postgres_tests", LevelFilter::INFO)
+        .with_default(LevelFilter::ERROR);
+    let _ = tracing_subscriber::registry()
+        .with(fmt::layer().with_test_writer())
+        .with(filter)
         .try_init();
 
     let seed: u64 = 15287082126695428488; // random();
     info!("seed={}", seed);
     let server = PostgresServer::new(pool);
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    let context = SimulationContext::default();
+    let mut context = SimulationContext::default();
 
-    for _ in 0..1_000 {
-        let (actor_ids, activities, entries, mut attributes) = {
-            let mut connection = server.pool.acquire().await.unwrap();
-            let mut executor = PostgresQueryExecutor::new(&mut *connection);
-            let actor_ids = executor.execute(AllActorIds {}).await.unwrap();
-            let activities = executor.execute(AllActivities {}).await.unwrap();
-            let entries = executor.execute(AllEntries {}).await.unwrap();
-            let attributes = executor.execute(AllAttributes {}).await.unwrap();
-            (actor_ids, activities, entries, attributes)
-        };
-
-        // Temporary workaround: currently need every actor to have at least one attribute.
-        // Check if each actor has no attributes, if not insert the std_lib.
-        for actor_id in actor_ids.clone() {
-            if !attributes.iter().any(|attr| attr.owner_id == actor_id) {
-                let std_attrs: Vec<Attribute> = std_lib::StandardLibrary::attributes()
-                    .into_iter()
-                    .map(|attr| Attribute {
-                        owner_id: actor_id,
-                        ..attr
-                    })
-                    .collect();
-                for std_attr in std_attrs.iter().cloned() {
-                    let create_attr_action = CreateAttribute {
-                        actor_id,
-                        attribute: std_attr,
-                    };
-                    let _result = server.run_action(create_attr_action.into()).await;
-                }
-                attributes.extend(std_attrs);
-            }
-        }
-
-        let action = Action::arbitrary_from(
-            &mut rng,
-            &context,
-            (&actor_ids, &activities, &entries, &attributes),
-        );
-        // info!("Running action:\n{:?}", action);
-
+    for _ in 0..10_000 {
         // Problem: running a MoveEntry action which tries to move into a non-sequence entry fails
         // as it should, but here that looks like a failure. I want to test that the system can
         // handle invalid inputs, so it seems that I need a way to differentiate between correct
@@ -191,6 +155,51 @@ async fn test_arbitrary_actions(pool: PgPool) {
         // - Solution: parameterize the generation, valid_distribution: 0..1 where 0 is all invalid
         // and 1 is all valid.
 
-        let _result = server.run_action(action.clone()).await;
+        let action = Action::arbitrary(&mut rng, &context);
+        let kind = action_kind(&action);
+        let mx = match server.run_action(action).await {
+            Ok(mx) => {
+                info!("ok   {kind}");
+                mx
+            }
+            Err(e) => {
+                info!("FAIL {kind}: {e}");
+                continue;
+            }
+        };
+        context.apply_mutation(mx).await.unwrap();
+
+        // Check the model matches the current state of the database.
+        let mut conn = server.pool.acquire().await.unwrap();
+        let snapshot = PostgresQueryExecutor::new(&mut conn)
+            .execute(SnapshotAll)
+            .await
+            .expect("snapshot should not fail");
+        let snapshot_model = Model::from_snapshot(snapshot);
+        assert_eq!(
+            context.model(),
+            &snapshot_model,
+            "model diverged from database after {kind}"
+        );
+    }
+}
+
+/// Short variant name for an `Action`, for scannable per-action logging.
+fn action_kind(action: &Action) -> &'static str {
+    match action {
+        Action::CreateUser(_) => "CreateUser",
+        Action::CreateActivity(_) => "CreateActivity",
+        Action::CreateAttribute(_) => "CreateAttribute",
+        Action::CreateValue(_) => "CreateValue",
+        Action::AttachValue(_) => "AttachValue",
+        Action::DeleteAttributeValue(_) => "DeleteAttributeValue",
+        Action::CreateEntry(_) => "CreateEntry",
+        Action::CreateEntryFromActivity(_) => "CreateEntryFromActivity",
+        Action::DeleteEntryRecursive(_) => "DeleteEntryRecursive",
+        Action::MoveEntry(_) => "MoveEntry",
+        Action::UpdateEntryCompletion(_) => "UpdateEntryCompletion",
+        Action::UpdateAttributeValue(_) => "UpdateAttributeValue",
+        Action::UpdateAttribute(_) => "UpdateAttribute",
+        Action::UpdateEntry(_) => "UpdateEntry",
     }
 }

@@ -290,6 +290,7 @@ pub async fn create_entry_from_activity(
         .await?
         .ok_or_else(|| {
             DomainError::Consistency(format!(
+                // TODO: this condition is hit a lot when running arbitrary actions.
                 "activity '{}' has no template root",
                 action.activity_id
             ))
@@ -331,6 +332,8 @@ pub async fn create_entry_from_activity(
 /// Move an entry by changing it's parent, fractional index, and temporal. Does not allow
 /// moving to root without a defined start or end time; while the model allows for this, it
 /// should be intentional and utilize a different action.
+/// TOOD: you shouldn't be able to move template entries between template trees. Eg I can't move an
+///       entry from My Workout's template to Strenght Workout's template.
 pub async fn move_entry(
     executor: &mut impl AnyQueryExecutor,
     action: MoveEntry,
@@ -346,6 +349,17 @@ pub async fn move_entry(
             "entry that does not exist cannot be moved".to_string(),
         ));
     };
+
+    // Root template entries are not allowed to move.
+    if entry.is_template && entry.position.is_none() {
+        return Err(DomainError::Consistency(
+            "root template entries cannot be moved".to_string(),
+        ));
+    }
+
+    // TODO: Template entries cannot be moved to root.
+    // TODO: Template entries cannot be moved outside template tree. This would cover the above,
+    // since root is not part of the tree.
 
     if let Some(position) = &action.position {
         // Check for cycles.

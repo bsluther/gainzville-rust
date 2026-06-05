@@ -5,6 +5,7 @@ use uuid::Uuid;
 use crate::{
     models::{
         activity::Activity,
+        actor::Actor,
         attribute::{Attribute, Value},
         attribute_pair::AttributePair,
         entry::Entry,
@@ -315,4 +316,22 @@ define_query! {
 
 define_query! {
     pub struct FindAttributePairsForEntry { pub entry_id: Uuid } => Vec<AttributePair>
+}
+
+// --- Simulation ---
+
+// SnapshotAll is used to read *every* row from the database, regardless of auth, to bootstrap a
+// model of the current state of the world. Should never be used on a production client/server.
+define_query! {
+    pub struct SnapshotAll; => Snapshot
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Snapshot {
+    pub users: Vec<User>,
+    pub actors: Vec<Actor>,
+    pub activities: Vec<Activity>,
+    pub attributes: Vec<Attribute>,
+    pub entries: Vec<Entry>,
+    pub values: Vec<Value>,
 }
