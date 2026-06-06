@@ -19,6 +19,7 @@ pub mod actions;
 pub mod activity;
 pub mod attribute;
 pub mod entry;
+pub mod io;
 pub mod model;
 pub mod samples;
 
