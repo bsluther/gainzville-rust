@@ -1,4 +1,8 @@
-use crate::error::{Result, ValidationError};
+use crate::{
+    actions::CreateActivity,
+    error::{Result, ValidationError},
+    models::entry::{Entry, Temporal},
+};
 use uuid::Uuid;
 
 // TODO: Activities can't currently be sequences! Need to add a field to the activity.
@@ -36,6 +40,28 @@ impl Activity {
         ActivityUpdater {
             old: self.clone(),
             new: self.clone(),
+        }
+    }
+
+    /// Build the `CreateActivity` action, using `template_id` as the id of the
+    /// template-root entry. The caller mints the id (via `Io::uuid` in
+    /// production, the rng in generation) so this stays a pure conversion.
+    pub fn into_create_activity(&self, template_id: Uuid) -> CreateActivity {
+        CreateActivity {
+            actor_id: self.owner_id,
+            activity: self.clone(),
+            template: vec![Entry {
+                id: template_id,
+                owner_id: self.owner_id,
+                activity_id: Some(self.id),
+                name: None,
+                position: None,
+                is_template: true,
+                display_as_sets: false,
+                is_sequence: true,
+                is_complete: false,
+                temporal: Temporal::None,
+            }],
         }
     }
 }

@@ -38,7 +38,9 @@ async fn test_create_user_activity_entry(pool: PgPool) {
         description: Some("Pull yourself up.".to_string()),
     };
     postgres_server
-        .run_action(Action::CreateActivity(activity.into()))
+        .run_action(Action::CreateActivity(
+            activity.into_create_activity(postgres_server.io().uuid()),
+        ))
         .await
         .unwrap();
 

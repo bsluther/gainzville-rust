@@ -847,7 +847,7 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
         source_activity_id: None,
     };
     sqlite_client
-        .run_action(CreateActivity::from(activity.clone()).into())
+        .run_action(activity.clone().into_create_activity(Uuid::new_v4()).into())
         .await
         .unwrap();
 

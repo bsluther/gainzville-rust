@@ -107,6 +107,10 @@ impl PostgresServer {
 
         Ok(mx)
     }
+
+    pub fn io(&self) -> Arc<dyn Io> {
+        self.io.clone()
+    }
 }
 
 pub mod tests {
@@ -130,7 +134,7 @@ pub mod tests {
             description: None,
             source_activity_id: None,
         };
-        let create_activity: CreateActivity = activity.into();
+        let create_activity = activity.into_create_activity(postgres_server.io.uuid());
         let action: Action = create_activity.into();
 
         let _ = postgres_server.run_action(action).await;

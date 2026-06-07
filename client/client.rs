@@ -3,7 +3,7 @@ use gv_core::error::DbErr;
 use gv_core::io::{Io, SystemIo};
 use gv_core::{
     DEFAULT_USER_ID,
-    actions::{Action, CreateActivity, CreateUser},
+    actions::{Action, CreateUser},
     error::Result,
     models::{
         activity::{Activity, ActivityName},
@@ -235,8 +235,8 @@ impl SqliteClient {
                     description: Some(format!("Created by background ticker (tick #{counter})")),
                     source_activity_id: None,
                 };
-                let create_scalar_activity: CreateActivity = activity.into();
-                let _ = client.run_action(create_scalar_activity.into()).await;
+                let create_activity = activity.into_create_activity(client.io.uuid());
+                let _ = client.run_action(create_activity.into()).await;
             }
         });
     }
@@ -289,7 +289,7 @@ pub mod tests {
             description: None,
             source_activity_id: None,
         };
-        let create_activity: CreateActivity = activity.into();
+        let create_activity = activity.into_create_activity(sqlite_client.io.uuid());
         let action: Action = create_activity.into();
 
         sqlite_client.run_action(action).await.unwrap();
