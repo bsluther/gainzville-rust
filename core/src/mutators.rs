@@ -9,7 +9,7 @@ use crate::{
         UpdateAttribute, UpdateAttributeValue, UpdateEntry, UpdateEntryCompletion, ValueField,
     },
     delta::{AnyDelta, Delta},
-    error::{DomainError, Result, ValidationError},
+    error::{DomainError, RejectReason, Result, ValidationError},
     forest::Forest,
     instantiation::instantiate_subtree,
     io::Io,
@@ -49,9 +49,9 @@ fn validate_template_temporal(
     temporal: &crate::models::entry::Temporal,
 ) -> Result<()> {
     if is_template && (temporal.start().is_some() || temporal.end().is_some()) {
-        return Err(DomainError::Consistency(
-            "template entries cannot have a start or end time (duration only)".to_string(),
-        ));
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "template entries cannot have a start or end time (duration only)",
+        )));
     }
     Ok(())
 }
@@ -69,7 +69,7 @@ pub async fn create_user(
         })
         .await?
     {
-        return Err(DomainError::EmailAlreadyExists);
+        return Err(DomainError::Rejected(RejectReason::EmailExists));
     }
 
     // Check if username is in use.
@@ -80,7 +80,9 @@ pub async fn create_user(
         .await?
         .is_some()
     {
-        return Err(DomainError::Other("user already in use".to_string()));
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "user already in use",
+        )));
     }
 
     // Check if ID is in use.
@@ -91,7 +93,9 @@ pub async fn create_user(
         .await?
         .is_some()
     {
-        return Err(DomainError::Other("actor_id already in use".to_string()));
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "actor_id already in use",
+        )));
     }
 
     let insert_actor = Delta::<Actor>::Insert {
@@ -118,32 +122,32 @@ pub async fn create_activity(
 ) -> Result<Mutation> {
     let activity = action.activity.clone();
     if action.actor_id != activity.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not authorized to create activities for owner '{}'",
             action.actor_id, activity.owner_id
-        )));
+        ))));
     }
 
     // Templates must form a tree.
     let template_forest = Forest::from(action.template.clone());
     let Some(root) = template_forest.tree_root() else {
-        return Err(DomainError::Consistency(
-            "activity template must form a tree".to_string(),
-        ));
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "activity template must form a tree",
+        )));
     };
 
     // Root of template tree must have activity_id == activity.id.
     if root.activity_id != Some(activity.id) {
-        return Err(DomainError::Consistency(
-            "activity template must have a root entry with activity_id == activity.id".to_string(),
-        ));
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "activity template must have a root entry with activity_id == activity.id",
+        )));
     }
 
     // All templates must have is_template == true.
     if !action.template.iter().all(|e| e.is_template) {
-        return Err(DomainError::Consistency(
-            "all template entries must have is_template == true".to_string(),
-        ));
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "all template entries must have is_template == true",
+        )));
     }
 
     let insert_activity = Delta::Insert { new: activity };
@@ -172,12 +176,12 @@ pub async fn create_entry(
     // Check if actor has permission to create entry at the given position.
     // For now, only allow the owner to create.
     if action.actor_id != action.entry.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not authorized to create entry for owner '{}' in parent entry '{:?}'",
             action.actor_id,
             action.entry.owner_id,
             action.entry.position.map(|p| p.parent_id)
-        )));
+        ))));
     }
 
     // Check if referenced activity exists.
@@ -187,10 +191,10 @@ pub async fn create_entry(
             .await?
             .is_none()
         {
-            return Err(DomainError::Other(format!(
+            return Err(DomainError::Rejected(RejectReason::NotFound(format!(
                 "create entry failed, activity '{}' not found",
                 activity_id
-            )));
+            ))));
         }
     };
 
@@ -205,9 +209,9 @@ pub async fn create_entry(
             .await?
         {
             if parent.is_template != action.entry.is_template {
-                return Err(DomainError::Consistency(
-                    "child entry must match its parent's template/log kind".to_string(),
-                ));
+                return Err(DomainError::Rejected(RejectReason::Precondition(
+                    "child entry must match its parent's template/log kind",
+                )));
             }
         }
     }
@@ -242,15 +246,18 @@ pub async fn create_entry_from_activity(
         })
         .await?
         .ok_or_else(|| {
-            DomainError::Other(format!("activity '{}' not found", action.activity_id))
+            DomainError::Rejected(RejectReason::NotFound(format!(
+                "activity '{}' not found",
+                action.activity_id
+            )))
         })?;
 
     // Only the owner can instantiate their activities (for now).
     if action.actor_id != activity.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not authorized to instantiate activity owned by '{}'",
             action.actor_id, activity.owner_id
-        )));
+        ))));
     }
 
     // Placement validation mirrors move_entry, applied to the instantiated root.
@@ -261,28 +268,30 @@ pub async fn create_entry_from_activity(
             })
             .await?
             .ok_or_else(|| {
-                DomainError::Consistency("instantiation parent does not exist".to_string())
+                DomainError::Rejected(RejectReason::NotFound(
+                    "instantiation parent does not exist".to_string(),
+                ))
             })?;
         if !parent.is_sequence {
-            return Err(DomainError::Consistency(
-                "cannot instantiate into a non-sequence entry".to_string(),
-            ));
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "cannot instantiate into a non-sequence entry",
+            )));
         }
         // A template tree and a log tree never mix: the instantiated subtree's
         // kind must match the parent's (log into log, template into template).
         if parent.is_template != action.is_template {
-            return Err(DomainError::Consistency(
-                "instantiated subtree must match its parent's template/log kind".to_string(),
-            ));
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "instantiated subtree must match its parent's template/log kind",
+            )));
         }
     } else if !action.is_template
         && action.temporal.start().is_none()
         && action.temporal.end().is_none()
     {
         // Log roots must be placed on the timeline; template roots are exempt.
-        return Err(DomainError::Consistency(
-            "root entry must have defined start or end time".to_string(),
-        ));
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "root entry must have defined start or end time",
+        )));
     }
 
     // Template entries (root or child) never carry a start or end.
@@ -294,11 +303,12 @@ pub async fn create_entry_from_activity(
         })
         .await?
         .ok_or_else(|| {
-            DomainError::Consistency(format!(
-                // TODO: this condition is hit a lot when running arbitrary actions.
-                "activity '{}' has no template root",
-                action.activity_id
-            ))
+            // Reaching here means we've observed an *existing* invariant violation:
+            // the activity exists but its template root is missing.
+            DomainError::InvariantViolation {
+                invariant: "activity has a template root",
+                context: format!("activity '{}'", action.activity_id),
+            }
         })?;
 
     let subtree = executor
@@ -352,17 +362,17 @@ pub async fn move_entry(
         })
         .await?
     else {
-        return Err(DomainError::Consistency(
+        return Err(DomainError::Rejected(RejectReason::NotFound(
             "entry that does not exist cannot be moved".to_string(),
-        ));
+        )));
     };
 
     if let Some(position) = &action.position {
         // Root template entries must remain at the root.
         if entry.is_template && entry.position.is_none() {
-            return Err(DomainError::Consistency(
-                "root template entry may not change position".to_string(),
-            ));
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "root template entry may not change position",
+            )));
         }
 
         // Check for cycles.
@@ -372,9 +382,9 @@ pub async fn move_entry(
             })
             .await?;
         if parent_ancestors.contains(&action.entry_id) {
-            return Err(DomainError::Consistency(
-                "move_entry would create a cycle".to_string(),
-            ));
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "move_entry would create a cycle",
+            )));
         }
 
         // Template entries cannot be moved outside their template tree.
@@ -392,9 +402,9 @@ pub async fn move_entry(
                 .copied()
                 .expect("ancestors should always be non-empty");
             if entry_root != dest_root {
-                return Err(DomainError::Consistency(
-                    "template entries cannot be moved outside their template tree".to_string(),
-                ));
+                return Err(DomainError::Rejected(RejectReason::Precondition(
+                    "template entries cannot be moved outside their template tree",
+                )));
             }
         }
 
@@ -407,29 +417,29 @@ pub async fn move_entry(
 
         // Destination entry must be a sequence.
         if !parent.is_sequence {
-            return Err(DomainError::Consistency(
-                "cannot move entry into a non-sequence entry".to_string(),
-            ));
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "cannot move entry into a non-sequence entry",
+            )));
         }
 
         // Check parent and child are both template or log entries
         if entry.is_template && !parent.is_template {
-            return Err(DomainError::Consistency(
-                "template entry cannot be a child of a log entry".to_string(),
-            ));
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "template entry cannot be a child of a log entry",
+            )));
         }
         if !entry.is_template && parent.is_template {
-            return Err(DomainError::Consistency(
-                "log entry cannot be a child of a template entry".to_string(),
-            ));
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "log entry cannot be a child of a template entry",
+            )));
         }
     } else if !entry.is_template {
         // Log entries at root must be placed on the timeline; templates are
         // exempt (they live outside the timeline).
         if action.temporal.start().is_none() && action.temporal.end().is_none() {
-            return Err(DomainError::Consistency(
-                "root entry must have defined start or end time".to_string(),
-            ));
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "root entry must have defined start or end time",
+            )));
         }
     }
 
@@ -475,16 +485,16 @@ pub async fn delete_entry_recursive(
             "descendants query must include the root entry or be null,
             found a non-empty tree which does not contain the root"
         );
-        return Err(DomainError::Other(
-            "delete_entry_recursive failed: entry not found in database".into(),
-        ));
+        return Err(DomainError::Rejected(RejectReason::NotFound(
+            "delete_entry_recursive failed: entry not found in database".to_string(),
+        )));
     };
 
     // Check if actor has permission to delete.
     if action.actor_id != root.owner_id {
-        return Err(DomainError::Unauthorized(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(
             "delete_entry_recursive actor is not the owner of the deleting entry".to_string(),
-        ));
+        )));
     }
 
     // Create delete deltas for entry and descendants.
@@ -519,10 +529,10 @@ pub async fn create_attribute(
 
     // Only the owner can create attributes for themselves (for now).
     if action.actor_id != attribute.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not authorized to create attributes for owner '{}'",
             action.actor_id, attribute.owner_id
-        )));
+        ))));
     }
 
     let insert_attribute = Delta::Insert { new: attribute };
@@ -546,29 +556,31 @@ pub async fn update_entry_completion(
         })
         .await?
     else {
-        return Err(DomainError::Consistency("entry does not exist".to_string()));
+        return Err(DomainError::Rejected(RejectReason::NotFound(
+            "entry does not exist".to_string(),
+        )));
     };
 
     // Only the owner may complete their own entries.
     if action.actor_id != entry.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not the owner of entry '{}'",
             action.actor_id, entry.id
-        )));
+        ))));
     }
 
     // Template entries represent activity definitions, not logged events.
     if entry.is_template {
-        return Err(DomainError::Consistency(
-            "template entries cannot be marked complete".to_string(),
-        ));
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "template entries cannot be marked complete",
+        )));
     }
 
     // Sequence entries are containers; completion applies only to leaf entries.
     if entry.is_sequence {
-        return Err(DomainError::Consistency(
-            "sequence entries cannot be marked complete".to_string(),
-        ));
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "sequence entries cannot be marked complete",
+        )));
     }
 
     let update_delta = entry.update().is_complete(action.is_complete).to_delta();
@@ -594,14 +606,19 @@ pub async fn create_value(
             entry_id: value.entry_id,
         })
         .await?
-        .ok_or_else(|| DomainError::Other(format!("entry '{}' not found", value.entry_id)))?;
+        .ok_or_else(|| {
+            DomainError::Rejected(RejectReason::NotFound(format!(
+                "entry '{}' not found",
+                value.entry_id
+            )))
+        })?;
 
     // Only the entry owner can create values on it.
     if action.actor_id != entry.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not authorized to create values on entry owned by '{}'",
             action.actor_id, entry.owner_id
-        )));
+        ))));
     }
 
     // The attribute must exist and be owned by the same actor as the entry.
@@ -611,14 +628,17 @@ pub async fn create_value(
         })
         .await?
         .ok_or_else(|| {
-            DomainError::Other(format!("attribute '{}' not found", value.attribute_id))
+            DomainError::Rejected(RejectReason::NotFound(format!(
+                "attribute '{}' not found",
+                value.attribute_id
+            )))
         })?;
 
     if attribute.owner_id != entry.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "attribute owner '{}' does not match entry owner '{}'",
             attribute.owner_id, entry.owner_id
-        )));
+        ))));
     }
 
     // No-op if a value for this (entry_id, attribute_id) already exists: an
@@ -662,14 +682,19 @@ pub async fn attach_value(
             entry_id: action.entry_id,
         })
         .await?
-        .ok_or_else(|| DomainError::Other(format!("entry '{}' not found", action.entry_id)))?;
+        .ok_or_else(|| {
+            DomainError::Rejected(RejectReason::NotFound(format!(
+                "entry '{}' not found",
+                action.entry_id
+            )))
+        })?;
 
     // Only the entry owner can attach values to it.
     if action.actor_id != entry.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not authorized to attach values on entry owned by '{}'",
             action.actor_id, entry.owner_id
-        )));
+        ))));
     }
 
     let attribute = executor
@@ -678,14 +703,17 @@ pub async fn attach_value(
         })
         .await?
         .ok_or_else(|| {
-            DomainError::Other(format!("attribute '{}' not found", action.attribute_id))
+            DomainError::Rejected(RejectReason::NotFound(format!(
+                "attribute '{}' not found",
+                action.attribute_id
+            )))
         })?;
 
     if attribute.owner_id != entry.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "attribute owner '{}' does not match entry owner '{}'",
             attribute.owner_id, entry.owner_id
-        )));
+        ))));
     }
 
     // No-op if already attached.
@@ -746,18 +774,20 @@ pub async fn delete_attribute_value(
         })
         .await?
         .ok_or_else(|| {
-            DomainError::Consistency(format!(
-                "value exists for entry '{}' but the entry does not",
-                action.entry_id
-            ))
+            // A value keyed to an entry that doesn't exist is a dangling row —
+            // an observed invariant violation, not a rejected action.
+            DomainError::InvariantViolation {
+                invariant: "value references an existing entry",
+                context: format!("entry '{}'", action.entry_id),
+            }
         })?;
 
     // Only the entry owner can detach values from it.
     if action.actor_id != entry.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not the owner of entry '{}'",
             action.actor_id, entry.id
-        )));
+        ))));
     }
 
     Ok(Mutation {
@@ -779,14 +809,16 @@ pub async fn update_attribute_value(
         })
         .await?
     else {
-        return Err(DomainError::Consistency("entry does not exist".to_string()));
+        return Err(DomainError::Rejected(RejectReason::NotFound(
+            "entry does not exist".to_string(),
+        )));
     };
 
     if action.actor_id != entry.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not the owner of entry '{}'",
             action.actor_id, entry.id
-        )));
+        ))));
     }
 
     if executor
@@ -796,9 +828,9 @@ pub async fn update_attribute_value(
         .await?
         .is_none()
     {
-        return Err(DomainError::Consistency(
+        return Err(DomainError::Rejected(RejectReason::NotFound(
             "attribute does not exist".to_string(),
-        ));
+        )));
     }
 
     let Some(old) = executor
@@ -808,9 +840,9 @@ pub async fn update_attribute_value(
         })
         .await?
     else {
-        return Err(DomainError::Consistency(
-            "value does not exist; use CreateValue before UpdateAttributeValue".to_string(),
-        ));
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "value does not exist; use CreateValue before UpdateAttributeValue",
+        )));
     };
 
     let new = match action.field {
@@ -848,17 +880,17 @@ pub async fn update_attribute(
         })
         .await?
     else {
-        return Err(DomainError::Consistency(
+        return Err(DomainError::Rejected(RejectReason::NotFound(
             "attribute does not exist".to_string(),
-        ));
+        )));
     };
 
     // Only the owner can modify their attributes.
     if action.actor_id != old.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not the owner of attribute '{}'",
             action.actor_id, old.id
-        )));
+        ))));
     }
 
     let mut new = old.clone();
@@ -867,7 +899,7 @@ pub async fn update_attribute(
         AttributeChange::SetDescription(description) => new.description = description.clone(),
         AttributeChange::Numeric(change) => {
             let AttributeConfig::Numeric(cfg) = &mut new.config else {
-                return Err(DomainError::AttributeMismatch);
+                return Err(DomainError::Rejected(RejectReason::AttributeMismatch));
             };
             match change {
                 NumericChange::SetDefault(default) => {
@@ -901,7 +933,7 @@ pub async fn update_attribute(
         }
         AttributeChange::Select(change) => {
             let AttributeConfig::Select(cfg) = &mut new.config else {
-                return Err(DomainError::AttributeMismatch);
+                return Err(DomainError::Rejected(RejectReason::AttributeMismatch));
             };
             match change {
                 SelectChange::SetDefault(default) => {
@@ -919,7 +951,7 @@ pub async fn update_attribute(
         }
         AttributeChange::Mass(change) => {
             let AttributeConfig::Mass(cfg) = &mut new.config else {
-                return Err(DomainError::AttributeMismatch);
+                return Err(DomainError::Rejected(RejectReason::AttributeMismatch));
             };
             match change {
                 MassChange::SetDefaultUnits(units) => {
@@ -969,14 +1001,16 @@ pub async fn update_entry(
         })
         .await?
     else {
-        return Err(DomainError::Consistency("entry does not exist".to_string()));
+        return Err(DomainError::Rejected(RejectReason::NotFound(
+            "entry does not exist".to_string(),
+        )));
     };
 
     if action.actor_id != entry.owner_id {
-        return Err(DomainError::Unauthorized(format!(
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
             "actor '{}' is not the owner of entry '{}'",
             action.actor_id, entry.id
-        )));
+        ))));
     }
 
     let mut deltas: Vec<AnyDelta> = vec![];

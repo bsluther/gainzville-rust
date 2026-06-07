@@ -16,7 +16,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::error::{DomainError, Result, ValidationError};
+use crate::error::{DomainError, RejectReason, Result, ValidationError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attribute {
@@ -38,21 +38,21 @@ impl Attribute {
     pub fn expect_numeric(&self) -> Result<&NumericConfig> {
         match &self.config {
             AttributeConfig::Numeric(c) => Ok(c),
-            _ => Err(DomainError::AttributeMismatch),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
 
     pub fn expect_select(&self) -> Result<&SelectConfig> {
         match &self.config {
             AttributeConfig::Select(c) => Ok(c),
-            _ => Err(DomainError::AttributeMismatch),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
 
     pub fn expect_mass(&self) -> Result<&MassConfig> {
         match &self.config {
             AttributeConfig::Mass(c) => Ok(c),
-            _ => Err(DomainError::AttributeMismatch),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
 
@@ -162,29 +162,29 @@ impl NumericConfig {
         if integer {
             if let Some(v) = min {
                 if !is_integer(v) {
-                    return Err(DomainError::Validation(
+                    return Err(DomainError::Rejected(RejectReason::Validation(
                         ValidationError::InvalidNumericConfig(format!(
                             "min ({v}) must be an integer"
                         )),
-                    ));
+                    )));
                 }
             }
             if let Some(v) = max {
                 if !is_integer(v) {
-                    return Err(DomainError::Validation(
+                    return Err(DomainError::Rejected(RejectReason::Validation(
                         ValidationError::InvalidNumericConfig(format!(
                             "max ({v}) must be an integer"
                         )),
-                    ));
+                    )));
                 }
             }
             if let Some(v) = default {
                 if !is_integer(v) {
-                    return Err(DomainError::Validation(
+                    return Err(DomainError::Rejected(RejectReason::Validation(
                         ValidationError::InvalidNumericConfig(format!(
                             "default ({v}) must be an integer"
                         )),
-                    ));
+                    )));
                 }
             }
         }
@@ -254,21 +254,21 @@ impl AttributeValue {
     pub fn expect_numeric(self) -> Result<NumericValue> {
         match self {
             AttributeValue::Numeric(v) => Ok(v),
-            _ => Err(DomainError::AttributeMismatch),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
 
     pub fn expect_select(self) -> Result<SelectValue> {
         match self {
             AttributeValue::Select(v) => Ok(v),
-            _ => Err(DomainError::AttributeMismatch),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
 
     pub fn expect_mass(self) -> Result<MassValue> {
         match self {
             AttributeValue::Mass(v) => Ok(v),
-            _ => Err(DomainError::AttributeMismatch),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
 }

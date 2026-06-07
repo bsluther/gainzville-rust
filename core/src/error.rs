@@ -1,30 +1,71 @@
-// Idea: consistency errors are violations of properties. Things like
-// "sequence entries cannot be marked complete"
-// "root entry must have defined start or end time"
-// "template entries cannot have a start or end time (duration only)"
-// "activity '0b7ed4a1-29c4-418c-94d5-9a5c73c633bd' has no template root"
-// - All of thse are error msgs from mutators, good starting point for assembling Properties.
-// Make a Property enum! Put it in the Consistency variant.
-// That may also help with differentiating errors where the system correctly caught a violation vs.
-// unexpected bad behavior.
-// It also should help line things up to assert those properties in PBT, DST, etc.
+// Errors split by *who is at fault*, which is what the simulator/PBT harness
+// needs to know:
+//
+// - `Rejected`           — the action was correctly refused; a precondition on
+//                          the current state was not met. Expected. A
+//                          well-behaved caller can hit these, and a simulator
+//                          continues past them.
+// - `InvariantViolation` — we *observed* an already-broken invariant in stored
+//                          state. A bug, not a rejected action; a simulator/PBT
+//                          harness halts and reports.
+// - `Database`           — the backend/machinery failed (sqlx, connection,
+//                          decode). Not a domain outcome.
 
 #[derive(thiserror::Error, Debug)]
 pub enum DomainError {
+    /// Backend / infrastructure failure (sqlx, connection, decode) — not a
+    /// domain outcome. The machinery failed, not the action.
     #[error("Database error: {0}")]
     Database(Box<dyn std::error::Error + Send + Sync>),
-    #[error("Email already exists")]
-    EmailAlreadyExists,
-    #[error("Other: {0}")]
-    Other(String),
+    /// The action was correctly refused: a precondition on the current state was
+    /// not met (auth, uniqueness, missing reference, state guard). Expected; a
+    /// well-behaved caller can hit these and a simulator continues past them.
+    #[error("{0}")]
+    Rejected(RejectReason),
+    /// We *observed* an already-broken invariant in stored state — a bug, not a
+    /// rejected action; a simulator/PBT harness halts and reports on these.
+    /// `invariant` is a stable identity (string-first; the seed for a future
+    /// `Property`); `context` carries the offending id(s).
+    #[error("invariant violation: {invariant} ({context})")]
+    InvariantViolation {
+        invariant: &'static str,
+        context: String,
+    },
+}
+
+/// Why an action was rejected. Every variant is an *expected* refusal — the
+/// system correctly prevented an illegal transition. Distinct from an observed
+/// invariant violation (already-broken stored state), which is a bug, not a
+/// rejection.
+#[derive(thiserror::Error, Debug)]
+pub enum RejectReason {
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
-    #[error("Validation error: {0}")]
-    Validation(#[from] ValidationError),
-    #[error("Consistency error: {0}")]
-    Consistency(String),
+    #[error("Email already exists")]
+    EmailExists,
     #[error("Attribute mismatch")]
     AttributeMismatch,
+    #[error("Validation error: {0}")]
+    Validation(#[from] ValidationError),
+    #[error("Not found: {0}")]
+    NotFound(String),
+    /// A precondition for the attempted transition did not hold in the current
+    /// state (e.g. "root entry must have defined start or end time"). Catch-all
+    /// for state guards. `&'static str` because every guard message is a stable
+    /// literal — it doubles as a grep-able identity and the seed for a future
+    /// named reason; specific guards graduate to their own variant when a test
+    /// or client reaches for them.
+    #[error("{0}")]
+    Precondition(&'static str),
+}
+
+// `From` is not transitive: `RejectReason: From<ValidationError>` does not give
+// `DomainError: From<ValidationError>`. This manual impl keeps every existing
+// `ValidationError::…().into()` / `?` site working through the `Rejected` layer.
+impl From<ValidationError> for DomainError {
+    fn from(e: ValidationError) -> Self {
+        DomainError::Rejected(RejectReason::Validation(e))
+    }
 }
 
 #[derive(thiserror::Error, Debug)]

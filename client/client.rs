@@ -91,7 +91,7 @@ impl SqliteClient {
         sqlx::migrate!("../gv-sql/sqlite/migrations")
             .run(&self.pool)
             .await
-            .map_err(|e| gv_core::error::DomainError::Other(e.to_string()))
+            .map_err(|e| gv_core::error::DomainError::Database(Box::new(e)))
     }
 
     #[instrument(skip_all)]

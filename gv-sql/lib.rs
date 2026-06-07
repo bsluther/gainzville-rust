@@ -5,6 +5,7 @@
 //! Keeps `gv_core` DB-agnostic.
 
 pub mod columns;
+pub mod error;
 pub mod rows;
 
 #[cfg(feature = "sqlite")]

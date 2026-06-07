@@ -1,5 +1,5 @@
 use gv_core::{
-    error::{DbErr, DomainError, Result},
+    error::{DbErr, DomainError, RejectReason, Result},
     models::{activity::Activity, user::User},
     queries::*,
     query_executor::QueryExecutor,
@@ -177,7 +177,9 @@ impl QueryExecutor<FindAncestors> for SqliteQueryExecutor<'_> {
         .db_err()?;
 
         if results.is_empty() {
-            return Err(DomainError::Other("entry not found".to_string()));
+            return Err(DomainError::Rejected(RejectReason::NotFound(
+                "entry not found".to_string(),
+            )));
         }
 
         for (child, parent) in results.iter().tuple_windows() {

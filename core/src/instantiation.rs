@@ -157,7 +157,15 @@ mod tests {
             template_entry(grandchild_id, Some(child_id), false),
         ];
 
-        let (entries, _) = instantiate_subtree(&crate::io::SystemIo::default(), root_id, &subtree, &[], None, Temporal::None, false);
+        let (entries, _) = instantiate_subtree(
+            &crate::io::SystemIo::default(),
+            root_id,
+            &subtree,
+            &[],
+            None,
+            Temporal::None,
+            false,
+        );
 
         // Map each instance back to which template entry it came from by structure.
         let inst_root = entries.iter().find(|e| e.position.is_none()).unwrap();
@@ -195,8 +203,15 @@ mod tests {
         ];
         let values = vec![numeric_value(child_id, attr, 7.0)];
 
-        let (entries, new_values) =
-            instantiate_subtree(&crate::io::SystemIo::default(), root_id, &subtree, &values, None, Temporal::None, false);
+        let (entries, new_values) = instantiate_subtree(
+            &crate::io::SystemIo::default(),
+            root_id,
+            &subtree,
+            &values,
+            None,
+            Temporal::None,
+            false,
+        );
 
         let inst_child = entries.iter().find(|e| e.position.is_some()).unwrap();
         assert_eq!(new_values.len(), 1);
@@ -222,8 +237,15 @@ mod tests {
             frac_index: FractionalIndex::default(),
         };
 
-        let (entries, _) =
-            instantiate_subtree(&crate::io::SystemIo::default(), root_id, &subtree, &[], Some(pos), Temporal::None, true);
+        let (entries, _) = instantiate_subtree(
+            &crate::io::SystemIo::default(),
+            root_id,
+            &subtree,
+            &[],
+            Some(pos),
+            Temporal::None,
+            true,
+        );
 
         assert_eq!(entries.len(), 2);
         assert!(

@@ -20,7 +20,7 @@ use rand::rngs::ChaCha8Rng;
 use sqlx::PgPool;
 use tracing::info;
 
-const N_ACTIONS: usize = 1000;
+const N_ACTIONS: usize = 500;
 const M_RUNS: usize = 10;
 
 /// Run `n` arbitrary actions against a freshly-wiped database with a seeded

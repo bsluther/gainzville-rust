@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     delta::Delta,
-    error::{DomainError, Result, ValidationError},
+    error::{DomainError, RejectReason, Result, ValidationError},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -87,9 +87,9 @@ impl Position {
                 frac_index,
             })),
             (None, None) => Ok(None),
-            _ => Err(DomainError::Consistency(
-                "parent_id and frac_index must both be defined or both be null".to_string(),
-            )),
+            _ => Err(DomainError::Rejected(RejectReason::Precondition(
+                "parent_id and frac_index must both be defined or both be null",
+            ))),
         }
     }
 }

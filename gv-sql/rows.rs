@@ -13,7 +13,7 @@
 use sqlx::FromRow;
 
 use gv_core::{
-    error::{DomainError, Result},
+    error::{DomainError, RejectReason, Result},
     models::{
         activity::Activity,
         actor::{Actor, ActorKind},
@@ -84,7 +84,9 @@ impl ActorRow {
             "system" => ActorKind::System,
             "user" => ActorKind::User,
             other => {
-                return Err(DomainError::Other(format!("unknown actor_kind: {other}")));
+                return Err(DomainError::Database(
+                    format!("unknown actor_kind: {other}").into(),
+                ));
             }
         };
         Ok(Actor {
@@ -181,8 +183,10 @@ impl EntryRow {
                 .map(|d| d.try_into())
                 .transpose()
                 .map_err(|_| {
-                    DomainError::Validation(gv_core::error::ValidationError::Other(
-                        "duration must fit in a u32".to_string().into(),
+                    DomainError::Rejected(RejectReason::Validation(
+                        gv_core::error::ValidationError::Other(
+                            "duration must fit in a u32".to_string().into(),
+                        ),
                     ))
                 })?;
         let position =
@@ -228,13 +232,13 @@ impl AttributeRow {
             description: attr.description.clone(),
             data_type: attr.config.data_type().to_string(),
             config: serde_json::to_string(&attr.config)
-                .map_err(|e| DomainError::Other(e.to_string()))?,
+                .map_err(|e| DomainError::Database(Box::new(e)))?,
         })
     }
 
     pub fn to_attribute(self) -> Result<Attribute> {
         let config: AttributeConfig =
-            serde_json::from_str(&self.config).map_err(|e| DomainError::Other(e.to_string()))?;
+            serde_json::from_str(&self.config).map_err(|e| DomainError::Database(Box::new(e)))?;
         Ok(Attribute {
             id: self.id.0,
             owner_id: self.owner_id.0,
@@ -264,13 +268,13 @@ impl ValueRow {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()
-            .map_err(|e| DomainError::Other(e.to_string()))?;
+            .map_err(|e| DomainError::Database(Box::new(e)))?;
         let actual = value
             .actual
             .as_ref()
             .map(serde_json::to_string)
             .transpose()
-            .map_err(|e| DomainError::Other(e.to_string()))?;
+            .map_err(|e| DomainError::Database(Box::new(e)))?;
         Ok(ValueRow {
             entry_id: UuidColumn(value.entry_id),
             attribute_id: UuidColumn(value.attribute_id),
@@ -287,13 +291,13 @@ impl ValueRow {
             .as_deref()
             .map(serde_json::from_str)
             .transpose()
-            .map_err(|e| DomainError::Other(e.to_string()))?;
+            .map_err(|e| DomainError::Database(Box::new(e)))?;
         let actual: Option<AttributeValue> = self
             .actual
             .as_deref()
             .map(serde_json::from_str)
             .transpose()
-            .map_err(|e| DomainError::Other(e.to_string()))?;
+            .map_err(|e| DomainError::Database(Box::new(e)))?;
         Ok(Value {
             entry_id: self.entry_id.0,
             attribute_id: self.attribute_id.0,

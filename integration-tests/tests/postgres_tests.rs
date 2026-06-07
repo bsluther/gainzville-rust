@@ -3,9 +3,10 @@ use std::sync::Arc;
 use fractional_index::FractionalIndex;
 use generation::{Arbitrary, GenerationContext, SimulationContext, io::SimIo, model::Model};
 use gv_core::{
-    actions::{Action, CreateActivity, CreateEntry, CreateUser, MoveEntry},
+    actions::{Action, CreateUser, MoveEntry},
+    error::{DomainError, RejectReason},
     models::entry::{Entry, Position, Temporal},
-    queries::{AllActorIds, SnapshotAll},
+    queries::SnapshotAll,
     query_executor::QueryExecutor,
 };
 use gv_server::server::PostgresServer;
@@ -67,7 +68,10 @@ async fn test_move_entry_disallows_cycles(pool: PgPool) {
 
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert!(matches!(err, gv_core::error::DomainError::Consistency(_)));
+    assert!(matches!(
+        err,
+        DomainError::Rejected(RejectReason::Precondition(_))
+    ));
 }
 
 #[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
@@ -94,39 +98,45 @@ async fn test_arbitrary_actions(pool: PgPool) {
     // Only this test's own logs; silence the internal crates' span/event spam.
     let filter = Targets::new()
         .with_target("postgres_tests", LevelFilter::INFO)
-        .with_target("generation::entry", LevelFilter::DEBUG)
         .with_default(LevelFilter::ERROR);
     let _ = tracing_subscriber::registry()
         .with(fmt::layer().with_test_writer())
         .with(filter)
         .try_init();
 
-    let seed: u64 = 15287082126695428488; // random();
+    // let seed: u64 = 15287082126695428488;
+    let seed: u64 = rand::random();
     info!("seed={}", seed);
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let server = PostgresServer::with_io(pool, Arc::new(SimIo::new(rng.random())));
     let mut context = SimulationContext::default();
 
-    for i in 0..500 {
-        // Problem: running a MoveEntry action which tries to move into a non-sequence entry fails
-        // as it should, but here that looks like a failure. I want to test that the system can
-        // handle invalid inputs, so it seems that I need a way to differentiate between correct
-        // errors and incorrect errors. But then, how do I determine if I correctly disallowed
-        // some action, or incorrectly diallowed some action?
-        // - Solution: parameterize the generation, valid_distribution: 0..1 where 0 is all invalid
-        // and 1 is all valid.
-
+    for i in 0..1_000 {
+        // The error taxonomy now tells correct refusals apart from bugs: a
+        // `Rejected` is the system correctly disallowing an invalid action
+        // (expected while fuzzing — log and continue), whereas an
+        // `InvariantViolation` (observed corruption) or `Database` (backend
+        // failure) is a real defect and fails the test. Still open: whether a
+        // given `Rejected` was *itself* correct (vs over-rejecting a valid
+        // action) — that needs a `valid_distribution` knob on generation.
         let action = Action::arbitrary(&mut rng, &context);
         let kind = action_kind(&action);
-        info!(?i, ?action);
         let mx = match server.run_action(action.clone()).await {
             Ok(mx) => {
-                info!("ok   {kind}");
+                info!(?i, "ok     {kind}");
                 mx
             }
-            Err(e) => {
-                info!("FAIL {kind}: {e}");
+            // Correctly refused — keep fuzzing. No catch-all below, so a new
+            // `DomainError` variant forces a deliberate decision here.
+            Err(DomainError::Rejected(reason)) => {
+                info!(?i, "reject {kind}: {reason}");
                 continue;
+            }
+            Err(DomainError::InvariantViolation { invariant, context }) => {
+                panic!("invariant violated by {kind} (seed={seed}): {invariant} ({context})");
+            }
+            Err(DomainError::Database(e)) => {
+                panic!("database error on {kind} (seed={seed}): {e}");
             }
         };
         context.apply_mutation(mx).await.unwrap();

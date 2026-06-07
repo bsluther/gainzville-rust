@@ -1,10 +1,12 @@
 use sqlx::PgConnection;
 use tracing::{info, instrument, warn};
 
+use crate::error::SqlErr;
+
 use gv_core::{
     delta::{AnyDelta, Delta},
     delta_executor::{AnyDeltaExecutor, DeltaExecutor},
-    error::{DbErr, Result},
+    error::Result,
     models::{
         activity::Activity,
         actor::Actor,
@@ -54,7 +56,7 @@ impl DeltaExecutor<Actor> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
             Delta::Update { .. } => {
                 warn!("Applying update delta to Actor table which does not support updates");
@@ -68,7 +70,7 @@ impl DeltaExecutor<Actor> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
         };
         Ok(())
@@ -91,7 +93,7 @@ impl DeltaExecutor<User> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(
@@ -113,7 +115,7 @@ impl DeltaExecutor<User> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
             Delta::Delete { old } => {
                 let row = crate::rows::UserRow::from(old);
@@ -125,7 +127,7 @@ impl DeltaExecutor<User> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
         };
         Ok(())
@@ -150,7 +152,7 @@ impl DeltaExecutor<Activity> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
@@ -173,7 +175,7 @@ impl DeltaExecutor<Activity> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
             Delta::Delete { old } => {
                 let row = crate::rows::ActivityRow::from(old);
@@ -185,7 +187,7 @@ impl DeltaExecutor<Activity> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
         };
         Ok(())
@@ -232,7 +234,7 @@ impl DeltaExecutor<Entry> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
@@ -267,7 +269,7 @@ impl DeltaExecutor<Entry> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
             Delta::Delete { old } => {
                 sqlx::query!(
@@ -278,7 +280,7 @@ impl DeltaExecutor<Entry> for PostgresDeltaExecutor<'_> {
                 )
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
         };
         Ok(())
@@ -304,7 +306,7 @@ impl DeltaExecutor<Attribute> for PostgresDeltaExecutor<'_> {
                 .bind(row.config)
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(old.id, new.id, "update must not mutate primary key");
@@ -324,14 +326,14 @@ impl DeltaExecutor<Attribute> for PostgresDeltaExecutor<'_> {
                 .bind(row.id)
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
             Delta::Delete { old } => {
                 sqlx::query("DELETE FROM attributes WHERE id = $1")
                     .bind(crate::columns::UuidColumn(old.id))
                     .execute(&mut *self.conn)
                     .await
-                    .db_err()?;
+                    .sql_err()?;
             }
         };
         Ok(())
@@ -356,7 +358,7 @@ impl DeltaExecutor<Value> for PostgresDeltaExecutor<'_> {
                 .bind(row.index_float)
                 .bind(row.index_string)
                 .execute(&mut *self.conn)
-                .await.db_err()?;
+                .await.sql_err()?;
             }
             Delta::Update { old, new } => {
                 assert_eq!(
@@ -380,7 +382,7 @@ impl DeltaExecutor<Value> for PostgresDeltaExecutor<'_> {
                 .bind(row.attribute_id)
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
             Delta::Delete { old } => {
                 sqlx::query(
@@ -390,7 +392,7 @@ impl DeltaExecutor<Value> for PostgresDeltaExecutor<'_> {
                 .bind(crate::columns::UuidColumn(old.attribute_id))
                 .execute(&mut *self.conn)
                 .await
-                .db_err()?;
+                .sql_err()?;
             }
         };
         Ok(())
