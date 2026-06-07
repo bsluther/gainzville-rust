@@ -3,8 +3,8 @@ use uuid::Uuid;
 use crate::{
     error::DomainError,
     models::attribute::{
-        Attribute, AttributeConfig, MassConfig, MassUnit, MassValue, NumericConfig,
-        NumericValue, SelectConfig, SelectValue, Value,
+        Attribute, AttributeConfig, MassConfig, MassUnit, MassValue, NumericConfig, NumericValue,
+        SelectConfig, SelectValue, Value,
     },
 };
 
@@ -130,4 +130,3 @@ impl MassAttributePair {
             .collect()
     }
 }
-

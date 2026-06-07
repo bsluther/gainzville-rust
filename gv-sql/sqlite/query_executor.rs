@@ -294,7 +294,7 @@ impl QueryExecutor<FindDescendants> for SqliteQueryExecutor<'_> {
                 SELECT c.* FROM entries c
                     INNER JOIN tree ON c.parent_id = tree.id
             )
-            SELECT * FROM tree
+            SELECT * FROM tree ORDER BY id
             "#,
         )
         .bind(crate::columns::UuidColumn(query.entry_id))

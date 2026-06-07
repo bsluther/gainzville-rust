@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
+use crate::io::Io;
 use crate::models::{
     attribute::Value,
     entry::{Entry, Position, Temporal},
@@ -31,6 +32,7 @@ use crate::models::{
 /// the subtree into the log; `true` composes it into another template (the
 /// caller is embedding the subtree under a template parent).
 pub fn instantiate_subtree(
+    io: &dyn Io,
     root_id: Uuid,
     subtree: &[Entry],
     values: &[Value],
@@ -39,7 +41,7 @@ pub fn instantiate_subtree(
     is_template: bool,
 ) -> (Vec<Entry>, Vec<Value>) {
     // Stable old-id -> new-id map for every entry in the subtree.
-    let id_map: HashMap<Uuid, Uuid> = subtree.iter().map(|e| (e.id, Uuid::new_v4())).collect();
+    let id_map: HashMap<Uuid, Uuid> = subtree.iter().map(|e| (e.id, io.uuid())).collect();
 
     let entries = subtree
         .iter()
@@ -124,6 +126,7 @@ mod tests {
         };
 
         let (entries, _) = instantiate_subtree(
+            &crate::io::SystemIo::default(),
             root_id,
             &[root],
             &[],
@@ -154,7 +157,7 @@ mod tests {
             template_entry(grandchild_id, Some(child_id), false),
         ];
 
-        let (entries, _) = instantiate_subtree(root_id, &subtree, &[], None, Temporal::None, false);
+        let (entries, _) = instantiate_subtree(&crate::io::SystemIo::default(), root_id, &subtree, &[], None, Temporal::None, false);
 
         // Map each instance back to which template entry it came from by structure.
         let inst_root = entries.iter().find(|e| e.position.is_none()).unwrap();
@@ -193,7 +196,7 @@ mod tests {
         let values = vec![numeric_value(child_id, attr, 7.0)];
 
         let (entries, new_values) =
-            instantiate_subtree(root_id, &subtree, &values, None, Temporal::None, false);
+            instantiate_subtree(&crate::io::SystemIo::default(), root_id, &subtree, &values, None, Temporal::None, false);
 
         let inst_child = entries.iter().find(|e| e.position.is_some()).unwrap();
         assert_eq!(new_values.len(), 1);
@@ -220,7 +223,7 @@ mod tests {
         };
 
         let (entries, _) =
-            instantiate_subtree(root_id, &subtree, &[], Some(pos), Temporal::None, true);
+            instantiate_subtree(&crate::io::SystemIo::default(), root_id, &subtree, &[], Some(pos), Temporal::None, true);
 
         assert_eq!(entries.len(), 2);
         assert!(
@@ -237,6 +240,7 @@ mod tests {
         let values = vec![numeric_value(root_id, attr, 3.0)];
 
         let (entries, new_values) = instantiate_subtree(
+            &crate::io::SystemIo::default(),
             root_id,
             &subtree,
             &values,

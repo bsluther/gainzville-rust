@@ -48,7 +48,8 @@ async fn create_user(client: &SqliteClient) -> User {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_find_descendants(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
 
     let user = create_user(&sqlite_client).await;
 
@@ -110,7 +111,8 @@ async fn test_find_descendants(pool: SqlitePool) {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_create_attribute_and_value(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
     let user = create_user(&sqlite_client).await;
     let user_id = user.actor_id.clone();
 
@@ -209,7 +211,8 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_attach_and_detach_value(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
     let user = create_user(&sqlite_client).await;
     let user_id = user.actor_id.clone();
 
@@ -348,7 +351,8 @@ async fn seed_entry(client: &SqliteClient) -> (User, Entry) {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_attach_mass_seeds_default_units(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
 
     let (user, entry) = seed_entry(&sqlite_client).await;
     let user_id = user.actor_id.clone();
@@ -413,7 +417,8 @@ async fn test_attach_mass_seeds_default_units(pool: SqlitePool) {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_attach_mass_empty_units_seeds_none(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
     let (user, entry) = seed_entry(&sqlite_client).await;
 
     let attribute = Attribute {
@@ -459,7 +464,8 @@ async fn test_attach_mass_empty_units_seeds_none(pool: SqlitePool) {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_create_value_is_noop_when_value_exists(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
     let (user, entry) = seed_entry(&sqlite_client).await;
 
     let attribute = Attribute {
@@ -541,7 +547,8 @@ async fn read_attribute(client: &SqliteClient, id: Uuid) -> Attribute {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_update_attribute_defaults(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
     let user = create_user(&sqlite_client).await;
 
     // --- Numeric: set default within bounds; reject out-of-bounds and non-integer.
@@ -743,7 +750,8 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
     let user = create_user(&sqlite_client).await;
 
     // --- No-op: re-applying the same value emits no deltas.
@@ -770,6 +778,7 @@ async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
         let mut executor = SqliteQueryExecutor::new(&mut *conn);
         gv_core::mutators::update_attribute(
             &mut executor,
+            &gv_core::io::SystemIo::default(),
             UpdateAttribute {
                 actor_id: user.actor_id,
                 attribute_id: numeric.id,
@@ -826,7 +835,8 @@ async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_template_temporal_rules(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
     let user = create_user(&sqlite_client).await;
 
     let activity = Activity {
@@ -953,7 +963,8 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_update_entry_set_is_sequence(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
     let user = create_user(&sqlite_client).await;
 
     // A sequence root with one child.
@@ -1044,7 +1055,8 @@ async fn test_update_entry_set_is_sequence(pool: SqlitePool) {
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
     let user = create_user(&sqlite_client).await;
 
     // Attribute with a default to seed onto the template.

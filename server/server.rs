@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use gv_core::{
     actions::Action,
     delta_executor::AnyDeltaExecutor,
     error::{DbErr, Result},
+    io::{Io, SystemIo},
     mutators,
 };
 
@@ -12,11 +15,19 @@ use gv_sql::postgres::{PostgresDeltaExecutor, PostgresQueryExecutor};
 
 pub struct PostgresServer {
     pub pool: PgPool,
+    io: Arc<dyn Io>,
 }
 
 impl PostgresServer {
     pub fn new(pool: PgPool) -> Self {
-        PostgresServer { pool }
+        PostgresServer {
+            pool,
+            io: Arc::new(SystemIo::default()),
+        }
+    }
+
+    pub fn with_io(pool: PgPool, io: Arc<dyn Io>) -> Self {
+        PostgresServer { pool, io }
     }
 
     #[instrument(skip(self), level = "info", err(level = "warn"))]
@@ -28,35 +39,48 @@ impl PostgresServer {
         // Create mutation.
         let mx = match action {
             Action::CreateActivity(action) => {
-                mutators::create_activity(&mut executor, action).await?
+                mutators::create_activity(&mut executor, self.io.as_ref(), action).await?
             }
-            Action::CreateUser(action) => mutators::create_user(&mut executor, action).await?,
-            Action::CreateEntry(action) => mutators::create_entry(&mut executor, action).await?,
+            Action::CreateUser(action) => {
+                mutators::create_user(&mut executor, self.io.as_ref(), action).await?
+            }
+            Action::CreateEntry(action) => {
+                mutators::create_entry(&mut executor, self.io.as_ref(), action).await?
+            }
             Action::CreateEntryFromActivity(action) => {
-                mutators::create_entry_from_activity(&mut executor, action).await?
+                mutators::create_entry_from_activity(&mut executor, self.io.as_ref(), action)
+                    .await?
             }
-            Action::MoveEntry(action) => mutators::move_entry(&mut executor, action).await?,
+            Action::MoveEntry(action) => {
+                mutators::move_entry(&mut executor, self.io.as_ref(), action).await?
+            }
             Action::DeleteEntryRecursive(action) => {
-                mutators::delete_entry_recursive(&mut executor, action).await?
+                mutators::delete_entry_recursive(&mut executor, self.io.as_ref(), action).await?
             }
             Action::CreateAttribute(action) => {
-                mutators::create_attribute(&mut executor, action).await?
+                mutators::create_attribute(&mut executor, self.io.as_ref(), action).await?
             }
-            Action::CreateValue(action) => mutators::create_value(&mut executor, action).await?,
-            Action::AttachValue(action) => mutators::attach_value(&mut executor, action).await?,
+            Action::CreateValue(action) => {
+                mutators::create_value(&mut executor, self.io.as_ref(), action).await?
+            }
+            Action::AttachValue(action) => {
+                mutators::attach_value(&mut executor, self.io.as_ref(), action).await?
+            }
             Action::DeleteAttributeValue(action) => {
-                mutators::delete_attribute_value(&mut executor, action).await?
+                mutators::delete_attribute_value(&mut executor, self.io.as_ref(), action).await?
             }
             Action::UpdateEntryCompletion(action) => {
-                mutators::update_entry_completion(&mut executor, action).await?
+                mutators::update_entry_completion(&mut executor, self.io.as_ref(), action).await?
             }
             Action::UpdateAttributeValue(action) => {
-                mutators::update_attribute_value(&mut executor, action).await?
+                mutators::update_attribute_value(&mut executor, self.io.as_ref(), action).await?
             }
             Action::UpdateAttribute(action) => {
-                mutators::update_attribute(&mut executor, action).await?
+                mutators::update_attribute(&mut executor, self.io.as_ref(), action).await?
             }
-            Action::UpdateEntry(action) => mutators::update_entry(&mut executor, action).await?,
+            Action::UpdateEntry(action) => {
+                mutators::update_entry(&mut executor, self.io.as_ref(), action).await?
+            }
         };
 
         // TODO: log mutation in this transaction.
@@ -96,7 +120,7 @@ pub mod tests {
 
     #[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
     fn test_create_activity(pool: PgPool) {
-        let postgres_server = PostgresServer { pool };
+        let postgres_server = PostgresServer::new(pool);
 
         let id = Uuid::new_v4();
         let activity = Activity {

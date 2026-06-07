@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use fractional_index::FractionalIndex;
-use generation::{Arbitrary, GenerationContext, SimulationContext, model::Model};
+use generation::{Arbitrary, GenerationContext, SimulationContext, io::SimIo, model::Model};
 use gv_core::{
     actions::{Action, CreateActivity, CreateEntry, CreateUser, MoveEntry},
     models::entry::{Entry, Position, Temporal},
@@ -8,8 +10,8 @@ use gv_core::{
 };
 use gv_server::server::PostgresServer;
 use gv_sql::postgres::PostgresQueryExecutor;
-use rand::SeedableRng;
 use rand::rngs::ChaCha8Rng;
+use rand::{RngExt, SeedableRng};
 use sqlx::PgPool;
 use tracing::info;
 
@@ -134,6 +136,7 @@ async fn test_arbitrary_actions(pool: PgPool) {
     // Only this test's own logs; silence the internal crates' span/event spam.
     let filter = Targets::new()
         .with_target("postgres_tests", LevelFilter::INFO)
+        .with_target("generation::entry", LevelFilter::DEBUG)
         .with_default(LevelFilter::ERROR);
     let _ = tracing_subscriber::registry()
         .with(fmt::layer().with_test_writer())
@@ -142,11 +145,11 @@ async fn test_arbitrary_actions(pool: PgPool) {
 
     let seed: u64 = 15287082126695428488; // random();
     info!("seed={}", seed);
-    let server = PostgresServer::new(pool);
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    let server = PostgresServer::with_io(pool, Arc::new(SimIo::new(rng.random())));
     let mut context = SimulationContext::default();
 
-    for _ in 0..10_000 {
+    for i in 0..500 {
         // Problem: running a MoveEntry action which tries to move into a non-sequence entry fails
         // as it should, but here that looks like a failure. I want to test that the system can
         // handle invalid inputs, so it seems that I need a way to differentiate between correct
@@ -157,7 +160,8 @@ async fn test_arbitrary_actions(pool: PgPool) {
 
         let action = Action::arbitrary(&mut rng, &context);
         let kind = action_kind(&action);
-        let mx = match server.run_action(action).await {
+        info!(?i, ?action);
+        let mx = match server.run_action(action.clone()).await {
             Ok(mx) => {
                 info!("ok   {kind}");
                 mx

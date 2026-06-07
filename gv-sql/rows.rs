@@ -152,7 +152,10 @@ pub struct EntryRow {
 impl EntryRow {
     pub fn from_entry(entry: &Entry) -> Self {
         let (parent_id, frac_index) = match entry.position.as_ref() {
-            Some(p) => (Some(UuidColumn(p.parent_id)), Some(FractionalIndexColumn(p.frac_index.clone()))),
+            Some(p) => (
+                Some(UuidColumn(p.parent_id)),
+                Some(FractionalIndexColumn(p.frac_index.clone())),
+            ),
             None => (None, None),
         };
         EntryRow {
@@ -173,19 +176,17 @@ impl EntryRow {
     }
 
     pub fn to_entry(self) -> Result<Entry> {
-        let duration_ms: Option<u32> = self
-            .duration_ms
-            .map(|d| d.try_into())
-            .transpose()
-            .map_err(|_| {
-                DomainError::Validation(gv_core::error::ValidationError::Other(
-                    "duration must fit in a u32".to_string().into(),
-                ))
-            })?;
-        let position = Position::from_parts(
-            self.parent_id.map(|c| c.0),
-            self.frac_index.map(|c| c.0),
-        )?;
+        let duration_ms: Option<u32> =
+            self.duration_ms
+                .map(|d| d.try_into())
+                .transpose()
+                .map_err(|_| {
+                    DomainError::Validation(gv_core::error::ValidationError::Other(
+                        "duration must fit in a u32".to_string().into(),
+                    ))
+                })?;
+        let position =
+            Position::from_parts(self.parent_id.map(|c| c.0), self.frac_index.map(|c| c.0))?;
         let temporal = Temporal::parse(
             self.start_time.map(|c| c.0),
             self.end_time.map(|c| c.0),
@@ -398,10 +399,7 @@ impl EntryJoinRow {
                     .expect("act_owner_id present when act_id is")
                     .0,
                 source_activity_id: self.act_source_activity_id.map(|c| c.0),
-                name: self
-                    .act_name
-                    .expect("act_name present when act_id is")
-                    .0,
+                name: self.act_name.expect("act_name present when act_id is").0,
                 description: self.act_description,
             }),
             None => None,

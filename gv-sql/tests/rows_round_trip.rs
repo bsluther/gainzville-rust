@@ -132,10 +132,21 @@ fn entry_round_trips_all_temporal_variants() {
         Temporal::None,
         Temporal::Start { start: dt1 },
         Temporal::End { end: dt2 },
-        Temporal::Duration { duration: 3_600_000 },
-        Temporal::StartAndEnd { start: dt1, end: dt2 },
-        Temporal::StartAndDuration { start: dt1, duration_ms: 60_000 },
-        Temporal::DurationAndEnd { duration_ms: 60_000, end: dt2 },
+        Temporal::Duration {
+            duration: 3_600_000,
+        },
+        Temporal::StartAndEnd {
+            start: dt1,
+            end: dt2,
+        },
+        Temporal::StartAndDuration {
+            start: dt1,
+            duration_ms: 60_000,
+        },
+        Temporal::DurationAndEnd {
+            duration_ms: 60_000,
+            end: dt2,
+        },
     ];
     for temporal in cases {
         let entry = Entry {
@@ -151,7 +162,10 @@ fn entry_round_trips_all_temporal_variants() {
             temporal: temporal.clone(),
         };
         let got = EntryRow::from_entry(&entry).to_entry().unwrap();
-        assert_eq!(got.temporal, temporal, "temporal variant did not round-trip");
+        assert_eq!(
+            got.temporal, temporal,
+            "temporal variant did not round-trip"
+        );
     }
 }
 
@@ -211,7 +225,10 @@ fn value_round_trips_mass() {
         index_string: None,
         plan: None,
         actual: Some(AttributeValue::Mass(MassValue::Exact(vec![
-            MassMeasurement { unit: MassUnit::Kilogram, value: 50.0 },
+            MassMeasurement {
+                unit: MassUnit::Kilogram,
+                value: 50.0,
+            },
         ]))),
     };
     let row = ValueRow::from_value(&value).unwrap();

@@ -23,10 +23,9 @@ use gv_core::{
     queries::{
         AllActivities, AllActorIds, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse,
         EntriesRootedInTimeInterval, FindActivityById, FindActivityTemplateRoot, FindAncestors,
-        FindAttributeById,
-        FindAttributePairsForEntry, FindAttributesByOwner, FindDescendants, FindEntryById,
-        FindEntryJoinById, FindUserById, FindUserByUsername, FindValueByKey, FindValuesForEntries,
-        FindValuesForEntry, IsEmailRegistered,
+        FindAttributeById, FindAttributePairsForEntry, FindAttributesByOwner, FindDescendants,
+        FindEntryById, FindEntryJoinById, FindUserById, FindUserByUsername, FindValueByKey,
+        FindValuesForEntries, FindValuesForEntry, IsEmailRegistered,
     },
     validation::{Email, Username},
 };

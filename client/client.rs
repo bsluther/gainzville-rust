@@ -1,5 +1,6 @@
 use gv_core::delta_executor::AnyDeltaExecutor;
 use gv_core::error::DbErr;
+use gv_core::io::{Io, SystemIo};
 use gv_core::{
     DEFAULT_USER_ID,
     actions::{Action, CreateActivity, CreateUser},
@@ -28,6 +29,7 @@ pub struct SqliteClient {
     change_transmitter: broadcast::Sender<()>,
     cache_ready_transmitter: broadcast::Sender<()>,
     query_store: QueryStore,
+    io: Arc<dyn Io>,
 }
 
 impl SqliteClient {
@@ -37,7 +39,7 @@ impl SqliteClient {
             .connect(db_path)
             .await
             .db_err()?;
-        let client = Self::from_pool(pool);
+        let client = Self::from_pool(pool, Arc::new(SystemIo::default()));
         client.run_migrations().await?;
         client.seed_default_user().await?;
         Ok(client)
@@ -63,7 +65,7 @@ impl SqliteClient {
         Ok(())
     }
 
-    pub fn from_pool(pool: SqlitePool) -> Self {
+    pub fn from_pool(pool: SqlitePool, io: Arc<dyn Io>) -> Self {
         let (change_transmitter, _rx) = broadcast::channel::<()>(16);
         let (cache_ready_transmitter, _rx2) = broadcast::channel::<()>(16);
         let cache_ready_tx = cache_ready_transmitter.clone();
@@ -79,6 +81,7 @@ impl SqliteClient {
             change_transmitter,
             cache_ready_transmitter,
             query_store,
+            io,
         }
     }
 
@@ -106,35 +109,48 @@ impl SqliteClient {
         // Create mutation.
         let mx = match action {
             Action::CreateActivity(action) => {
-                mutators::create_activity(&mut executor, action).await?
+                mutators::create_activity(&mut executor, self.io.as_ref(), action).await?
             }
-            Action::CreateUser(action) => mutators::create_user(&mut executor, action).await?,
-            Action::CreateEntry(action) => mutators::create_entry(&mut executor, action).await?,
+            Action::CreateUser(action) => {
+                mutators::create_user(&mut executor, self.io.as_ref(), action).await?
+            }
+            Action::CreateEntry(action) => {
+                mutators::create_entry(&mut executor, self.io.as_ref(), action).await?
+            }
             Action::CreateEntryFromActivity(action) => {
-                mutators::create_entry_from_activity(&mut executor, action).await?
+                mutators::create_entry_from_activity(&mut executor, self.io.as_ref(), action)
+                    .await?
             }
-            Action::MoveEntry(action) => mutators::move_entry(&mut executor, action).await?,
+            Action::MoveEntry(action) => {
+                mutators::move_entry(&mut executor, self.io.as_ref(), action).await?
+            }
             Action::DeleteEntryRecursive(action) => {
-                mutators::delete_entry_recursive(&mut executor, action).await?
+                mutators::delete_entry_recursive(&mut executor, self.io.as_ref(), action).await?
             }
             Action::CreateAttribute(action) => {
-                mutators::create_attribute(&mut executor, action).await?
+                mutators::create_attribute(&mut executor, self.io.as_ref(), action).await?
             }
-            Action::CreateValue(action) => mutators::create_value(&mut executor, action).await?,
-            Action::AttachValue(action) => mutators::attach_value(&mut executor, action).await?,
+            Action::CreateValue(action) => {
+                mutators::create_value(&mut executor, self.io.as_ref(), action).await?
+            }
+            Action::AttachValue(action) => {
+                mutators::attach_value(&mut executor, self.io.as_ref(), action).await?
+            }
             Action::DeleteAttributeValue(action) => {
-                mutators::delete_attribute_value(&mut executor, action).await?
+                mutators::delete_attribute_value(&mut executor, self.io.as_ref(), action).await?
             }
             Action::UpdateEntryCompletion(action) => {
-                mutators::update_entry_completion(&mut executor, action).await?
+                mutators::update_entry_completion(&mut executor, self.io.as_ref(), action).await?
             }
             Action::UpdateAttributeValue(action) => {
-                mutators::update_attribute_value(&mut executor, action).await?
+                mutators::update_attribute_value(&mut executor, self.io.as_ref(), action).await?
             }
             Action::UpdateAttribute(action) => {
-                mutators::update_attribute(&mut executor, action).await?
+                mutators::update_attribute(&mut executor, self.io.as_ref(), action).await?
             }
-            Action::UpdateEntry(action) => mutators::update_entry(&mut executor, action).await?,
+            Action::UpdateEntry(action) => {
+                mutators::update_entry(&mut executor, self.io.as_ref(), action).await?
+            }
         };
 
         // TODO: write this mutation into the local mutation log.
@@ -238,7 +254,7 @@ pub mod tests {
     /// refreshes (stale reads until restart).
     #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
     fn test_query_subscription_refcount(pool: SqlitePool) {
-        let client = SqliteClient::from_pool(pool);
+        let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
         let query = AnyQuery::FindEntryJoinById(FindEntryJoinById {
             entry_id: Uuid::new_v4(),
         });
@@ -263,7 +279,7 @@ pub mod tests {
 
     #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
     fn test_create_activity(pool: SqlitePool) {
-        let sqlite_client = SqliteClient::from_pool(pool);
+        let sqlite_client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
 
         let id = Uuid::new_v4();
         let activity = Activity {

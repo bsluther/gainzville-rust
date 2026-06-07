@@ -58,7 +58,14 @@ impl Arbitrary for CreateUser {
 
 impl Arbitrary for CreateActivity {
     fn arbitrary<R: rand::RngExt, C: super::GenerationContext>(rng: &mut R, context: &C) -> Self {
-        Activity::arbitrary(rng, context).into()
+        let mut create: CreateActivity = Activity::arbitrary(rng, context).into();
+        // `From<Activity>` mints the template-root id with `new_v4()` (a hidden
+        // side-effect that's fine in production but nondeterministic in sims).
+        // Reseed it from the generator's rng so the generated action reproduces.
+        for entry in &mut create.template {
+            entry.id = Uuid::arbitrary(rng, context);
+        }
+        create
     }
 }
 

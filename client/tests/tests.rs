@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_create_user_roundtrip(pool: SqlitePool) {
-    let sqlite_client = SqliteClient::from_pool(pool);
+    let sqlite_client = SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
 
     let new_id = Uuid::new_v4();
     let new_user = User {

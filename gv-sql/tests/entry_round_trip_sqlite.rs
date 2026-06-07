@@ -11,12 +11,8 @@
 
 use generation::{Arbitrary, SimulationContext};
 use gv_core::{
-    SYSTEM_ACTOR_ID,
-    delta::Delta,
-    delta_executor::DeltaExecutor,
-    models::entry::Entry,
-    queries::AllEntries,
-    query_executor::QueryExecutor,
+    SYSTEM_ACTOR_ID, delta::Delta, delta_executor::DeltaExecutor, models::entry::Entry,
+    queries::AllEntries, query_executor::QueryExecutor,
 };
 use gv_sql::sqlite::{SqliteDeltaExecutor, SqliteQueryExecutor};
 use rand::SeedableRng;

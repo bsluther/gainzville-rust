@@ -3,6 +3,7 @@ use gv_core::io::{Clock, Io};
 use rand::{RngExt, SeedableRng, rngs::ChaCha8Rng};
 use std::sync::Mutex;
 
+#[derive(Debug)]
 pub struct SimIo {
     clock: SimClock,
     rng: Mutex<ChaCha8Rng>,
@@ -30,6 +31,7 @@ impl Io for SimIo {
     }
 }
 
+#[derive(Debug)]
 pub struct SimClock {
     curr_time: Mutex<DateTime<Utc>>,
     rng: Mutex<ChaCha8Rng>,

@@ -78,10 +78,14 @@ macro_rules! impl_column_via {
 pub struct EmailColumn(pub Email);
 
 impl From<Email> for EmailColumn {
-    fn from(v: Email) -> Self { EmailColumn(v) }
+    fn from(v: Email) -> Self {
+        EmailColumn(v)
+    }
 }
 impl From<EmailColumn> for Email {
-    fn from(c: EmailColumn) -> Self { c.0 }
+    fn from(c: EmailColumn) -> Self {
+        c.0
+    }
 }
 
 impl_column_via! {
@@ -96,10 +100,14 @@ impl_column_via! {
 pub struct UsernameColumn(pub Username);
 
 impl From<Username> for UsernameColumn {
-    fn from(v: Username) -> Self { UsernameColumn(v) }
+    fn from(v: Username) -> Self {
+        UsernameColumn(v)
+    }
 }
 impl From<UsernameColumn> for Username {
-    fn from(c: UsernameColumn) -> Self { c.0 }
+    fn from(c: UsernameColumn) -> Self {
+        c.0
+    }
 }
 
 impl_column_via! {
@@ -114,10 +122,14 @@ impl_column_via! {
 pub struct ActivityNameColumn(pub ActivityName);
 
 impl From<ActivityName> for ActivityNameColumn {
-    fn from(v: ActivityName) -> Self { ActivityNameColumn(v) }
+    fn from(v: ActivityName) -> Self {
+        ActivityNameColumn(v)
+    }
 }
 impl From<ActivityNameColumn> for ActivityName {
-    fn from(c: ActivityNameColumn) -> Self { c.0 }
+    fn from(c: ActivityNameColumn) -> Self {
+        c.0
+    }
 }
 
 impl_column_via! {
@@ -134,10 +146,14 @@ impl_column_via! {
 pub struct FractionalIndexColumn(pub FractionalIndex);
 
 impl From<FractionalIndex> for FractionalIndexColumn {
-    fn from(v: FractionalIndex) -> Self { FractionalIndexColumn(v) }
+    fn from(v: FractionalIndex) -> Self {
+        FractionalIndexColumn(v)
+    }
 }
 impl From<FractionalIndexColumn> for FractionalIndex {
-    fn from(c: FractionalIndexColumn) -> Self { c.0 }
+    fn from(c: FractionalIndexColumn) -> Self {
+        c.0
+    }
 }
 
 impl_column_via! {
@@ -154,10 +170,14 @@ impl_column_via! {
 pub struct UuidColumn(pub Uuid);
 
 impl From<Uuid> for UuidColumn {
-    fn from(v: Uuid) -> Self { UuidColumn(v) }
+    fn from(v: Uuid) -> Self {
+        UuidColumn(v)
+    }
 }
 impl From<UuidColumn> for Uuid {
-    fn from(c: UuidColumn) -> Self { c.0 }
+    fn from(c: UuidColumn) -> Self {
+        c.0
+    }
 }
 
 impl<DB> sqlx::Type<DB> for UuidColumn
@@ -191,7 +211,9 @@ where
     DB: sqlx::Database,
     Uuid: sqlx::Decode<'r, DB>,
 {
-    fn decode(value: <DB as sqlx::Database>::ValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+    fn decode(
+        value: <DB as sqlx::Database>::ValueRef<'r>,
+    ) -> Result<Self, sqlx::error::BoxDynError> {
         Ok(UuidColumn(<Uuid as sqlx::Decode<'r, DB>>::decode(value)?))
     }
 }
@@ -200,10 +222,14 @@ where
 pub struct DateTimeColumn(pub DateTime<Utc>);
 
 impl From<DateTime<Utc>> for DateTimeColumn {
-    fn from(v: DateTime<Utc>) -> Self { DateTimeColumn(v) }
+    fn from(v: DateTime<Utc>) -> Self {
+        DateTimeColumn(v)
+    }
 }
 impl From<DateTimeColumn> for DateTime<Utc> {
-    fn from(c: DateTimeColumn) -> Self { c.0 }
+    fn from(c: DateTimeColumn) -> Self {
+        c.0
+    }
 }
 
 impl<DB> sqlx::Type<DB> for DateTimeColumn
@@ -237,7 +263,11 @@ where
     DB: sqlx::Database,
     DateTime<Utc>: sqlx::Decode<'r, DB>,
 {
-    fn decode(value: <DB as sqlx::Database>::ValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        Ok(DateTimeColumn(<DateTime<Utc> as sqlx::Decode<'r, DB>>::decode(value)?))
+    fn decode(
+        value: <DB as sqlx::Database>::ValueRef<'r>,
+    ) -> Result<Self, sqlx::error::BoxDynError> {
+        Ok(DateTimeColumn(
+            <DateTime<Utc> as sqlx::Decode<'r, DB>>::decode(value)?,
+        ))
     }
 }

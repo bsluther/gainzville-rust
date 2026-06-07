@@ -3,10 +3,9 @@ use crate::{
     queries::{
         AllActivities, AllActorIds, AllAttributes, AllEntries, EntriesRootedInTimeInterval,
         FindActivityById, FindActivityTemplateRoot, FindAncestors, FindAttributeById,
-        FindAttributePairsForEntry,
-        FindAttributesByOwner, FindDescendants, FindEntryById, FindEntryJoinById, FindUserById,
-        FindUserByUsername, FindValueByKey, FindValuesForEntries, FindValuesForEntry,
-        IsEmailRegistered, Query,
+        FindAttributePairsForEntry, FindAttributesByOwner, FindDescendants, FindEntryById,
+        FindEntryJoinById, FindUserById, FindUserByUsername, FindValueByKey, FindValuesForEntries,
+        FindValuesForEntry, IsEmailRegistered, Query,
     },
 };
 

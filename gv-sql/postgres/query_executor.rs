@@ -28,7 +28,8 @@ impl QueryExecutor<IsEmailRegistered> for PostgresQueryExecutor<'_> {
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE email = $1")
             .bind(crate::columns::EmailColumn(query.email))
             .fetch_one(&mut *self.conn)
-            .await.db_err()?;
+            .await
+            .db_err()?;
 
         Ok(count > 0)
     }
@@ -41,7 +42,8 @@ impl QueryExecutor<FindUserById> for PostgresQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.actor_id))
         .fetch_optional(&mut *self.conn)
-        .await.db_err()?;
+        .await
+        .db_err()?;
 
         Ok(row.map(User::from))
     }
@@ -57,7 +59,8 @@ impl QueryExecutor<FindUserByUsername> for PostgresQueryExecutor<'_> {
         )
         .bind(crate::columns::UsernameColumn(query.username))
         .fetch_optional(&mut *self.conn)
-        .await.db_err()?;
+        .await
+        .db_err()?;
 
         Ok(row.map(User::from))
     }
@@ -67,7 +70,8 @@ impl QueryExecutor<AllActorIds> for PostgresQueryExecutor<'_> {
     async fn execute(&mut self, _query: AllActorIds) -> Result<<AllActorIds as Query>::Response> {
         let actor_ids = sqlx::query_scalar("SELECT id FROM actors")
             .fetch_all(&mut *self.conn)
-            .await.db_err()?;
+            .await
+            .db_err()?;
         Ok(actor_ids)
     }
 }
@@ -99,7 +103,8 @@ impl QueryExecutor<AllActivities> for PostgresQueryExecutor<'_> {
             "SELECT id, owner_id, source_activity_id, name, description FROM activities",
         )
         .fetch_all(&mut *self.conn)
-        .await.db_err()?;
+        .await
+        .db_err()?;
 
         Ok(rows.into_iter().map(Activity::from).collect())
     }
@@ -111,7 +116,8 @@ impl QueryExecutor<AllEntries> for PostgresQueryExecutor<'_> {
     async fn execute(&mut self, _query: AllEntries) -> Result<<AllEntries as Query>::Response> {
         sqlx::query_as::<_, crate::rows::EntryRow>("SELECT * FROM entries")
             .fetch_all(&mut *self.conn)
-            .await.db_err()?
+            .await
+            .db_err()?
             .into_iter()
             .map(|r| r.to_entry())
             .collect()
@@ -139,7 +145,8 @@ impl QueryExecutor<EntriesRootedInTimeInterval> for PostgresQueryExecutor<'_> {
         .bind(crate::columns::DateTimeColumn(query.from))
         .bind(crate::columns::DateTimeColumn(query.to))
         .fetch_all(&mut *self.conn)
-        .await.db_err()?
+        .await
+        .db_err()?
         .into_iter()
         .map(|r| r.to_entry())
         .collect()
@@ -168,7 +175,8 @@ impl QueryExecutor<FindAncestors> for PostgresQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
-        .await.db_err()?;
+        .await
+        .db_err()?;
 
         if results.is_empty() {
             return Err(DomainError::Other("entry not found".to_string()));
@@ -261,7 +269,8 @@ impl QueryExecutor<FindEntryJoinById> for PostgresQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_optional(&mut *self.conn)
-        .await.db_err()?;
+        .await
+        .db_err()?;
 
         match row {
             None => Ok(None),
@@ -291,12 +300,13 @@ impl QueryExecutor<FindDescendants> for PostgresQueryExecutor<'_> {
                 SELECT c.* FROM entries c
                     INNER JOIN tree ON c.parent_id = tree.id
             )
-            SELECT * FROM tree
+            SELECT * FROM tree ORDER BY id
             "#,
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
-        .await.db_err()?
+        .await
+        .db_err()?
         .into_iter()
         .map(|e| e.to_entry())
         .collect()
@@ -330,7 +340,8 @@ impl QueryExecutor<AllAttributes> for PostgresQueryExecutor<'_> {
             "SELECT id, owner_id, name, description, data_type, config FROM attributes",
         )
         .fetch_all(&mut *self.conn)
-        .await.db_err()?
+        .await
+        .db_err()?
         .into_iter()
         .map(|row| row.to_attribute())
         .collect()
@@ -431,7 +442,8 @@ impl QueryExecutor<FindAttributePairsForEntry> for PostgresQueryExecutor<'_> {
         )
         .bind(crate::columns::UuidColumn(query.entry_id))
         .fetch_all(&mut *self.conn)
-        .await.db_err()?
+        .await
+        .db_err()?
         .into_iter()
         .map(|row| row.to_attribute_pair())
         .collect()

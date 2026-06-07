@@ -70,9 +70,7 @@ pub struct Position {
 impl Position {
     pub fn parse(parent_id: Option<Uuid>, frac_index: Option<String>) -> Result<Option<Position>> {
         let frac_index = frac_index
-            .map(|s| {
-                FractionalIndex::from_string(&s).expect("fractional index should be valid")
-            });
+            .map(|s| FractionalIndex::from_string(&s).expect("fractional index should be valid"));
         Self::from_parts(parent_id, frac_index)
     }
 

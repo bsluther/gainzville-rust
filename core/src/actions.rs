@@ -86,6 +86,13 @@ pub struct CreateActivity {
     pub template: Vec<Entry>,
 }
 
+// TODO: replace this `From` with an explicit method on `Activity` (e.g.
+// `Activity::into_create(&self, io: &dyn Io)`) that mints the template-root id
+// via `io.uuid()`. The `From` hides a nondeterministic side-effect (`new_v4`)
+// inside a pure-looking conversion, which leaks into deterministic sims; the
+// generator currently reseeds the id as a workaround (see
+// generation/actions.rs CreateActivity::arbitrary). Deferred to the IO-migration
+// phase since it touches the production call sites (server.rs, ticker).
 impl From<Activity> for CreateActivity {
     fn from(activity: Activity) -> Self {
         CreateActivity {

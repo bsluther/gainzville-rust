@@ -62,9 +62,9 @@ impl Attribute {
     /// seed from its units).
     pub fn default_value(&self) -> Option<AttributeValue> {
         match &self.config {
-            AttributeConfig::Numeric(c) => {
-                c.default.map(|d| AttributeValue::Numeric(NumericValue::Exact(d)))
-            }
+            AttributeConfig::Numeric(c) => c
+                .default
+                .map(|d| AttributeValue::Numeric(NumericValue::Exact(d))),
             AttributeConfig::Select(c) => c
                 .default
                 .clone()
@@ -320,4 +320,3 @@ pub struct MassMeasurement {
     pub unit: MassUnit,
     pub value: f64,
 }
-

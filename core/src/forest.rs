@@ -319,7 +319,10 @@ mod tests {
         let log = root_entry(false, None);
         let forest = Forest::from(vec![template.clone(), other_template, log]);
 
-        assert_eq!(forest.template_root(activity_id).map(|e| e.id), Some(template.id));
+        assert_eq!(
+            forest.template_root(activity_id).map(|e| e.id),
+            Some(template.id)
+        );
         assert!(forest.template_root(Uuid::new_v4()).is_none());
     }
 
@@ -336,7 +339,11 @@ mod tests {
         assert!(forest.position_between(scalar.id, None, None).is_none());
         assert!(forest.position_after_children(scalar.id).is_none());
         // Unknown parent id is also handled.
-        assert!(forest.position_between(Uuid::new_v4(), None, None).is_none());
+        assert!(
+            forest
+                .position_between(Uuid::new_v4(), None, None)
+                .is_none()
+        );
     }
 
     #[test]

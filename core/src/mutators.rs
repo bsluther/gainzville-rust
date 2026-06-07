@@ -12,6 +12,7 @@ use crate::{
     error::{DomainError, Result, ValidationError},
     forest::Forest,
     instantiation::instantiate_subtree,
+    io::Io,
     models::{
         actor::{Actor, ActorKind},
         attribute::{AttributeConfig, Value},
@@ -57,6 +58,7 @@ fn validate_template_temporal(
 
 pub async fn create_user(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: CreateUser,
 ) -> Result<Mutation> {
     let user = action.user;
@@ -96,14 +98,14 @@ pub async fn create_user(
         new: Actor {
             actor_id: user.actor_id,
             actor_kind: ActorKind::User,
-            created_at: chrono::Utc::now(),
+            created_at: io.current_time_wall_clock(),
         },
     };
     let insert_user = Delta::<User>::Insert { new: user.clone() };
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::CreateUser(CreateUser { user }),
         changes: vec![insert_actor.into(), insert_user.into()],
     })
@@ -111,6 +113,7 @@ pub async fn create_user(
 
 pub async fn create_activity(
     _executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: CreateActivity,
 ) -> Result<Mutation> {
     let activity = action.activity.clone();
@@ -154,8 +157,8 @@ pub async fn create_activity(
     deltas.extend(insert_templates);
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::CreateActivity(action.clone()),
         changes: deltas,
     })
@@ -163,6 +166,7 @@ pub async fn create_activity(
 
 pub async fn create_entry(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: CreateEntry,
 ) -> Result<Mutation> {
     // Check if actor has permission to create entry at the given position.
@@ -215,8 +219,8 @@ pub async fn create_entry(
     };
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::CreateEntry(action),
         changes: vec![insert_entry.into()],
     })
@@ -229,6 +233,7 @@ pub async fn create_entry(
 /// to commit, so delta order doesn't matter).
 pub async fn create_entry_from_activity(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: CreateEntryFromActivity,
 ) -> Result<Mutation> {
     let activity = executor
@@ -307,6 +312,7 @@ pub async fn create_entry_from_activity(
         .await?;
 
     let (entries, values) = instantiate_subtree(
+        io,
         root.id,
         &subtree,
         &values,
@@ -322,8 +328,8 @@ pub async fn create_entry_from_activity(
     deltas.extend(values.into_iter().map(|v| Delta::Insert { new: v }.into()));
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::CreateEntryFromActivity(action),
         changes: deltas,
     })
@@ -336,6 +342,7 @@ pub async fn create_entry_from_activity(
 ///       entry from My Workout's template to Strenght Workout's template.
 pub async fn move_entry(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: MoveEntry,
 ) -> Result<Mutation> {
     // Moving entry should exist.
@@ -419,8 +426,8 @@ pub async fn move_entry(
         .to_delta();
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::MoveEntry(action),
         changes: vec![update_delta.into()],
     })
@@ -428,6 +435,7 @@ pub async fn move_entry(
 
 pub async fn delete_entry_recursive(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: DeleteEntryRecursive,
 ) -> Result<Mutation> {
     // Get entry and all descendants.
@@ -478,8 +486,8 @@ pub async fn delete_entry_recursive(
     deltas.extend(attr_value_deltas);
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: action.into(),
         changes: deltas,
     })
@@ -487,6 +495,7 @@ pub async fn delete_entry_recursive(
 
 pub async fn create_attribute(
     _executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: CreateAttribute,
 ) -> Result<Mutation> {
     let attribute = action.attribute.clone();
@@ -502,8 +511,8 @@ pub async fn create_attribute(
     let insert_attribute = Delta::Insert { new: attribute };
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::CreateAttribute(action),
         changes: vec![insert_attribute.into()],
     })
@@ -511,6 +520,7 @@ pub async fn create_attribute(
 
 pub async fn update_entry_completion(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: UpdateEntryCompletion,
 ) -> Result<Mutation> {
     let Some(entry) = executor
@@ -547,8 +557,8 @@ pub async fn update_entry_completion(
     let update_delta = entry.update().is_complete(action.is_complete).to_delta();
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::UpdateEntryCompletion(action),
         changes: vec![update_delta.into()],
     })
@@ -556,6 +566,7 @@ pub async fn update_entry_completion(
 
 pub async fn create_value(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: CreateValue,
 ) -> Result<Mutation> {
     let value = action.value.clone();
@@ -604,8 +615,8 @@ pub async fn create_value(
         .is_some()
     {
         return Ok(Mutation {
-            id: Uuid::new_v4(),
-            timestamp: Utc::now(),
+            id: io.uuid(),
+            timestamp: io.current_time_wall_clock(),
             action: Action::CreateValue(action),
             changes: vec![],
         });
@@ -614,8 +625,8 @@ pub async fn create_value(
     let insert_value = Delta::Insert { new: value };
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::CreateValue(action),
         changes: vec![insert_value.into()],
     })
@@ -626,6 +637,7 @@ pub async fn create_value(
 /// attached. The default is resolved here in core via `Attribute::seed_value`.
 pub async fn attach_value(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: AttachValue,
 ) -> Result<Mutation> {
     let entry = executor
@@ -669,8 +681,8 @@ pub async fn attach_value(
         .is_some()
     {
         return Ok(Mutation {
-            id: Uuid::new_v4(),
-            timestamp: Utc::now(),
+            id: io.uuid(),
+            timestamp: io.current_time_wall_clock(),
             action: Action::AttachValue(action),
             changes: vec![],
         });
@@ -680,8 +692,8 @@ pub async fn attach_value(
     let insert_value = Delta::Insert { new: seeded };
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::AttachValue(action),
         changes: vec![insert_value.into()],
     })
@@ -692,6 +704,7 @@ pub async fn attach_value(
 /// toggle is idempotent.
 pub async fn delete_attribute_value(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: DeleteAttributeValue,
 ) -> Result<Mutation> {
     let Some(old) = executor
@@ -703,8 +716,8 @@ pub async fn delete_attribute_value(
     else {
         // No-op: nothing attached.
         return Ok(Mutation {
-            id: Uuid::new_v4(),
-            timestamp: Utc::now(),
+            id: io.uuid(),
+            timestamp: io.current_time_wall_clock(),
             action: Action::DeleteAttributeValue(action),
             changes: vec![],
         });
@@ -731,8 +744,8 @@ pub async fn delete_attribute_value(
     }
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::DeleteAttributeValue(action),
         changes: vec![Delta::<Value>::Delete { old }.into()],
     })
@@ -740,6 +753,7 @@ pub async fn delete_attribute_value(
 
 pub async fn update_attribute_value(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: UpdateAttributeValue,
 ) -> Result<Mutation> {
     let Some(entry) = executor
@@ -794,8 +808,8 @@ pub async fn update_attribute_value(
     };
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::UpdateAttributeValue(action),
         changes: vec![Delta::<Value>::Update { old, new }.into()],
     })
@@ -808,6 +822,7 @@ pub async fn update_attribute_value(
 /// integer/min/max). A change that leaves the attribute unchanged is a no-op.
 pub async fn update_attribute(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: UpdateAttribute,
 ) -> Result<Mutation> {
     let Some(old) = executor
@@ -907,16 +922,16 @@ pub async fn update_attribute(
     // No-op if the change left the attribute unchanged.
     if new == old {
         return Ok(Mutation {
-            id: Uuid::new_v4(),
-            timestamp: Utc::now(),
+            id: io.uuid(),
+            timestamp: io.current_time_wall_clock(),
             action: Action::UpdateAttribute(action),
             changes: vec![],
         });
     }
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::UpdateAttribute(action),
         changes: vec![Delta::<crate::models::attribute::Attribute>::Update { old, new }.into()],
     })
@@ -928,6 +943,7 @@ pub async fn update_attribute(
 /// they go through `move_entry`.
 pub async fn update_entry(
     executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
     action: UpdateEntry,
 ) -> Result<Mutation> {
     let Some(entry) = executor
@@ -953,8 +969,8 @@ pub async fn update_entry(
             if entry.is_sequence == *is_sequence {
                 // No-op.
                 return Ok(Mutation {
-                    id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
+                    id: io.uuid(),
+                    timestamp: io.current_time_wall_clock(),
                     action: Action::UpdateEntry(action),
                     changes: vec![],
                 });
@@ -992,8 +1008,8 @@ pub async fn update_entry(
     }
 
     Ok(Mutation {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
         action: Action::UpdateEntry(action),
         changes: deltas,
     })

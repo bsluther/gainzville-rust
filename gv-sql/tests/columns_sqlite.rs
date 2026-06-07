@@ -37,7 +37,10 @@ where
         + Unpin
         + 'static,
 {
-    sqlx::query("DROP TABLE IF EXISTS rt").execute(pool).await.unwrap();
+    sqlx::query("DROP TABLE IF EXISTS rt")
+        .execute(pool)
+        .await
+        .unwrap();
     sqlx::query(&format!("CREATE TABLE rt (v {col_type})"))
         .execute(pool)
         .await
@@ -78,8 +81,7 @@ async fn username_column_round_trips() {
 async fn activity_name_column_round_trips() {
     let pool = fresh_pool().await;
     let name = ActivityName::parse("Bench Press".to_string()).unwrap();
-    let got: ActivityNameColumn =
-        round_trip(&pool, "TEXT", ActivityNameColumn(name.clone())).await;
+    let got: ActivityNameColumn = round_trip(&pool, "TEXT", ActivityNameColumn(name.clone())).await;
     assert_eq!(got.0, name);
 }
 
