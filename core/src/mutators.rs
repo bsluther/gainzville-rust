@@ -345,7 +345,7 @@ pub async fn move_entry(
     io: &dyn Io,
     action: MoveEntry,
 ) -> Result<Mutation> {
-    // Moving entry should exist.
+    // Moving entry must exist.
     let Some(entry) = executor
         .execute(FindEntryById {
             entry_id: action.entry_id,
@@ -357,20 +357,14 @@ pub async fn move_entry(
         ));
     };
 
-    // Root template entries are not allowed to move.
-    // TODO: this isn't quite true - root entries aren't allowed to change positions, but they are
-    // allowed to change their durations. Need to fix this.
-    if entry.is_template && entry.position.is_none() {
-        return Err(DomainError::Consistency(
-            "root template entries cannot be moved".to_string(),
-        ));
-    }
-
-    // TODO: Template entries cannot be moved to root.
-    // TODO: Template entries cannot be moved outside template tree. This would cover the above,
-    // since root is not part of the tree.
-
     if let Some(position) = &action.position {
+        // Root template entries must remain at the root.
+        if entry.is_template && entry.position.is_none() {
+            return Err(DomainError::Consistency(
+                "root template entry may not change position".to_string(),
+            ));
+        }
+
         // Check for cycles.
         let parent_ancestors: Vec<Uuid> = executor
             .execute(FindAncestors {
@@ -381,6 +375,27 @@ pub async fn move_entry(
             return Err(DomainError::Consistency(
                 "move_entry would create a cycle".to_string(),
             ));
+        }
+
+        // Template entries cannot be moved outside their template tree.
+        // Note that this also enforces that a template entry cannot be moved to root, and therefore
+        // maintains that a template tree has a single root.
+        if entry.is_template {
+            let entry_root = executor
+                .execute(FindAncestors { entry_id: entry.id })
+                .await?
+                .first()
+                .copied()
+                .expect("ancestors should always be non-empty");
+            let dest_root = parent_ancestors
+                .first()
+                .copied()
+                .expect("ancestors should always be non-empty");
+            if entry_root != dest_root {
+                return Err(DomainError::Consistency(
+                    "template entries cannot be moved outside their template tree".to_string(),
+                ));
+            }
         }
 
         let parent = executor
@@ -418,7 +433,7 @@ pub async fn move_entry(
         }
     }
 
-    // Template entries never carry a start or end, root or child.
+    // Any templ
     validate_template_temporal(entry.is_template, &action.temporal)?;
 
     let update_delta = entry
