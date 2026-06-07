@@ -358,6 +358,8 @@ pub async fn move_entry(
     };
 
     // Root template entries are not allowed to move.
+    // TODO: this isn't quite true - root entries aren't allowed to change positions, but they are
+    // allowed to change their durations. Need to fix this.
     if entry.is_template && entry.position.is_none() {
         return Err(DomainError::Consistency(
             "root template entries cannot be moved".to_string(),

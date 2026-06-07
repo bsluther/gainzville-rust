@@ -276,32 +276,4 @@ pub mod tests {
             "cache key must be evicted once the last subscriber drops"
         );
     }
-
-    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
-    fn test_create_activity(pool: SqlitePool) {
-        let sqlite_client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
-
-        let id = Uuid::new_v4();
-        let activity = Activity {
-            id: id.clone(),
-            owner_id: SYSTEM_ACTOR_ID,
-            name: ActivityName::parse("test".to_string()).unwrap(),
-            description: None,
-            source_activity_id: None,
-        };
-        let create_activity = activity.into_create_activity(sqlite_client.io.uuid());
-        let action: Action = create_activity.into();
-
-        sqlite_client.run_action(action).await.unwrap();
-
-        let queried_activity = {
-            let mut connection = sqlite_client.pool.acquire().await.unwrap();
-            SqliteQueryExecutor::new(&mut *connection)
-                .execute(FindActivityById { id })
-                .await
-                .unwrap()
-        };
-
-        assert!(queried_activity.is_some());
-    }
 }

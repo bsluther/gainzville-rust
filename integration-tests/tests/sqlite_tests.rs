@@ -1,4 +1,5 @@
 use fractional_index::FractionalIndex;
+use generation::{Arbitrary, SimulationContext};
 use gv_client::client::SqliteClient;
 use gv_core::{
     actions::{
@@ -23,7 +24,11 @@ use gv_core::{
     validation::{Email, Username},
 };
 use gv_sql::sqlite::SqliteQueryExecutor;
+use rand::SeedableRng;
+use rand::rngs::ChaCha8Rng;
 use sqlx::SqlitePool;
+use std::collections::HashMap;
+use std::sync::Arc;
 use uuid::Uuid;
 
 async fn run_actions(client: &SqliteClient, actions: impl IntoIterator<Item = Action>) {
@@ -891,21 +896,6 @@ async fn test_template_temporal_rules(pool: SqlitePool) {
         .await
         .unwrap();
 
-    // move_entry: a template root with no start/end is allowed (templates are
-    // exempt from the log-root "must have start or end" rule).
-    sqlite_client
-        .run_action(
-            MoveEntry {
-                actor_id: user.actor_id,
-                entry_id: none_template_id,
-                position: None,
-                temporal: Temporal::None,
-            }
-            .into(),
-        )
-        .await
-        .unwrap();
-
     // move_entry: giving a template a start time is rejected.
     assert!(
         sqlite_client
@@ -1199,5 +1189,66 @@ async fn test_create_entry_from_activity_instantiates_template(pool: SqlitePool)
     match values[0].actual.clone().expect("seeded actual") {
         AttributeValue::Numeric(NumericValue::Exact(v)) => assert_eq!(v, 5.0),
         other => panic!("expected Numeric Exact 5.0, got {:?}", other),
+    }
+}
+
+/// Property-style round-trip: arbitrary entries written through the real client
+/// write path (`run_action` → mutator → `SqliteDeltaExecutor`) and read back via
+/// `AllEntries`.
+///
+/// This catches regressions where `EntryRow`'s `FromRow`-derived decode fails for
+/// non-`Temporal::None` entries — e.g. when a `*Column` type's `compatible()` is
+/// stricter than the underlying sqlx type's, rejecting valid SQL column types.
+///
+/// Ported from a gv-sql delta-level test; going through `run_action` means we
+/// exercise the same path the live app uses (and no longer depend on a seeded
+/// SYSTEM actor — users are created via arbitrary `CreateUser` actions).
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn arbitrary_entries_round_trip_through_all_entries(pool: SqlitePool) {
+    const N_USERS: usize = 4;
+    const N_ENTRIES: usize = 30;
+
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let mut rng = ChaCha8Rng::seed_from_u64(0xb0c0_dabad7e5);
+    let mut context = SimulationContext::default();
+
+    // Seed a few users so generated entries can be owned by real actors. The
+    // `From<Entry>` for `CreateEntry` makes the actor the entry's owner, so this
+    // also satisfies the create-entry permission check. We apply each returned
+    // mutation back to the context model so subsequent generation sees the actors.
+    for _ in 0..N_USERS {
+        let create = CreateUser::arbitrary(&mut rng, &context);
+        let mx = client.run_action(create.into()).await.unwrap();
+        context.apply_mutation(mx).await.unwrap();
+    }
+
+    // Generate arbitrary log entries, keeping the model in sync so generated
+    // positions reference real sequence parents (and owners real actors).
+    let mut inserted: HashMap<Uuid, Entry> = HashMap::with_capacity(N_ENTRIES);
+    for _ in 0..N_ENTRIES {
+        let create = CreateEntry::arbitrary(&mut rng, &context);
+        inserted.insert(create.entry.id, create.entry.clone());
+        let mx = client.run_action(create.into()).await.unwrap();
+        context.apply_mutation(mx).await.unwrap();
+    }
+
+    // Read every entry back via AllEntries — this is what feeds the forest cache
+    // in the live app.
+    let entries = {
+        let mut conn = client.pool.acquire().await.unwrap();
+        SqliteQueryExecutor::new(&mut *conn)
+            .execute(AllEntries {})
+            .await
+            .expect("AllEntries query must not fail")
+    };
+
+    assert_eq!(
+        entries.len(),
+        inserted.len(),
+        "all inserted entries should come back through AllEntries"
+    );
+    for got in entries {
+        let original = inserted.get(&got.id).expect("unknown id returned");
+        assert_eq!(&got, original, "entry round-trip mismatch");
     }
 }

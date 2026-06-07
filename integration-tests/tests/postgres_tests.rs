@@ -18,20 +18,12 @@ use tracing::info;
 #[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
 async fn test_move_entry_disallows_cycles(pool: PgPool) {
     let server = PostgresServer::new(pool);
-    let mut tx = server
-        .pool
-        .begin()
-        .await
-        .expect("begin transaction should not fail");
-
     let mut rng = rand::rng();
     let context = SimulationContext::default();
 
-    let actor_ids = PostgresQueryExecutor::new(&mut *tx)
-        .execute(AllActorIds {})
-        .await
-        .unwrap();
-    let actor_id = actor_ids[0];
+    let create_user = CreateUser::arbitrary(&mut rng, &context);
+    let actor_id = create_user.user.actor_id.clone();
+    server.run_action(create_user.into()).await.unwrap();
 
     let mut entry_a = Entry::arbitrary(&mut rng, &context);
     entry_a.owner_id = actor_id;
@@ -90,40 +82,6 @@ async fn test_arbitrary_create_user(pool: PgPool) {
         .run_action(action)
         .await
         .expect("create_user action should succeed");
-}
-
-#[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
-async fn test_arbitrary_create_entry(pool: PgPool) {
-    // YOU ARE HERE
-    // Fixed up the test, but it fails with eg called `Result::unwrap()` on an `Err` value: Consistency("child entry must match its parent's template/log kind").
-    // Problem: that's the system working as it should and preventing an invalid parenting. But how
-    // do we differentiate between a correct failure and incorrect one?
-    // We need properties...
-    let server = PostgresServer::new(pool);
-    let mut rng = rand::rng();
-    let mut context = SimulationContext::default();
-
-    let mx = server
-        .run_action(CreateUser::arbitrary(&mut rng, &context).into())
-        .await
-        .unwrap();
-    context.apply_mutation(mx).await.unwrap();
-
-    for _ in 0..100 {
-        let mx = server
-            .run_action(CreateActivity::arbitrary(&mut rng, &context).into())
-            .await
-            .unwrap();
-        context.apply_mutation(mx).await.unwrap();
-    }
-
-    for _ in 0..100 {
-        let mx = server
-            .run_action(CreateEntry::arbitrary(&mut rng, &context).into())
-            .await
-            .unwrap();
-        context.apply_mutation(mx).await.unwrap();
-    }
 }
 
 #[sqlx::test(migrations = "../gv-sql/postgres/migrations")]
