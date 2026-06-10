@@ -17,6 +17,23 @@ struct MassAttribute: View {
     @State private var debounceTask: Task<Void, Never>?
     @FocusState private var focusedUnit: MassUnit?
     @EnvironmentObject private var focusModel: AttributeFocusModel
+    // Set by Remove so the focus-loss handler skips flushNow() — flushing
+    // would dispatch an update against the just-deleted row.
+    @State private var pendingRemoval = false
+
+    // Same attribute can be attached to multiple visible entries, so the focus
+    // owner token needs both ids.
+    private var focusToken: String { "\(entry.id)/\(pair.attrId)" }
+
+    // The bar actions for this attribute, defined once and rendered identically
+    // by both surfaces (iOS keyboard bar via the focus model, macOS popover).
+    private var barActions: [AttributeBarAction] {
+        .mass(remove: {
+            pendingRemoval = true
+            forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+            focusedUnit = nil
+        })
+    }
 
     var body: some View {
         AttributeRow(label: pair.name) {
@@ -32,10 +49,16 @@ struct MassAttribute: View {
         .onChange(of: values) { _, _ in scheduleDebounce() }
         .onChange(of: focusedUnit) { _, newFocus in
             if newFocus != nil {
-                focusModel.focus(kind: .mass, entryId: entry.id, attributeId: pair.attrId)
+                focusModel.focus(focusToken, actions: barActions)
             } else {
-                focusModel.clear()
-                flushNow()
+                focusModel.clear(focusToken)
+                if pendingRemoval {
+                    pendingRemoval = false
+                    debounceTask?.cancel()
+                    debounceTask = nil
+                } else {
+                    flushNow()
+                }
             }
         }
     }
@@ -72,11 +95,7 @@ struct MassAttribute: View {
         ) {
             AttributeSheetBar(
                 title: pair.name,
-                kind: .mass,
-                onRemove: {
-                    forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
-                    focusedUnit = nil
-                },
+                actions: barActions,
                 onDismiss: { focusedUnit = nil }
             )
             .frame(width: 280)

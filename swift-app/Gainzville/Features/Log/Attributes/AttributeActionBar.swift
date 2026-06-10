@@ -10,21 +10,84 @@ import SwiftUI
 // attribute, Pick units, Range) aren't part of an established symbolic
 // language, and there are few enough that text fits.
 //
-// SPIKE: every button except dismiss is a no-op. This exists to evaluate the
-// mechanism (scroll row + pinned dismiss inside a `.keyboard` toolbar / sheet
-// header) and the cross-context UX before any actions are wired. See GV-36.
+// The bar is pure presentation: it renders whatever `[AttributeBarAction]`
+// list the host hands it. Which buttons a given attribute kind shows is
+// decided by the variant builders below — hosts build their list once and
+// feed it to every surface they own, so a kind looks the same on the keyboard
+// bar, a sheet, or a popover.
+
+/// The bar's vocabulary: presentation (label/icon/color) lives here; behavior
+/// arrives as associated closures. `units` and `range` are placeholder no-ops
+/// until their backing features (unit selection, exact/range switching) land.
+enum AttributeBarAction: Identifiable {
+    case clear(() -> Void)
+    case units
+    case range
+    case remove(() -> Void)
+
+    var id: String { label }
+
+    var label: String {
+        switch self {
+        case .clear: "Clear"
+        case .units: "Units"
+        case .range: "Range"
+        case .remove: "Remove"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .clear: "x.square"
+        case .units: "ruler"
+        case .range: "arrow.left.and.right.square"
+        case .remove: "trash.fill"
+        }
+    }
+
+    var color: Color {
+        if case .remove = self { return Color.red }
+        return Color.gvTextPrimary
+    }
+
+    func run() {
+        switch self {
+        case .clear(let f), .remove(let f): f()
+        case .units, .range: break
+        }
+    }
+}
+
+// The per-kind matrix. Each signature is the policy: numeric/mass clear via
+// backspace so they take no `clear`; picker kinds (select/temporal) have no
+// keyboard, so they get an explicit Clear — supplied only when there's
+// something to clear; temporal is intrinsic to the entry so it takes no
+// `remove`.
+extension Array where Element == AttributeBarAction {
+    static func numeric(remove: @escaping () -> Void) -> Self {
+        [.range, .remove(remove)]
+    }
+
+    static func mass(remove: @escaping () -> Void) -> Self {
+        [.units, .range, .remove(remove)]
+    }
+
+    // TODO: Range only when the attribute is `ordered`.
+    static func select(clear: (() -> Void)?, remove: @escaping () -> Void) -> Self {
+        (clear.map { [.clear($0)] } ?? []) + [.range, .remove(remove)]
+    }
+
+    static func temporal(clear: (() -> Void)?) -> Self {
+        clear.map { [.clear($0)] } ?? []
+    }
+}
+
 struct AttributeActionBar: View {
-    /// The focused attribute's kind. `nil` means no attribute is focused (e.g.
-    /// a plain text field elsewhere in the same container) — only the dismiss
-    /// affordance shows, preserving the old keyboard-Done behavior.
-    var kind: AttributeMenuKind?
-    /// Empty the focused field/value while keeping the attribute attached. When
-    /// nil, the Clear button is hidden — the host supplies it only when clearing
-    /// is meaningful and allowed (e.g. temporal Clear is withheld when it would
-    /// leave a root entry with no start/end).
-    var onClear: (() -> Void)? = nil
-    /// Detach the attribute from the entry. When nil, the Remove button is hidden.
-    var onRemove: (() -> Void)? = nil
+    /// The focused attribute's actions, built by the host via the
+    /// `[AttributeBarAction]` variants. Empty means no attribute is focused
+    /// (e.g. a plain text field elsewhere in the same container) — only the
+    /// dismiss affordance shows, preserving the old keyboard-Done behavior.
+    let actions: [AttributeBarAction]
     /// Resign first responder. Supplied only by the iOS keyboard bar, where
     /// there's no title row to host a close button; when set, a trailing dismiss
     /// affordance is shown. Sheet / popover presentations put the dismiss in
@@ -65,40 +128,6 @@ struct AttributeActionBar: View {
         .padding(.horizontal, GvSpacing.lg)
         .padding(.vertical, GvSpacing.sm)
     }
-
-    // The buttons available for the focused attribute's kind. Clear and Remove
-    // are wired via the host-supplied closures and only appear when supplied;
-    // Units and Range remain no-op placeholders (their backing features —
-    // unit selection and exact/range switching — aren't built yet).
-    private var actions: [Action] {
-        guard let kind else { return [] }
-        var result: [Action] = []
-        // Picker-based kinds have no keyboard, so backspace can't clear them —
-        // they get an explicit Clear. Keyboard kinds (numeric/mass) clear via
-        // backspace and so don't.
-        if (kind == .temporal || kind == .select), let onClear {
-            result.append(Action(label: "Clear", icon: "x.square", run: onClear))
-        }
-        if kind == .mass {
-            result.append(Action(label: "Units", icon: "ruler"))
-        }
-        // TODO: select should only have a Range action if the attribute is `ordered`.
-        if kind == .numeric || kind == .mass || kind == .select {
-            result.append(Action(label: "Range", icon: "arrow.left.and.right.square"))
-        }
-        if kind != .temporal, let onRemove {
-            result.append(Action(label: "Remove", icon: "trash.fill", color: Color.red, run: onRemove))
-        }
-        return result
-    }
-
-    private struct Action: Identifiable {
-        let label: String
-        let icon: String
-        var color: Color = Color.gvTextPrimary
-        var run: () -> Void = {}
-        var id: String { label }
-    }
 }
 
 // Sheet presentation of the action bar: a large title with the bar framed by
@@ -106,9 +135,7 @@ struct AttributeActionBar: View {
 // directly (no title or separators).
 struct AttributeSheetBar: View {
     let title: String
-    let kind: AttributeMenuKind?
-    var onClear: (() -> Void)? = nil
-    var onRemove: (() -> Void)? = nil
+    let actions: [AttributeBarAction]
     let onDismiss: () -> Void
 
     var body: some View {
@@ -143,7 +170,7 @@ struct AttributeSheetBar: View {
 
                 // Actions only; the close button is in the toolbar above, so no
                 // inline dismiss affordance.
-                AttributeActionBar(kind: kind, onClear: onClear, onRemove: onRemove)
+                AttributeActionBar(actions: actions)
             }
             .frame(maxWidth: .infinity)
             GvMenuDivider()
@@ -157,16 +184,12 @@ struct AttributeSheetBar: View {
 // EnvironmentObject; apply once at the container level (LogView, LibraryView).
 struct AttributeKeyboardBar: ViewModifier {
     @EnvironmentObject private var focusModel: AttributeFocusModel
-    @EnvironmentObject private var forestVM: ForestViewModel
 
     func body(content: Content) -> some View {
         #if os(iOS)
         content.toolbar {
             ToolbarItemGroup(placement: .keyboard) {
-                AttributeActionBar(
-                    kind: focusModel.keyboardKind,
-                    onRemove: keyboardRemove
-                ) {
+                AttributeActionBar(actions: focusModel.actions ?? []) {
                     UIApplication.shared.sendAction(
                         #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
@@ -181,19 +204,4 @@ struct AttributeKeyboardBar: ViewModifier {
         content
         #endif
     }
-
-    #if os(iOS)
-    // Remove the attribute whose field currently owns the keyboard, then dismiss
-    // it (the field disappears with the attribute). nil — hiding Remove — when no
-    // attribute field is focused.
-    private var keyboardRemove: (() -> Void)? {
-        guard let entryId = focusModel.focusedEntryId,
-              let attributeId = focusModel.focusedAttributeId else { return nil }
-        return {
-            forestVM.removeAttribute(entryId: entryId, attributeId: attributeId)
-            UIApplication.shared.sendAction(
-                #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        }
-    }
-    #endif
 }

@@ -2,13 +2,6 @@ import SwiftUI
 
 // Shared layout for attribute-style rows: label on the left, custom input on the
 // right, consistent min-height across temporal and attribute editors.
-enum AttributeMenuKind {
-    case numeric
-    case mass
-    case select
-    case temporal
-}
-
 struct AttributeRow<Content: View>: View {
     let label: String
     let indent: CGFloat

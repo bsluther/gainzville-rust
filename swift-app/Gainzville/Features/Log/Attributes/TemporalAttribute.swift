@@ -2,10 +2,6 @@ import SwiftUI
 
 // MARK: - Future work
 //
-// - Add per-field "unset" control (×-button or menu item) to clear start/end/duration.
-//   macOS inline time field: nil state currently shows an empty pill; wiring should
-//   preserve that — don't default-initialise to .now on load, only on user intent.
-//
 // Duration picker (long-term)
 // - Replace the macOS stepper popover with an inline text field (e.g. "1h 30m" or
 //   "1:30:00") backed by a custom NSFormatter. The stepper popover is good enough
@@ -19,11 +15,12 @@ import SwiftUI
 // - After the user picks "Remove X" from the conflict alert, auto-open the picker
 //   for the pending field instead of requiring a second tap.
 //
-// Root-entry / duration-only
-// - Root entries (no parent) require at least a start or end time (Rust constraint).
-//   Setting duration-only on a root entry will silently fail; deferred until there
-//   is a clear UX for handling this (e.g. disable the duration pill, or automatically
-//   pair it with a start time).
+// Root-entry anchor invariant
+// - Root log entries require a start or end time (core rejects MoveEntry
+//   otherwise; templates are exempt — duration only, never start/end). The UI
+//   can't reach the duration-only state: core guarantees roots arrive with an
+//   anchor (create/move both validate), and `canClear` refuses to clear the
+//   last one.
 
 // MARK: - TemporalAttribute
 
@@ -269,6 +266,8 @@ private struct DatePickerPill: View {
         }
     }
 
+    private var barActions: [AttributeBarAction] { .temporal(clear: clearAction) }
+
     private var displayText: String {
         guard let date else { return "" }
         return components == .date ? formatDate(from: date) : formatTime(from: date)
@@ -295,7 +294,7 @@ private struct DatePickerPill: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.gvSurface))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gvDivider, lineWidth: 1))
                     .popover(isPresented: $isTimeFocused, arrowEdge: .top) {
-                        AttributeSheetBar(title: "Time", kind: .temporal, onClear: clearAction, onDismiss: { isTimeFocused = false })
+                        AttributeSheetBar(title: "Time", actions: barActions, onDismiss: { isTimeFocused = false })
                             .frame(width: 280)
                     }
             } else {
@@ -327,9 +326,9 @@ private struct DatePickerPill: View {
         .buttonStyle(.plain)
         .platformPopover(isPresented: $isPresenting) {
             #if os(iOS)
-            DatePickerIOS(date: pickerDate, components: components, onClear: clearAction)
+            DatePickerIOS(date: pickerDate, components: components, actions: barActions)
             #else
-            DatePickerMacOS(date: pickerDate, components: components, onClear: clearAction)
+            DatePickerMacOS(date: pickerDate, components: components, actions: barActions)
             #endif
         }
     }
@@ -358,6 +357,8 @@ private struct DurationPickerPill: View {
         }
     }
 
+    private var barActions: [AttributeBarAction] { .temporal(clear: clearAction) }
+
     private var displayText: String {
         durationMs.map(formatDuration) ?? ""
     }
@@ -379,7 +380,7 @@ private struct DurationPickerPill: View {
                 minutes: $editMinutes,
                 seconds: $editSeconds,
                 onDone: { commitToBinding() },
-                onClear: clearAction
+                actions: barActions
             )
             #else
             DurationPickerMacOS(
@@ -387,7 +388,7 @@ private struct DurationPickerPill: View {
                 minutes: $editMinutes,
                 seconds: $editSeconds,
                 onDone: { commitToBinding(); isPresenting = false },
-                onClear: clearAction
+                actions: barActions
             )
             #endif
         }
@@ -412,12 +413,12 @@ private struct DurationPickerPill: View {
 private struct DatePickerIOS: View {
     @Binding var date: Date
     let components: DatePickerComponents
-    var onClear: (() -> Void)? = nil
+    var actions: [AttributeBarAction] = []
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
-            AttributeSheetBar(title: components == .date ? "Date" : "Time", kind: .temporal, onClear: onClear, onDismiss: { dismiss() })
+            AttributeSheetBar(title: components == .date ? "Date" : "Time", actions: actions, onDismiss: { dismiss() })
             Group {
                 if components == .date {
                     DatePicker("", selection: $date, displayedComponents: components)
@@ -445,14 +446,14 @@ private struct DurationPickerIOS: View {
     @Binding var minutes: Int
     @Binding var seconds: Int
     let onDone: () -> Void
-    var onClear: (() -> Void)? = nil
+    var actions: [AttributeBarAction] = []
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
             // Title + action bar. No Cancel (editing is live); the bar's dismiss
             // commits + closes — "Done ≡ dismiss".
-            AttributeSheetBar(title: "Duration", kind: .temporal, onClear: onClear, onDismiss: { onDone(); dismiss() })
+            AttributeSheetBar(title: "Duration", actions: actions, onDismiss: { onDone(); dismiss() })
 
             HStack(spacing: 0) {
                 durationWheelColumn(range: 0..<24, label: "Hours", selection: $hours)
@@ -550,12 +551,12 @@ private struct TimeFieldMacOS: NSViewRepresentable {
 private struct DatePickerMacOS: View {
     @Binding var date: Date
     let components: DatePickerComponents
-    var onClear: (() -> Void)? = nil
+    var actions: [AttributeBarAction] = []
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
-            AttributeSheetBar(title: components == .date ? "Date" : "Time", kind: .temporal, onClear: onClear, onDismiss: { dismiss() })
+            AttributeSheetBar(title: components == .date ? "Date" : "Time", actions: actions, onDismiss: { dismiss() })
             CalendarPickerMacOS(selection: $date, components: components)
                 .padding(GvSpacing.md)
         }
@@ -567,11 +568,11 @@ private struct DurationPickerMacOS: View {
     @Binding var minutes: Int
     @Binding var seconds: Int
     let onDone: () -> Void
-    var onClear: (() -> Void)? = nil
+    var actions: [AttributeBarAction] = []
 
     var body: some View {
         VStack(spacing: GvSpacing.lg) {
-            AttributeSheetBar(title: "Duration", kind: .temporal, onClear: onClear, onDismiss: { onDone() })
+            AttributeSheetBar(title: "Duration", actions: actions, onDismiss: { onDone() })
             HStack(spacing: GvSpacing.xl) {
                 DurationStepperColumn(label: "Hours", value: $hours, range: 0...23)
                 DurationStepperColumn(label: "Minutes", value: $minutes, range: 0...59)

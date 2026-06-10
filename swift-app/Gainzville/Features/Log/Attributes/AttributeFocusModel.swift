@@ -3,27 +3,33 @@ internal import Combine
 import Foundation
 
 final class AttributeFocusModel: ObservableObject {
-    // Which attribute kind currently owns the keyboard (is first responder).
-    // Drives the container-level iOS keyboard action bar. Set ONLY when a text
-    // field gains/loses keyboard focus. nil when no attribute field has the
-    // keyboard.
-    @Published var keyboardKind: AttributeMenuKind?
+    // The focused attribute field's bar actions, built by the owning view via
+    // the `[AttributeBarAction]` variants. Drives the container-level iOS
+    // keyboard action bar. Set ONLY when a text field gains/loses keyboard
+    // focus. nil when no attribute field has the keyboard.
+    //
+    // NOTE: the list is captured at focus time. If an action list ever needs
+    // to change mid-edit (e.g. a Clear that appears once a value is typed),
+    // the keyboard bar won't see it unless the owning view re-calls
+    // `focus(actions:)`. No current list changes mid-edit (numeric/mass are
+    // static; select/temporal don't use the keyboard surface), but this needs
+    // resolution if that changes.
+    @Published private(set) var actions: [AttributeBarAction]?
 
-    // The entry/attribute the focused field edits, set together with
-    // `keyboardKind`. The keyboard action bar needs these to dispatch actions
-    // (e.g. Remove), since it has no other handle on the focused attribute.
-    @Published var focusedEntryId: String?
-    @Published var focusedAttributeId: String?
+    // Which field owns the bar. When focus jumps directly between two
+    // attribute fields, SwiftUI doesn't order the two onChange handlers — the
+    // old field's clear can land after the new field's focus and empty the bar
+    // mid-edit. Owner-checking clear() makes the stale call a no-op.
+    private var owner: String?
 
-    func focus(kind: AttributeMenuKind, entryId: String, attributeId: String) {
-        keyboardKind = kind
-        focusedEntryId = entryId
-        focusedAttributeId = attributeId
+    func focus(_ owner: String, actions: [AttributeBarAction]) {
+        self.owner = owner
+        self.actions = actions
     }
 
-    func clear() {
-        keyboardKind = nil
-        focusedEntryId = nil
-        focusedAttributeId = nil
+    func clear(_ owner: String) {
+        guard self.owner == owner else { return }
+        self.owner = nil
+        actions = nil
     }
 }

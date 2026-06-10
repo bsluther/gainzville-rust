@@ -16,6 +16,23 @@ struct NumericAttribute: View {
     // macOS prototype (GV-36): show the action bar in a popover anchored to the
     // field while it's focused, since macOS has no keyboard accessory.
     @State private var showActions = false
+    // Set by Remove so the focus-loss handler skips flushNow() — flushing
+    // would dispatch an update against the just-deleted row.
+    @State private var pendingRemoval = false
+
+    // Same attribute can be attached to multiple visible entries, so the focus
+    // owner token needs both ids.
+    private var focusToken: String { "\(entry.id)/\(pair.attrId)" }
+
+    // The bar actions for this attribute, defined once and rendered identically
+    // by both surfaces (iOS keyboard bar via the focus model, macOS popover).
+    private var barActions: [AttributeBarAction] {
+        .numeric(remove: {
+            pendingRemoval = true
+            forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+            isKeyboardFocused = false
+        })
+    }
 
     var body: some View {
         AttributeRow(label: pair.name) { field }
@@ -28,10 +45,16 @@ struct NumericAttribute: View {
             .onChange(of: editValue) { _, _ in scheduleDebounce() }
             .onChange(of: isKeyboardFocused) { _, focused in
                 if focused {
-                    focusModel.focus(kind: .numeric, entryId: entry.id, attributeId: pair.attrId)
+                    focusModel.focus(focusToken, actions: barActions)
                 } else {
-                    focusModel.clear()
-                    flushNow()
+                    focusModel.clear(focusToken)
+                    if pendingRemoval {
+                        pendingRemoval = false
+                        debounceTask?.cancel()
+                        debounceTask = nil
+                    } else {
+                        flushNow()
+                    }
                 }
                 #if os(macOS)
                 showActions = focused
@@ -66,11 +89,7 @@ struct NumericAttribute: View {
             .popover(isPresented: $showActions, arrowEdge: .top) {
                 AttributeSheetBar(
                     title: pair.name,
-                    kind: .numeric,
-                    onRemove: {
-                        forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
-                        isKeyboardFocused = false
-                    },
+                    actions: barActions,
                     onDismiss: { isKeyboardFocused = false }
                 )
                 .frame(width: 280)
