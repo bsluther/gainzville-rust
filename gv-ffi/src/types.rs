@@ -538,7 +538,7 @@ pub struct UpdateAttributeValue {
     pub entry_id: Uuid,
     pub attribute_id: Uuid,
     pub field: ValueField,
-    pub value: AttributeValue,
+    pub value: Option<AttributeValue>,
 }
 
 #[uniffi::remote(Record)]

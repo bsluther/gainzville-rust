@@ -204,7 +204,7 @@ class ForestViewModel: ObservableObject {
         entryId: String,
         attributeId: String,
         field: ValueField,
-        value: AttributeValue
+        value: AttributeValue?
     ) {
         guard let core else { return }
         try? core.runAction(action: .updateAttributeValue(UpdateAttributeValue(
@@ -213,6 +213,22 @@ class ForestViewModel: ObservableObject {
             attributeId: attributeId,
             field: field,
             value: value
+        )))
+    }
+
+    /// Empty a value's field (`plan`/`actual`) while keeping the attribute
+    /// attached — `UpdateAttributeValue` with a `nil` value.
+    func clearAttributeValue(entryId: String, attributeId: String, field: ValueField) {
+        updateAttributeValue(entryId: entryId, attributeId: attributeId, field: field, value: nil)
+    }
+
+    /// Detach an attribute from an entry (deletes its value row). Idempotent in core.
+    func removeAttribute(entryId: String, attributeId: String) {
+        guard let core else { return }
+        try? core.runAction(action: .deleteAttributeValue(DeleteAttributeValue(
+            actorId: SYSTEM_ACTOR_ID,
+            entryId: entryId,
+            attributeId: attributeId
         )))
     }
 

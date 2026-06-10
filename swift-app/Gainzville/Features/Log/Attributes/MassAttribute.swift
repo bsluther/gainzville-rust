@@ -32,9 +32,9 @@ struct MassAttribute: View {
         .onChange(of: values) { _, _ in scheduleDebounce() }
         .onChange(of: focusedUnit) { _, newFocus in
             if newFocus != nil {
-                focusModel.keyboardKind = .mass
+                focusModel.focus(kind: .mass, entryId: entry.id, attributeId: pair.attrId)
             } else {
-                focusModel.keyboardKind = nil
+                focusModel.clear()
                 flushNow()
             }
         }
@@ -70,8 +70,16 @@ struct MassAttribute: View {
             isPresented: Binding(get: { focusedUnit == unit }, set: { if !$0 { focusedUnit = nil } }),
             arrowEdge: .top
         ) {
-            AttributeSheetBar(title: pair.name, kind: .mass, onDismiss: { focusedUnit = nil })
-                .frame(width: 280)
+            AttributeSheetBar(
+                title: pair.name,
+                kind: .mass,
+                onRemove: {
+                    forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+                    focusedUnit = nil
+                },
+                onDismiss: { focusedUnit = nil }
+            )
+            .frame(width: 280)
         }
         #endif
     }

@@ -28,9 +28,9 @@ struct NumericAttribute: View {
             .onChange(of: editValue) { _, _ in scheduleDebounce() }
             .onChange(of: isKeyboardFocused) { _, focused in
                 if focused {
-                    focusModel.keyboardKind = .numeric
+                    focusModel.focus(kind: .numeric, entryId: entry.id, attributeId: pair.attrId)
                 } else {
-                    focusModel.keyboardKind = nil
+                    focusModel.clear()
                     flushNow()
                 }
                 #if os(macOS)
@@ -64,8 +64,16 @@ struct NumericAttribute: View {
             .onSubmit { isKeyboardFocused = false }
             #if os(macOS)
             .popover(isPresented: $showActions, arrowEdge: .top) {
-                AttributeSheetBar(title: pair.name, kind: .numeric, onDismiss: { isKeyboardFocused = false })
-                    .frame(width: 280)
+                AttributeSheetBar(
+                    title: pair.name,
+                    kind: .numeric,
+                    onRemove: {
+                        forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+                        isKeyboardFocused = false
+                    },
+                    onDismiss: { isKeyboardFocused = false }
+                )
+                .frame(width: 280)
             }
             #endif
     }

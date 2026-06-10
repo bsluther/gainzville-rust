@@ -3723,11 +3723,11 @@ public struct UpdateAttributeValue: Equatable, Hashable {
     public var entryId: Uuid
     public var attributeId: Uuid
     public var field: ValueField
-    public var value: AttributeValue
+    public var value: AttributeValue?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(actorId: Uuid, entryId: Uuid, attributeId: Uuid, field: ValueField, value: AttributeValue) {
+    public init(actorId: Uuid, entryId: Uuid, attributeId: Uuid, field: ValueField, value: AttributeValue?) {
         self.actorId = actorId
         self.entryId = entryId
         self.attributeId = attributeId
@@ -3755,7 +3755,7 @@ public struct FfiConverterTypeUpdateAttributeValue: FfiConverterRustBuffer {
                 entryId: FfiConverterTypeUuid.read(from: &buf), 
                 attributeId: FfiConverterTypeUuid.read(from: &buf), 
                 field: FfiConverterTypeValueField.read(from: &buf), 
-                value: FfiConverterTypeAttributeValue.read(from: &buf)
+                value: FfiConverterOptionTypeAttributeValue.read(from: &buf)
         )
     }
 
@@ -3764,7 +3764,7 @@ public struct FfiConverterTypeUpdateAttributeValue: FfiConverterRustBuffer {
         FfiConverterTypeUuid.write(value.entryId, into: &buf)
         FfiConverterTypeUuid.write(value.attributeId, into: &buf)
         FfiConverterTypeValueField.write(value.field, into: &buf)
-        FfiConverterTypeAttributeValue.write(value.value, into: &buf)
+        FfiConverterOptionTypeAttributeValue.write(value.value, into: &buf)
     }
 }
 

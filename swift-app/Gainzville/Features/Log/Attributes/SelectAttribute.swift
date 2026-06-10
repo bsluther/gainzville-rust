@@ -26,6 +26,16 @@ struct SelectAttribute: View {
                     onPick: { picked in
                         commit(picked)
                         isPresenting = false
+                    },
+                    // Clear only when there's a value to clear, matching temporal.
+                    onClear: pair.actual == nil ? nil : {
+                        forestVM.clearAttributeValue(
+                            entryId: entry.id, attributeId: pair.attrId, field: .actual)
+                        isPresenting = false
+                    },
+                    onRemove: {
+                        forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+                        isPresenting = false
                     }
                 )
             }
@@ -65,12 +75,14 @@ private struct SelectOptionsList: View {
     let options: [String]
     let selection: String?
     let onPick: (String) -> Void
+    let onClear: (() -> Void)?
+    let onRemove: () -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         #if os(iOS)
         VStack(spacing: 0) {
-            AttributeSheetBar(title: title, kind: .select, onDismiss: { dismiss() })
+            sheetBar
             list
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -78,11 +90,21 @@ private struct SelectOptionsList: View {
         .presentationContentInteraction(.scrolls)
         #else
         VStack(spacing: 0) {
-            AttributeSheetBar(title: title, kind: .select, onDismiss: { dismiss() })
+            sheetBar
             list
         }
         .frame(minWidth: 220)
         #endif
+    }
+
+    private var sheetBar: some View {
+        AttributeSheetBar(
+            title: title,
+            kind: .select,
+            onClear: onClear,
+            onRemove: onRemove,
+            onDismiss: { dismiss() }
+        )
     }
 
     private var list: some View {

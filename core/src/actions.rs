@@ -209,7 +209,9 @@ pub struct UpdateAttributeValue {
     pub entry_id: Uuid,
     pub attribute_id: Uuid,
     pub field: ValueField,
-    pub value: AttributeValue,
+    /// `None` clears the field (sets `plan`/`actual` to `None`) while leaving
+    /// the value attached. `Some` sets it.
+    pub value: Option<AttributeValue>,
 }
 
 impl From<UpdateAttributeValue> for Action {

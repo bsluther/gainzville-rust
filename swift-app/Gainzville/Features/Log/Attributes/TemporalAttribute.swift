@@ -54,7 +54,10 @@ struct TemporalAttribute: View {
                     editDurationMs: $editDurationMs,
                     onBeforeEditStart: { gateEdit(for: .start) },
                     onBeforeEditEnd: { gateEdit(for: .end) },
-                    onBeforeEditDuration: { gateEdit(for: .duration) }
+                    onBeforeEditDuration: { gateEdit(for: .duration) },
+                    canClearStart: canClear(.start),
+                    canClearEnd: canClear(.end),
+                    canClearDuration: canClear(.duration)
                 )
             }
         }
@@ -126,6 +129,31 @@ struct TemporalAttribute: View {
         return true
     }
 
+    // MARK: - Clear gate
+
+    /// A root log entry (on the timeline, not a template) must keep a start or
+    /// end time — core rejects `MoveEntry` otherwise. Child entries and
+    /// templates have no such requirement.
+    private var isRootLogEntry: Bool {
+        !entryContext.isTemplate && entry.position == nil
+    }
+
+    /// Whether the field's Clear button should be offered: the field must be set,
+    /// and clearing it must not leave a root log entry with neither start nor end.
+    private func canClear(_ field: TemporalField) -> Bool {
+        let isSet: Bool
+        switch field {
+        case .start:    isSet = editStart != nil
+        case .end:      isSet = editEnd != nil
+        case .duration: isSet = editDurationMs != nil
+        }
+        guard isSet else { return false }
+        guard isRootLogEntry else { return true }
+        let startRemains = field != .start && editStart != nil
+        let endRemains = field != .end && editEnd != nil
+        return startRemains || endRemains
+    }
+
     // MARK: - Sync / persist
 
     private func syncEditState() {
@@ -192,6 +220,9 @@ private struct TemporalExpandedRows: View {
     var onBeforeEditStart: () -> Bool = { true }
     var onBeforeEditEnd: () -> Bool = { true }
     var onBeforeEditDuration: () -> Bool = { true }
+    var canClearStart = false
+    var canClearEnd = false
+    var canClearDuration = false
     @Environment(\.entryContext) private var entryContext
 
     var body: some View {
@@ -199,16 +230,16 @@ private struct TemporalExpandedRows: View {
             // Templates live outside the timeline: duration only, no start/end.
             if !entryContext.isTemplate {
                 AttributeRow(label: "Start", indent: GvSpacing.lg) {
-                    DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart)
-                    DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart)
+                    DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart, canClear: canClearStart)
+                    DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart, canClear: canClearStart)
                 }
                 AttributeRow(label: "End", indent: GvSpacing.lg) {
-                    DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd)
-                    DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd)
+                    DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd, canClear: canClearEnd)
+                    DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd, canClear: canClearEnd)
                 }
             }
             AttributeRow(label: "Duration", indent: GvSpacing.lg) {
-                DurationPickerPill(durationMs: $editDurationMs, onBeforeEdit: onBeforeEditDuration)
+                DurationPickerPill(durationMs: $editDurationMs, onBeforeEdit: onBeforeEditDuration, canClear: canClearDuration)
             }
         }
     }
@@ -220,8 +251,23 @@ private struct DatePickerPill: View {
     @Binding var date: Date?
     let components: DatePickerComponents
     var onBeforeEdit: () -> Bool = { true }
+    var canClear = false
     @State private var isPresenting = false
     @State private var isTimeFocused = false
+
+    /// Clearing this field nils the shadow binding (and dismisses the editor);
+    /// the parent's debounce then persists the recomputed temporal. nil when
+    /// clearing isn't allowed, which hides the Clear button.
+    private var clearAction: (() -> Void)? {
+        guard canClear else { return nil }
+        return {
+            date = nil
+            isPresenting = false
+            #if os(macOS)
+            isTimeFocused = false
+            #endif
+        }
+    }
 
     private var displayText: String {
         guard let date else { return "" }
@@ -249,7 +295,7 @@ private struct DatePickerPill: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.gvSurface))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gvDivider, lineWidth: 1))
                     .popover(isPresented: $isTimeFocused, arrowEdge: .top) {
-                        AttributeSheetBar(title: "Time", kind: .temporal, onDismiss: { isTimeFocused = false })
+                        AttributeSheetBar(title: "Time", kind: .temporal, onClear: clearAction, onDismiss: { isTimeFocused = false })
                             .frame(width: 280)
                     }
             } else {
@@ -281,9 +327,9 @@ private struct DatePickerPill: View {
         .buttonStyle(.plain)
         .platformPopover(isPresented: $isPresenting) {
             #if os(iOS)
-            DatePickerIOS(date: pickerDate, components: components)
+            DatePickerIOS(date: pickerDate, components: components, onClear: clearAction)
             #else
-            DatePickerMacOS(date: pickerDate, components: components)
+            DatePickerMacOS(date: pickerDate, components: components, onClear: clearAction)
             #endif
         }
     }
@@ -294,10 +340,23 @@ private struct DatePickerPill: View {
 private struct DurationPickerPill: View {
     @Binding var durationMs: UInt32?
     var onBeforeEdit: () -> Bool = { true }
+    var canClear = false
     @State private var isPresenting = false
     @State private var editHours = 0
     @State private var editMinutes = 0
     @State private var editSeconds = 0
+
+    /// Clear nils the binding directly and dismisses — deliberately NOT via
+    /// `onDone`/`commitToBinding`, which would re-read the still-loaded wheels and
+    /// write the old duration back over the cleared value. The parent's debounce
+    /// persists the `nil`. nil when clearing isn't allowed (hides Clear).
+    private var clearAction: (() -> Void)? {
+        guard canClear else { return nil }
+        return {
+            durationMs = nil
+            isPresenting = false
+        }
+    }
 
     private var displayText: String {
         durationMs.map(formatDuration) ?? ""
@@ -319,14 +378,16 @@ private struct DurationPickerPill: View {
                 hours: $editHours,
                 minutes: $editMinutes,
                 seconds: $editSeconds,
-                onDone: { commitToBinding() }
+                onDone: { commitToBinding() },
+                onClear: clearAction
             )
             #else
             DurationPickerMacOS(
                 hours: $editHours,
                 minutes: $editMinutes,
                 seconds: $editSeconds,
-                onDone: { commitToBinding(); isPresenting = false }
+                onDone: { commitToBinding(); isPresenting = false },
+                onClear: clearAction
             )
             #endif
         }
@@ -351,11 +412,12 @@ private struct DurationPickerPill: View {
 private struct DatePickerIOS: View {
     @Binding var date: Date
     let components: DatePickerComponents
+    var onClear: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
-            AttributeSheetBar(title: components == .date ? "Date" : "Time", kind: .temporal, onDismiss: { dismiss() })
+            AttributeSheetBar(title: components == .date ? "Date" : "Time", kind: .temporal, onClear: onClear, onDismiss: { dismiss() })
             Group {
                 if components == .date {
                     DatePicker("", selection: $date, displayedComponents: components)
@@ -383,13 +445,14 @@ private struct DurationPickerIOS: View {
     @Binding var minutes: Int
     @Binding var seconds: Int
     let onDone: () -> Void
+    var onClear: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
             // Title + action bar. No Cancel (editing is live); the bar's dismiss
             // commits + closes — "Done ≡ dismiss".
-            AttributeSheetBar(title: "Duration", kind: .temporal, onDismiss: { onDone(); dismiss() })
+            AttributeSheetBar(title: "Duration", kind: .temporal, onClear: onClear, onDismiss: { onDone(); dismiss() })
 
             HStack(spacing: 0) {
                 durationWheelColumn(range: 0..<24, label: "Hours", selection: $hours)
@@ -487,11 +550,12 @@ private struct TimeFieldMacOS: NSViewRepresentable {
 private struct DatePickerMacOS: View {
     @Binding var date: Date
     let components: DatePickerComponents
+    var onClear: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
-            AttributeSheetBar(title: components == .date ? "Date" : "Time", kind: .temporal, onDismiss: { dismiss() })
+            AttributeSheetBar(title: components == .date ? "Date" : "Time", kind: .temporal, onClear: onClear, onDismiss: { dismiss() })
             CalendarPickerMacOS(selection: $date, components: components)
                 .padding(GvSpacing.md)
         }
@@ -503,10 +567,11 @@ private struct DurationPickerMacOS: View {
     @Binding var minutes: Int
     @Binding var seconds: Int
     let onDone: () -> Void
+    var onClear: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: GvSpacing.lg) {
-            AttributeSheetBar(title: "Duration", kind: .temporal, onDismiss: { onDone() })
+            AttributeSheetBar(title: "Duration", kind: .temporal, onClear: onClear, onDismiss: { onDone() })
             HStack(spacing: GvSpacing.xl) {
                 DurationStepperColumn(label: "Hours", value: $hours, range: 0...23)
                 DurationStepperColumn(label: "Minutes", value: $minutes, range: 0...59)

@@ -847,11 +847,11 @@ pub async fn update_attribute_value(
 
     let new = match action.field {
         ValueField::Plan => Value {
-            plan: Some(action.value.clone()),
+            plan: action.value.clone(),
             ..old.clone()
         },
         ValueField::Actual => Value {
-            actual: Some(action.value.clone()),
+            actual: action.value.clone(),
             ..old.clone()
         },
     };

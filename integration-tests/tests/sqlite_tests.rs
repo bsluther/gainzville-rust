@@ -5,13 +5,14 @@ use gv_core::{
     actions::{
         Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
         CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue, EntryChange,
-        MassChange, MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateEntry,
+        MassChange, MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue,
+        UpdateEntry, ValueField,
     },
     models::{
         activity::{Activity, ActivityName},
         attribute::{
             Attribute, AttributeConfig, AttributeValue, MassConfig, MassMeasurement, MassUnit,
-            MassValue, NumericConfig, NumericValue, SelectConfig, Value,
+            MassValue, NumericConfig, NumericValue, SelectConfig, SelectValue, Value,
         },
         entry::{Entry, Position, Temporal},
         user::User,
@@ -539,6 +540,154 @@ async fn test_create_value_is_noop_when_value_exists(pool: SqlitePool) {
         }
         other => panic!("expected Numeric Exact, got {:?}", other),
     }
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_update_actual_on_plan_only_row_succeeds(pool: SqlitePool) {
+    // Arbitrary seeding (Value::arbitrary) can produce plan-only rows. Updating
+    // `actual` on such a row must succeed — the precondition is row existence,
+    // not field existence — so plan-only seeds are NOT the cause of the
+    // "value does not exist" rejection (that requires a missing row).
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
+    let (user, entry) = seed_entry(&sqlite_client).await;
+
+    let attribute = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: "Outcome".to_string(),
+        description: None,
+        config: AttributeConfig::Select(SelectConfig {
+            options: vec!["Flash".to_string(), "Sent".to_string()],
+            ordered: false,
+            default: None,
+        }),
+    };
+    sqlite_client
+        .run_action(CreateAttribute::from(attribute.clone()).into())
+        .await
+        .unwrap();
+
+    // Plan set, actual NULL — the shape that displays as empty in the UI today.
+    sqlite_client
+        .run_action(
+            CreateValue {
+                actor_id: user.actor_id,
+                value: Value {
+                    entry_id: entry.id,
+                    attribute_id: attribute.id,
+                    index_float: None,
+                    index_string: None,
+                    plan: Some(AttributeValue::Select(SelectValue::Exact("Flash".to_string()))),
+                    actual: None,
+                },
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    let result = sqlite_client
+        .run_action(
+            UpdateAttributeValue {
+                actor_id: user.actor_id,
+                entry_id: entry.id,
+                attribute_id: attribute.id,
+                field: ValueField::Actual,
+                value: Some(AttributeValue::Select(SelectValue::Exact("Sent".to_string()))),
+            }
+            .into(),
+        )
+        .await;
+    assert!(result.is_ok(), "update actual on plan-only row should succeed: {result:?}");
+
+    let value = {
+        let mut connection = sqlite_client.pool.acquire().await.unwrap();
+        SqliteQueryExecutor::new(&mut *connection)
+            .execute(FindValueByKey { entry_id: entry.id, attribute_id: attribute.id })
+            .await
+            .unwrap()
+            .expect("value row exists")
+    };
+    assert_eq!(value.actual, Some(AttributeValue::Select(SelectValue::Exact("Sent".to_string()))));
+    assert_eq!(value.plan, Some(AttributeValue::Select(SelectValue::Exact("Flash".to_string()))));
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_update_attribute_value_clears_only_target_field(pool: SqlitePool) {
+    let sqlite_client =
+        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
+    let (user, entry) = seed_entry(&sqlite_client).await;
+
+    let attribute = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: "Reps".to_string(),
+        description: None,
+        config: AttributeConfig::Numeric(NumericConfig {
+            min: None,
+            max: None,
+            integer: false,
+            default: None,
+        }),
+    };
+    sqlite_client
+        .run_action(CreateAttribute::from(attribute.clone()).into())
+        .await
+        .unwrap();
+
+    // Seed a value with both plan and actual populated.
+    sqlite_client
+        .run_action(
+            CreateValue {
+                actor_id: user.actor_id,
+                value: Value {
+                    entry_id: entry.id,
+                    attribute_id: attribute.id,
+                    index_float: None,
+                    index_string: None,
+                    plan: Some(AttributeValue::Numeric(NumericValue::Exact(5.0))),
+                    actual: Some(AttributeValue::Numeric(NumericValue::Exact(8.0))),
+                },
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // Clearing `actual` (value: None) nulls only that field; plan is untouched
+    // and the value row remains attached.
+    sqlite_client
+        .run_action(
+            UpdateAttributeValue {
+                actor_id: user.actor_id,
+                entry_id: entry.id,
+                attribute_id: attribute.id,
+                field: ValueField::Actual,
+                value: None,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    let value = {
+        let mut connection = sqlite_client.pool.acquire().await.unwrap();
+        SqliteQueryExecutor::new(&mut *connection)
+            .execute(FindValueByKey {
+                entry_id: entry.id,
+                attribute_id: attribute.id,
+            })
+            .await
+            .unwrap()
+            .expect("value row should still exist after clearing a field")
+    };
+    assert!(value.actual.is_none(), "cleared field should be None");
+    assert_eq!(
+        value.plan,
+        Some(AttributeValue::Numeric(NumericValue::Exact(5.0))),
+        "clearing actual must not touch plan"
+    );
 }
 
 async fn read_attribute(client: &SqliteClient, id: Uuid) -> Attribute {
