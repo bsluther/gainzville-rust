@@ -69,7 +69,15 @@ impl Arbitrary for NumericConfig {
 impl Arbitrary for SelectConfig {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         let n = rng.random_range(1..=8);
-        let options: Vec<String> = (0..n).map(|_| gen_random_text(rng, 1..3)).collect();
+        // Dedupe: short random text can collide, and the config rejects
+        // duplicate options. First push always lands, so options is non-empty.
+        let mut options: Vec<String> = Vec::with_capacity(n);
+        for _ in 0..n {
+            let option = gen_random_text(rng, 1..3);
+            if !options.contains(&option) {
+                options.push(option);
+            }
+        }
         let ordered = rng.random_bool(0.5);
         let default = maybe(rng, 0.5, |rng| pick(&options, rng).unwrap().clone());
         SelectConfig {

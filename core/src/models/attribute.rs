@@ -73,6 +73,21 @@ impl Attribute {
         }
     }
 
+    /// Validate a value against this attribute's config: the variant must match
+    /// the config type (numeric value on a numeric attribute, etc.), and the
+    /// inner value must satisfy the config's constraints. Applied on every
+    /// value write path (`CreateValue`, `UpdateAttributeValue`); configs are
+    /// additive-only (options never removed, bounds never shrunk), so values
+    /// admitted here stay conformant.
+    pub fn validate_value(&self, value: &AttributeValue) -> Result<()> {
+        match (&self.config, value) {
+            (AttributeConfig::Numeric(c), AttributeValue::Numeric(v)) => c.validate_value(v),
+            (AttributeConfig::Select(c), AttributeValue::Select(v)) => c.validate_value(v),
+            (AttributeConfig::Mass(c), AttributeValue::Mass(v)) => c.validate_value(v),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
+        }
+    }
+
     /// Build the seed `Value` used when attaching this attribute to an entry.
     /// Both `plan` and `actual` are set to the resolved default. Scalar types use
     /// `default_value`; Mass constructs a zero-magnitude `MassMeasurement` per
@@ -131,6 +146,18 @@ impl From<MassConfig> for AttributeConfig {
 }
 
 impl AttributeConfig {
+    /// Validate the config itself (applied at `CreateAttribute`): bounds and
+    /// defaults must be coherent, so values and seeds derived from the config
+    /// pass `validate_value`. Per-field edits (`Set*Default`) re-check their
+    /// own field in `update_attribute`.
+    pub fn validate(&self) -> Result<()> {
+        match self {
+            AttributeConfig::Numeric(c) => c.validate(),
+            AttributeConfig::Select(c) => c.validate(),
+            AttributeConfig::Mass(c) => c.validate(),
+        }
+    }
+
     pub fn data_type(&self) -> &'static str {
         match self {
             AttributeConfig::Numeric(_) => "Numeric",
@@ -155,46 +182,98 @@ impl NumericConfig {
         integer: bool,
         default: Option<f64>,
     ) -> Result<Self> {
-        fn is_integer(v: f64) -> bool {
-            v.is_finite() && v == v.trunc()
-        }
-
-        if integer {
-            if let Some(v) = min {
-                if !is_integer(v) {
-                    return Err(DomainError::Rejected(RejectReason::Validation(
-                        ValidationError::InvalidNumericConfig(format!(
-                            "min ({v}) must be an integer"
-                        )),
-                    )));
-                }
-            }
-            if let Some(v) = max {
-                if !is_integer(v) {
-                    return Err(DomainError::Rejected(RejectReason::Validation(
-                        ValidationError::InvalidNumericConfig(format!(
-                            "max ({v}) must be an integer"
-                        )),
-                    )));
-                }
-            }
-            if let Some(v) = default {
-                if !is_integer(v) {
-                    return Err(DomainError::Rejected(RejectReason::Validation(
-                        ValidationError::InvalidNumericConfig(format!(
-                            "default ({v}) must be an integer"
-                        )),
-                    )));
-                }
-            }
-        }
-
-        Ok(Self {
+        let cfg = Self {
             min,
             max,
             integer,
             default,
-        })
+        };
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
+    /// Validate the config itself: bounds must be finite (and integers when
+    /// `integer`) and ordered (min <= max); the default, when present, must be
+    /// valid as a value.
+    pub fn validate(&self) -> Result<()> {
+        for (label, bound) in [("min", self.min), ("max", self.max)] {
+            if let Some(v) = bound {
+                if !v.is_finite() {
+                    return Err(ValidationError::InvalidNumericConfig(format!(
+                        "{label} ({v}) must be finite"
+                    ))
+                    .into());
+                }
+                if self.integer && v.trunc() != v {
+                    return Err(ValidationError::InvalidNumericConfig(format!(
+                        "{label} ({v}) must be an integer"
+                    ))
+                    .into());
+                }
+            }
+        }
+        if let (Some(min), Some(max)) = (self.min, self.max) {
+            if min > max {
+                return Err(ValidationError::InvalidNumericConfig(format!(
+                    "min ({min}) is above max ({max})"
+                ))
+                .into());
+            }
+        }
+        if let Some(d) = self.default {
+            self.validate_value(&NumericValue::Exact(d))?;
+        }
+        Ok(())
+    }
+
+    /// Validate a numeric value against this config: finite, integer when the
+    /// config demands it, within min/max. Range endpoints are each checked and
+    /// must be ordered (min <= max).
+    pub fn validate_value(&self, value: &NumericValue) -> Result<()> {
+        let check = |v: f64| -> Result<()> {
+            if !v.is_finite() {
+                return Err(
+                    ValidationError::InvalidValue(format!("value ({v}) must be finite")).into(),
+                );
+            }
+            if self.integer && v.trunc() != v {
+                return Err(ValidationError::InvalidValue(format!(
+                    "value ({v}) must be an integer"
+                ))
+                .into());
+            }
+            if let Some(min) = self.min {
+                if v < min {
+                    return Err(ValidationError::InvalidValue(format!(
+                        "value ({v}) is below min ({min})"
+                    ))
+                    .into());
+                }
+            }
+            if let Some(max) = self.max {
+                if v > max {
+                    return Err(ValidationError::InvalidValue(format!(
+                        "value ({v}) is above max ({max})"
+                    ))
+                    .into());
+                }
+            }
+            Ok(())
+        };
+        match value {
+            NumericValue::Exact(v) => check(*v),
+            NumericValue::Range { min, max } => {
+                check(*min)?;
+                check(*max)?;
+                if min > max {
+                    return Err(ValidationError::InvalidValue(format!(
+                        "range min ({min}) is above range max ({max})"
+                    ))
+                    .into());
+                }
+                Ok(())
+            }
+        }
     }
 }
 
@@ -205,9 +284,120 @@ pub struct SelectConfig {
     pub default: Option<String>,
 }
 
+impl SelectConfig {
+    /// Validate the config itself: options must be unique (duplicates make the
+    /// option order ambiguous); the default, when present, must be a member.
+    /// An empty options list is allowed — options are added incrementally when
+    /// authoring.
+    pub fn validate(&self) -> Result<()> {
+        for (i, option) in self.options.iter().enumerate() {
+            if self.options[..i].contains(option) {
+                return Err(ValidationError::InvalidSelectConfig(format!(
+                    "duplicate option '{option}'"
+                ))
+                .into());
+            }
+        }
+        if let Some(d) = &self.default {
+            self.validate_value(&SelectValue::Exact(d.clone()))?;
+        }
+        Ok(())
+    }
+
+    /// Validate a select value against this config: every option must be a
+    /// member of `options`. Ranges additionally require an `ordered` config and
+    /// endpoints ordered by their position in `options` (min <= max).
+    pub fn validate_value(&self, value: &SelectValue) -> Result<()> {
+        let member_index = |s: &String| -> Result<usize> {
+            self.options.iter().position(|o| o == s).ok_or_else(|| {
+                ValidationError::InvalidValue(format!("'{s}' is not one of the select options"))
+                    .into()
+            })
+        };
+        match value {
+            SelectValue::Exact(s) => member_index(s).map(|_| ()),
+            SelectValue::Range { min, max } => {
+                if !self.ordered {
+                    return Err(ValidationError::InvalidValue(
+                        "range value on an unordered select".to_string(),
+                    )
+                    .into());
+                }
+                let lo = member_index(min)?;
+                let hi = member_index(max)?;
+                if lo > hi {
+                    return Err(ValidationError::InvalidValue(format!(
+                        "range min ('{min}') comes after range max ('{max}') in the option order"
+                    ))
+                    .into());
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MassConfig {
     pub default_units: Vec<MassUnit>,
+}
+
+impl MassConfig {
+    /// Validate the config itself: default units must be unique. (Note
+    /// `SetDefaultUnits` normalizes by deduping instead of rejecting; this
+    /// guards the create path, where the config arrives whole.)
+    pub fn validate(&self) -> Result<()> {
+        for (i, unit) in self.default_units.iter().enumerate() {
+            if self.default_units[..i].contains(unit) {
+                return Err(ValidationError::InvalidMassConfig(format!(
+                    "duplicate default unit ({unit:?})"
+                ))
+                .into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Structural checks only: measurement lists must be non-empty with finite
+    /// magnitudes and no duplicate units. Comparing range endpoints (min <= max)
+    /// requires unit conversion, which is deferred — see
+    /// docs/attributes-design.md "Unit selection / conversion for measures".
+    pub fn validate_value(&self, value: &MassValue) -> Result<()> {
+        fn check(label: &str, measurements: &[MassMeasurement]) -> Result<()> {
+            if measurements.is_empty() {
+                return Err(ValidationError::InvalidValue(format!(
+                    "{label} must have at least one measurement"
+                ))
+                .into());
+            }
+            let mut seen: Vec<&MassUnit> = Vec::with_capacity(measurements.len());
+            for m in measurements {
+                if !m.value.is_finite() {
+                    return Err(ValidationError::InvalidValue(format!(
+                        "{label} magnitude ({}) must be finite",
+                        m.value
+                    ))
+                    .into());
+                }
+                if seen.contains(&&m.unit) {
+                    return Err(ValidationError::InvalidValue(format!(
+                        "{label} has a duplicate unit ({:?})",
+                        m.unit
+                    ))
+                    .into());
+                }
+                seen.push(&m.unit);
+            }
+            Ok(())
+        }
+        match value {
+            MassValue::Exact(m) => check("mass value", m),
+            MassValue::Range { min, max } => {
+                check("mass range min", min)?;
+                check("mass range max", max)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -319,4 +509,148 @@ impl MassValue {
 pub struct MassMeasurement {
     pub unit: MassUnit,
     pub value: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rejected_validation(r: &Result<()>) -> bool {
+        matches!(
+            r,
+            Err(DomainError::Rejected(RejectReason::Validation(
+                ValidationError::InvalidValue(_)
+            )))
+        )
+    }
+
+    fn attr(config: impl Into<AttributeConfig>) -> Attribute {
+        Attribute {
+            id: Uuid::nil(),
+            owner_id: Uuid::nil(),
+            name: "test".to_string(),
+            description: None,
+            config: config.into(),
+        }
+    }
+
+    #[test]
+    fn validate_value_rejects_type_mismatch() {
+        let a = attr(SelectConfig {
+            options: vec!["a".to_string()],
+            ordered: false,
+            default: None,
+        });
+        let r = a.validate_value(&AttributeValue::Numeric(NumericValue::Exact(1.0)));
+        assert!(matches!(
+            r,
+            Err(DomainError::Rejected(RejectReason::AttributeMismatch))
+        ));
+    }
+
+    #[test]
+    fn numeric_validation() {
+        let cfg = NumericConfig {
+            min: Some(0.0),
+            max: Some(10.0),
+            integer: true,
+            default: None,
+        };
+        assert!(cfg.validate_value(&NumericValue::Exact(5.0)).is_ok());
+        assert!(cfg
+            .validate_value(&NumericValue::Range { min: 1.0, max: 9.0 })
+            .is_ok());
+        assert!(rejected_validation(&cfg.validate_value(&NumericValue::Exact(2.5)))); // non-integer
+        assert!(rejected_validation(&cfg.validate_value(&NumericValue::Exact(-1.0)))); // below min
+        assert!(rejected_validation(&cfg.validate_value(&NumericValue::Exact(11.0)))); // above max
+        assert!(rejected_validation(
+            &cfg.validate_value(&NumericValue::Exact(f64::NAN))
+        ));
+        assert!(rejected_validation(
+            &cfg.validate_value(&NumericValue::Range { min: 9.0, max: 1.0 })
+        ));
+    }
+
+    #[test]
+    fn select_validation() {
+        let opts = |ordered| SelectConfig {
+            options: vec!["low".to_string(), "mid".to_string(), "high".to_string()],
+            ordered,
+            default: None,
+        };
+        let in_range = SelectValue::Range {
+            min: "low".to_string(),
+            max: "high".to_string(),
+        };
+        assert!(opts(false)
+            .validate_value(&SelectValue::Exact("mid".to_string()))
+            .is_ok());
+        assert!(opts(true).validate_value(&in_range).is_ok());
+        assert!(rejected_validation(
+            &opts(false).validate_value(&SelectValue::Exact("nope".to_string()))
+        ));
+        assert!(rejected_validation(&opts(false).validate_value(&in_range))); // range on unordered
+        assert!(rejected_validation(
+            // endpoints reversed in option order
+            &opts(true).validate_value(&SelectValue::Range {
+                min: "high".to_string(),
+                max: "low".to_string(),
+            })
+        ));
+    }
+
+    #[test]
+    fn config_validation() {
+        // Numeric: unordered bounds, out-of-bounds default, non-integer bound.
+        assert!(NumericConfig::new(Some(10.0), Some(0.0), false, None).is_err());
+        assert!(NumericConfig::new(Some(0.0), Some(10.0), false, Some(11.0)).is_err());
+        assert!(NumericConfig::new(Some(0.5), None, true, None).is_err());
+        assert!(NumericConfig::new(Some(0.0), Some(10.0), true, Some(5.0)).is_ok());
+
+        // Select: duplicate options, non-member default; empty options allowed.
+        let select = |options: &[&str], default: Option<&str>| SelectConfig {
+            options: options.iter().map(|s| s.to_string()).collect(),
+            ordered: false,
+            default: default.map(|s| s.to_string()),
+        };
+        assert!(select(&["a", "b", "a"], None).validate().is_err());
+        assert!(select(&["a", "b"], Some("c")).validate().is_err());
+        assert!(select(&[], None).validate().is_ok());
+        assert!(select(&["a", "b"], Some("b")).validate().is_ok());
+
+        // Mass: duplicate default units.
+        assert!(MassConfig {
+            default_units: vec![MassUnit::Pound, MassUnit::Pound]
+        }
+        .validate()
+        .is_err());
+        assert!(MassConfig {
+            default_units: vec![MassUnit::Pound, MassUnit::Kilogram]
+        }
+        .validate()
+        .is_ok());
+    }
+
+    #[test]
+    fn mass_validation() {
+        let cfg = MassConfig {
+            default_units: vec![],
+        };
+        let m = |unit, value| MassMeasurement { unit, value };
+        assert!(cfg
+            .validate_value(&MassValue::Exact(vec![
+                m(MassUnit::Pound, 45.0),
+                m(MassUnit::Kilogram, 20.0),
+            ]))
+            .is_ok());
+        assert!(rejected_validation(&cfg.validate_value(&MassValue::Exact(vec![])))); // empty
+        assert!(rejected_validation(&cfg.validate_value(&MassValue::Exact(vec![
+            m(MassUnit::Pound, 45.0),
+            m(MassUnit::Pound, 25.0), // duplicate unit
+        ]))));
+        assert!(rejected_validation(&cfg.validate_value(&MassValue::Exact(vec![m(
+            MassUnit::Pound,
+            f64::INFINITY
+        )]))));
+    }
 }

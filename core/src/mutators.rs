@@ -9,13 +9,13 @@ use crate::{
         UpdateAttribute, UpdateAttributeValue, UpdateEntry, UpdateEntryCompletion, ValueField,
     },
     delta::{AnyDelta, Delta},
-    error::{DomainError, RejectReason, Result, ValidationError},
+    error::{DomainError, RejectReason, Result},
     forest::Forest,
     instantiation::instantiate_subtree,
     io::Io,
     models::{
         actor::{Actor, ActorKind},
-        attribute::{AttributeConfig, Value},
+        attribute::{AttributeConfig, NumericValue, SelectValue, Value},
         user::User,
     },
     queries::{
@@ -535,6 +535,8 @@ pub async fn create_attribute(
         ))));
     }
 
+    attribute.config.validate()?;
+
     let insert_attribute = Delta::Insert { new: attribute };
 
     Ok(Mutation {
@@ -639,6 +641,13 @@ pub async fn create_value(
             "attribute owner '{}' does not match entry owner '{}'",
             attribute.owner_id, entry.owner_id
         ))));
+    }
+
+    if let Some(plan) = &value.plan {
+        attribute.validate_value(plan)?;
+    }
+    if let Some(actual) = &value.actual {
+        attribute.validate_value(actual)?;
     }
 
     // No-op if a value for this (entry_id, attribute_id) already exists: an
@@ -821,16 +830,20 @@ pub async fn update_attribute_value(
         ))));
     }
 
-    if executor
+    let Some(attribute) = executor
         .execute(FindAttributeById {
             attribute_id: action.attribute_id,
         })
         .await?
-        .is_none()
-    {
+    else {
         return Err(DomainError::Rejected(RejectReason::NotFound(
             "attribute does not exist".to_string(),
         )));
+    };
+
+    // `None` (clearing the field) is trivially valid.
+    if let Some(value) = &action.value {
+        attribute.validate_value(value)?;
     }
 
     let Some(old) = executor
@@ -903,29 +916,9 @@ pub async fn update_attribute(
             };
             match change {
                 NumericChange::SetDefault(default) => {
+                    // Same rules as a value write: finite, integer-ness, min/max.
                     if let Some(v) = default {
-                        if cfg.integer && (!v.is_finite() || v.trunc() != *v) {
-                            return Err(ValidationError::InvalidNumericConfig(format!(
-                                "default ({v}) must be an integer"
-                            ))
-                            .into());
-                        }
-                        if let Some(min) = cfg.min {
-                            if *v < min {
-                                return Err(ValidationError::InvalidNumericConfig(format!(
-                                    "default ({v}) is below min ({min})"
-                                ))
-                                .into());
-                            }
-                        }
-                        if let Some(max) = cfg.max {
-                            if *v > max {
-                                return Err(ValidationError::InvalidNumericConfig(format!(
-                                    "default ({v}) is above max ({max})"
-                                ))
-                                .into());
-                            }
-                        }
+                        cfg.validate_value(&NumericValue::Exact(*v))?;
                     }
                     cfg.default = *default;
                 }
@@ -937,13 +930,9 @@ pub async fn update_attribute(
             };
             match change {
                 SelectChange::SetDefault(default) => {
+                    // Same rule as a value write: option membership.
                     if let Some(s) = default {
-                        if !cfg.options.contains(s) {
-                            return Err(ValidationError::Other(format!(
-                                "default '{s}' is not one of the select options"
-                            ))
-                            .into());
-                        }
+                        cfg.validate_value(&SelectValue::Exact(s.clone()))?;
                     }
                     cfg.default = default.clone();
                 }
