@@ -16,6 +16,7 @@ anarchist-readable-name-generator-lib = "0.2.1"
 anyhow = "1.0"
 dotenvy = "0.15.7"
 fractional_index = "2.0.2"
+hegeltest = { version = "0.15.2", features = ["rand"] }
 itertools = "0.14.0"
 lipsum = "0.9.1"
 proptest = "1.0.0"

@@ -14,10 +14,13 @@ use gv_core::{
     queries::Snapshot,
     std_lib::StandardLibrary,
 };
+use rand::RngExt;
 use rustc_hash::FxHashMap as HashMap;
 use std::{collections::HashSet, hash::Hash};
 use tracing::error;
 use uuid::Uuid;
+
+use crate::GenerationContext;
 
 #[derive(Debug, PartialEq)]
 pub struct Model {
@@ -78,7 +81,11 @@ impl Model {
 }
 
 impl Model {
-    pub async fn seed_basic(&mut self) -> gv_core::error::Result<()> {
+    pub async fn seed_basic<R: RngExt, C: GenerationContext>(
+        &mut self,
+        rng: &mut R,
+        ctx: &C,
+    ) -> gv_core::error::Result<()> {
         let actors_seed = vec![Actor {
             actor_id: SYSTEM_ACTOR_ID,
             actor_kind: ActorKind::System,

@@ -22,3 +22,6 @@ rand_distr = "0.6"
 # rand 0.9 RngCore, used only by the shim that adapts our 0.10 rng to the
 # rand-0.9-bound `anarchist-readable-name-generator-lib`.
 rand_core_0_9 = { package = "rand_core", version = "0.9" }
+
+[dev-dependencies]
+hegeltest = { workspace = true }

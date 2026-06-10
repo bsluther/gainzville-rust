@@ -24,6 +24,9 @@ target/
 # Claude Code local state
 .claude/
 
+# Hegel (property-based testing) artifacts: process logs + constants cache
+.hegel/
+
 # Swift build artifacts
 GvFfi.xcframework/
 
