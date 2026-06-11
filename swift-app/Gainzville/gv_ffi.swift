@@ -3165,12 +3165,12 @@ public func FfiConverterTypeMassAttributePair_lower(_ value: MassAttributePair) 
 
 
 public struct MassConfig: Equatable, Hashable {
-    public var defaultUnits: [MassUnit]
+    public var defaultUnit: MassUnit
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(defaultUnits: [MassUnit]) {
-        self.defaultUnits = defaultUnits
+    public init(defaultUnit: MassUnit) {
+        self.defaultUnit = defaultUnit
     }
 
     
@@ -3189,12 +3189,12 @@ public struct FfiConverterTypeMassConfig: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MassConfig {
         return
             try MassConfig(
-                defaultUnits: FfiConverterSequenceTypeMassUnit.read(from: &buf)
+                defaultUnit: FfiConverterTypeMassUnit.read(from: &buf)
         )
     }
 
     public static func write(_ value: MassConfig, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeMassUnit.write(value.defaultUnits, into: &buf)
+        FfiConverterTypeMassUnit.write(value.defaultUnit, into: &buf)
     }
 }
 
@@ -5220,7 +5220,7 @@ public func FfiConverterTypeFfiError_lower(_ value: FfiError) -> RustBuffer {
 
 public enum MassChange: Equatable, Hashable {
     
-    case setDefaultUnits([MassUnit]
+    case setDefaultUnit(MassUnit
     )
 
 
@@ -5243,7 +5243,7 @@ public struct FfiConverterTypeMassChange: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .setDefaultUnits(try FfiConverterSequenceTypeMassUnit.read(from: &buf)
+        case 1: return .setDefaultUnit(try FfiConverterTypeMassUnit.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5254,9 +5254,9 @@ public struct FfiConverterTypeMassChange: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .setDefaultUnits(v1):
+        case let .setDefaultUnit(v1):
             writeInt(&buf, Int32(1))
-            FfiConverterSequenceTypeMassUnit.write(v1, into: &buf)
+            FfiConverterTypeMassUnit.write(v1, into: &buf)
             
         }
     }
@@ -5357,9 +5357,9 @@ public func FfiConverterTypeMassUnit_lower(_ value: MassUnit) -> RustBuffer {
 
 public enum MassValue: Equatable, Hashable {
     
-    case exact([MassMeasurement]
+    case exact(MassMeasurement
     )
-    case range(min: [MassMeasurement], max: [MassMeasurement]
+    case range(unit: MassUnit, min: Double, max: Double
     )
 
 
@@ -5382,10 +5382,10 @@ public struct FfiConverterTypeMassValue: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .exact(try FfiConverterSequenceTypeMassMeasurement.read(from: &buf)
+        case 1: return .exact(try FfiConverterTypeMassMeasurement.read(from: &buf)
         )
         
-        case 2: return .range(min: try FfiConverterSequenceTypeMassMeasurement.read(from: &buf), max: try FfiConverterSequenceTypeMassMeasurement.read(from: &buf)
+        case 2: return .range(unit: try FfiConverterTypeMassUnit.read(from: &buf), min: try FfiConverterDouble.read(from: &buf), max: try FfiConverterDouble.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5398,13 +5398,14 @@ public struct FfiConverterTypeMassValue: FfiConverterRustBuffer {
         
         case let .exact(v1):
             writeInt(&buf, Int32(1))
-            FfiConverterSequenceTypeMassMeasurement.write(v1, into: &buf)
+            FfiConverterTypeMassMeasurement.write(v1, into: &buf)
             
         
-        case let .range(min,max):
+        case let .range(unit,min,max):
             writeInt(&buf, Int32(2))
-            FfiConverterSequenceTypeMassMeasurement.write(min, into: &buf)
-            FfiConverterSequenceTypeMassMeasurement.write(max, into: &buf)
+            FfiConverterTypeMassUnit.write(unit, into: &buf)
+            FfiConverterDouble.write(min, into: &buf)
+            FfiConverterDouble.write(max, into: &buf)
             
         }
     }
@@ -6353,31 +6354,6 @@ fileprivate struct FfiConverterSequenceTypeEntry: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeMassMeasurement: FfiConverterRustBuffer {
-    typealias SwiftType = [MassMeasurement]
-
-    public static func write(_ value: [MassMeasurement], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeMassMeasurement.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [MassMeasurement] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [MassMeasurement]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeMassMeasurement.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeValue: FfiConverterRustBuffer {
     typealias SwiftType = [Value]
 
@@ -6420,31 +6396,6 @@ fileprivate struct FfiConverterSequenceTypeAttributePair: FfiConverterRustBuffer
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAttributePair.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeMassUnit: FfiConverterRustBuffer {
-    typealias SwiftType = [MassUnit]
-
-    public static func write(_ value: [MassUnit], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeMassUnit.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [MassUnit] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [MassUnit]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeMassUnit.read(from: &buf))
         }
         return seq
     }

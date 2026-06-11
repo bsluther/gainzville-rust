@@ -7,7 +7,7 @@ use gv_core::models::{
 };
 use uuid::Uuid;
 
-use rand::seq::{IndexedRandom, SliceRandom};
+use rand::seq::IndexedRandom;
 use rand::{RngExt, seq::IteratorRandom};
 
 use crate::{Arbitrary, ArbitraryFrom, GenerationContext, gen_random_text, maybe, pick};
@@ -91,12 +91,8 @@ impl Arbitrary for SelectConfig {
 impl Arbitrary for MassConfig {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         let all_units = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
-        let n = rng.random_range(1..=all_units.len());
-        let mut units: Vec<MassUnit> = all_units.to_vec();
-        units.shuffle(rng);
-        units.truncate(n);
         MassConfig {
-            default_units: units,
+            default_unit: pick(&all_units[..], rng).unwrap().clone(),
         }
     }
 }
@@ -236,32 +232,23 @@ impl ArbitraryFrom<&MassConfig> for MassValue {
         _config: &MassConfig,
     ) -> Self {
         let all_units = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
-        let rand_measurements = |rng: &mut R| -> Vec<MassMeasurement> {
-            let n = rng.random_range(1..=all_units.len());
-            let mut units = all_units.to_vec();
-            units.shuffle(rng);
-            units.truncate(n);
-            units
-                .into_iter()
-                .map(|unit| MassMeasurement {
-                    unit,
-                    value: rng.random_range(0.0..500.0),
-                })
-                .collect()
-        };
+        let rand_unit = |rng: &mut R| pick(&all_units[..], rng).unwrap().clone();
+        let rand_magnitude = |rng: &mut R| -> f64 { rng.random_range(0.0..500.0) };
 
-        // TEMPORARY: always generate exact values for UI development.
-        match rng.random_range(0..=0) {
-            0 => MassValue::Exact(rand_measurements(rng)),
+        match rng.random_range(0..=1) {
+            0 => MassValue::Exact(MassMeasurement {
+                unit: rand_unit(rng),
+                value: rand_magnitude(rng),
+            }),
             _ => {
-                let a = rand_measurements(rng);
-                let b = rand_measurements(rng);
-                let (min, max) = if a[0].value <= b[0].value {
-                    (a, b)
-                } else {
-                    (b, a)
-                };
-                MassValue::Range { min, max }
+                let a = rand_magnitude(rng);
+                let b = rand_magnitude(rng);
+                let (min, max) = if a <= b { (a, b) } else { (b, a) };
+                MassValue::Range {
+                    unit: rand_unit(rng),
+                    min,
+                    max,
+                }
             }
         }
     }

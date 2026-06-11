@@ -80,8 +80,6 @@ pub enum ValidationError {
     InvalidNumericConfig(String),
     #[error("Invalid select config: {0}")]
     InvalidSelectConfig(String),
-    #[error("Invalid mass config: {0}")]
-    InvalidMassConfig(String),
     #[error("Invalid value: {0}")]
     InvalidValue(String),
     #[error("Other: {0}")]

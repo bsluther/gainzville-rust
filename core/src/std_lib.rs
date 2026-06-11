@@ -29,7 +29,7 @@ impl StandardLibrary {
             name: "Load".to_string(),
             description: Some("External resistance or weight".to_string()),
             config: MassConfig {
-                default_units: vec![MassUnit::Pound],
+                default_unit: MassUnit::Pound,
             }
             .into(),
         };

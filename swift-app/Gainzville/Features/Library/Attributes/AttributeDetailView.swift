@@ -93,7 +93,7 @@ struct AttributeDetailView: View {
         case .select(let cfg):
             SelectConfigEditor(config: cfg) { vm.apply(.select(.setDefault($0))) }
         case .mass(let cfg):
-            MassConfigEditor(config: cfg) { vm.apply(.mass(.setDefaultUnits($0))) }
+            MassConfigEditor(config: cfg) { vm.apply(.mass(.setDefaultUnit($0))) }
         }
     }
 }
@@ -303,41 +303,30 @@ private struct DefaultOptionList: View {
 
 private struct MassConfigEditor: View {
     let config: MassConfig
-    let onSetUnits: ([MassUnit]) -> Void
+    let onSetUnit: (MassUnit) -> Void
 
-    // Stable display order for the unit checkboxes.
+    // Stable display order for the unit rows.
     private let allUnits: [MassUnit] = [.gram, .kilogram, .pound]
 
     var body: some View {
         VStack(spacing: GvSpacing.md) {
-            Text("Default units")
+            Text("Default unit")
                 .font(.gvBody)
                 .foregroundStyle(Color.gvTextSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // Single-select: checking a unit replaces the previous default.
             ForEach(allUnits, id: \.self) { unit in
                 HStack {
                     Text(label(for: unit))
                         .font(.gvBody)
                         .foregroundStyle(Color.gvTextPrimary)
                     Spacer()
-                    GvCheckbox(checked: config.defaultUnits.contains(unit)) {
-                        toggle(unit)
+                    GvCheckbox(checked: config.defaultUnit == unit) {
+                        if config.defaultUnit != unit { onSetUnit(unit) }
                     }
                 }
             }
         }
-    }
-
-    private func toggle(_ unit: MassUnit) {
-        var units = config.defaultUnits
-        if let idx = units.firstIndex(of: unit) {
-            units.remove(at: idx)
-        } else {
-            // Preserve the canonical display order when adding.
-            units.append(unit)
-            units = allUnits.filter { units.contains($0) }
-        }
-        onSetUnits(units)
     }
 
     private func label(for unit: MassUnit) -> String {

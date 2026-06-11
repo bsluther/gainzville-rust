@@ -120,13 +120,13 @@ pub struct MassAttributePair {
 }
 
 impl MassAttributePair {
-    pub fn defined_units(&self) -> Vec<MassUnit> {
-        let plan_units = self.plan.clone().map_or(vec![], |m| m.defined_units());
-        let actual_units = self.actual.clone().map_or(vec![], |m| m.defined_units());
-        plan_units
-            .iter()
-            .chain(actual_units.iter().filter(|u| !plan_units.contains(u)))
-            .cloned()
-            .collect()
+    /// The unit this pair presents in: the actual value's unit, else the
+    /// plan's, else the config's `default_unit`.
+    pub fn display_unit(&self) -> MassUnit {
+        self.actual
+            .as_ref()
+            .or(self.plan.as_ref())
+            .map(|v| v.unit().clone())
+            .unwrap_or_else(|| self.config.default_unit.clone())
     }
 }

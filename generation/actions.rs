@@ -301,12 +301,8 @@ impl Arbitrary for UpdateAttribute {
                 }
                 AttributeConfig::Mass(_) => {
                     let all = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
-                    let units: Vec<MassUnit> = all
-                        .iter()
-                        .filter(|_| rng.random_bool(0.5))
-                        .cloned()
-                        .collect();
-                    AttributeChange::Mass(MassChange::SetDefaultUnits(units))
+                    let unit = pick(&all[..], rng).unwrap().clone();
+                    AttributeChange::Mass(MassChange::SetDefaultUnit(unit))
                 }
             },
         };

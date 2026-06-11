@@ -193,7 +193,7 @@ fn attribute_round_trips_mass() {
         name: "Load".to_string(),
         description: None,
         config: AttributeConfig::Mass(MassConfig {
-            default_units: vec![MassUnit::Kilogram, MassUnit::Pound],
+            default_unit: MassUnit::Kilogram,
         }),
     };
     let row = AttributeRow::from_attribute(&attr).unwrap();
@@ -224,12 +224,10 @@ fn value_round_trips_mass() {
         index_float: Some(50.0),
         index_string: None,
         plan: None,
-        actual: Some(AttributeValue::Mass(MassValue::Exact(vec![
-            MassMeasurement {
-                unit: MassUnit::Kilogram,
-                value: 50.0,
-            },
-        ]))),
+        actual: Some(AttributeValue::Mass(MassValue::Exact(MassMeasurement {
+            unit: MassUnit::Kilogram,
+            value: 50.0,
+        }))),
     };
     let row = ValueRow::from_value(&value).unwrap();
     let got = row.to_value().unwrap();

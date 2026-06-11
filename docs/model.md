@@ -231,10 +231,11 @@ A set of options from which 0-n values are selected.
 - **Index type:** `???`.
 
 ##### Measures
-A scalar measurement in an SI unit. The UI supports representation in a combination of denormalized
-units, e.g. time may be represented as hours + minutes + seconds. The denormalized represention is
-stored for a consistent UX while the normalized representation (in the SI base unit) is stored for
-indexing and comparison. The 
+A scalar measurement stored as a single magnitude in a single unit (the user's chosen unit, so
+input isn't reformatted). Mixed-radix display formats (e.g. hours + minutes + seconds, feet +
+inches) are a presentation concern over the one stored magnitude — see "Single Measurement per
+Mass Value" in attributes-design.md. A normalized (SI) representation backs indexing and
+comparison via the value's index column.
 - Units I want to support soon: time (s), length (m), mass (kg).
 - Will eventualy want to support composite units: speed (m/s), joules to support calories (N*m), etc.
 - Will eventually want kelvin K for temperature.

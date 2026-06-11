@@ -190,7 +190,7 @@ pub enum MassUnit {
 
 #[uniffi::remote(Record)]
 pub struct MassConfig {
-    pub default_units: Vec<MassUnit>,
+    pub default_unit: MassUnit,
 }
 
 #[uniffi::remote(Enum)]
@@ -231,11 +231,8 @@ pub struct MassMeasurement {
 
 #[uniffi::remote(Enum)]
 pub enum MassValue {
-    Exact(Vec<MassMeasurement>),
-    Range {
-        min: Vec<MassMeasurement>,
-        max: Vec<MassMeasurement>,
-    },
+    Exact(MassMeasurement),
+    Range { unit: MassUnit, min: f64, max: f64 },
 }
 
 #[uniffi::remote(Enum)]
@@ -567,7 +564,7 @@ pub enum SelectChange {
 
 #[uniffi::remote(Enum)]
 pub enum MassChange {
-    SetDefaultUnits(Vec<MassUnit>),
+    SetDefaultUnit(MassUnit),
 }
 
 #[uniffi::remote(Enum)]

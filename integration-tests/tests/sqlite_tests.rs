@@ -356,21 +356,20 @@ async fn seed_entry(client: &SqliteClient) -> (User, Entry) {
 }
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
-async fn test_attach_mass_seeds_default_units(pool: SqlitePool) {
+async fn test_attach_mass_seeds_default_unit(pool: SqlitePool) {
     let sqlite_client =
         SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
 
     let (user, entry) = seed_entry(&sqlite_client).await;
     let user_id = user.actor_id.clone();
 
-    // Mass attribute with two default units.
     let attribute = Attribute {
         id: Uuid::new_v4(),
         owner_id: user_id,
         name: "Load".to_string(),
         description: None,
         config: AttributeConfig::Mass(MassConfig {
-            default_units: vec![MassUnit::Kilogram, MassUnit::Pound],
+            default_unit: MassUnit::Kilogram,
         }),
     };
     sqlite_client
@@ -402,70 +401,17 @@ async fn test_attach_mass_seeds_default_units(pool: SqlitePool) {
             .expect("value should exist after attach")
     };
 
-    // Both plan and actual seed a zero-magnitude measurement per default unit.
-    let expected = vec![
-        MassMeasurement {
-            unit: MassUnit::Kilogram,
-            value: 0.0,
-        },
-        MassMeasurement {
-            unit: MassUnit::Pound,
-            value: 0.0,
-        },
-    ];
+    // Both plan and actual seed a zero-magnitude measurement in the default unit.
+    let expected = MassMeasurement {
+        unit: MassUnit::Kilogram,
+        value: 0.0,
+    };
     for field in [value.plan, value.actual] {
         match field.expect("seeded mass present") {
-            AttributeValue::Mass(MassValue::Exact(ms)) => assert_eq!(ms, expected),
-            other => panic!("expected Mass Exact with default units, got {:?}", other),
+            AttributeValue::Mass(MassValue::Exact(m)) => assert_eq!(m, expected),
+            other => panic!("expected Mass Exact in the default unit, got {:?}", other),
         }
     }
-}
-
-#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
-async fn test_attach_mass_empty_units_seeds_none(pool: SqlitePool) {
-    let sqlite_client =
-        SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
-    let (user, entry) = seed_entry(&sqlite_client).await;
-
-    let attribute = Attribute {
-        id: Uuid::new_v4(),
-        owner_id: user.actor_id,
-        name: "Load".to_string(),
-        description: None,
-        config: AttributeConfig::Mass(MassConfig {
-            default_units: vec![],
-        }),
-    };
-    sqlite_client
-        .run_action(CreateAttribute::from(attribute.clone()).into())
-        .await
-        .unwrap();
-
-    sqlite_client
-        .run_action(
-            AttachValue {
-                actor_id: user.actor_id,
-                entry_id: entry.id,
-                attribute_id: attribute.id,
-            }
-            .into(),
-        )
-        .await
-        .unwrap();
-
-    let value = {
-        let mut connection = sqlite_client.pool.acquire().await.unwrap();
-        SqliteQueryExecutor::new(&mut *connection)
-            .execute(FindValueByKey {
-                entry_id: entry.id,
-                attribute_id: attribute.id,
-            })
-            .await
-            .unwrap()
-            .expect("value should exist after attach")
-    };
-    assert!(value.plan.is_none(), "no default units -> empty plan");
-    assert!(value.actual.is_none(), "no default units -> empty actual");
 }
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
@@ -851,14 +797,14 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
         "numeric change on a select attribute must be rejected"
     );
 
-    // --- Mass: replace default units; common SetName edit.
+    // --- Mass: replace the default unit; common SetName edit.
     let mass = Attribute {
         id: Uuid::new_v4(),
         owner_id: user.actor_id,
         name: "Load".to_string(),
         description: None,
         config: AttributeConfig::Mass(MassConfig {
-            default_units: vec![MassUnit::Kilogram],
+            default_unit: MassUnit::Kilogram,
         }),
     };
     sqlite_client
@@ -870,10 +816,7 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
             UpdateAttribute {
                 actor_id: user.actor_id,
                 attribute_id: mass.id,
-                change: AttributeChange::Mass(MassChange::SetDefaultUnits(vec![
-                    MassUnit::Pound,
-                    MassUnit::Kilogram,
-                ])),
+                change: AttributeChange::Mass(MassChange::SetDefaultUnit(MassUnit::Pound)),
             }
             .into(),
         )
@@ -884,8 +827,8 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
             .await
             .expect_mass()
             .unwrap()
-            .default_units,
-        vec![MassUnit::Pound, MassUnit::Kilogram]
+            .default_unit,
+        MassUnit::Pound
     );
 
     sqlite_client
@@ -903,7 +846,7 @@ async fn test_update_attribute_defaults(pool: SqlitePool) {
 }
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
-async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
+async fn test_update_attribute_noop(pool: SqlitePool) {
     let sqlite_client =
         SqliteClient::from_pool(pool, std::sync::Arc::new(gv_core::io::SystemIo::default()));
     let user = create_user(&sqlite_client).await;
@@ -945,45 +888,6 @@ async fn test_update_attribute_noop_and_dedupe(pool: SqlitePool) {
     assert!(
         mutation.changes.is_empty(),
         "setting the default to its current value must be a no-op"
-    );
-
-    // --- Mass dedupe: duplicates collapse, first-seen order preserved.
-    let mass = Attribute {
-        id: Uuid::new_v4(),
-        owner_id: user.actor_id,
-        name: "Load".to_string(),
-        description: None,
-        config: AttributeConfig::Mass(MassConfig {
-            default_units: vec![],
-        }),
-    };
-    sqlite_client
-        .run_action(CreateAttribute::from(mass.clone()).into())
-        .await
-        .unwrap();
-    sqlite_client
-        .run_action(
-            UpdateAttribute {
-                actor_id: user.actor_id,
-                attribute_id: mass.id,
-                change: AttributeChange::Mass(MassChange::SetDefaultUnits(vec![
-                    MassUnit::Kilogram,
-                    MassUnit::Pound,
-                    MassUnit::Kilogram,
-                    MassUnit::Gram,
-                ])),
-            }
-            .into(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        read_attribute(&sqlite_client, mass.id)
-            .await
-            .expect_mass()
-            .unwrap()
-            .default_units,
-        vec![MassUnit::Kilogram, MassUnit::Pound, MassUnit::Gram]
     );
 }
 

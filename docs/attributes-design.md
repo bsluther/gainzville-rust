@@ -60,6 +60,17 @@ State 2 is needed because users can add/remove attributes per entry independentl
 
 **No `attribute_type` field on the struct**: The enum variant is the discriminator. A separate field would create inconsistent states. Derive it when needed via `attribute.config.data_type()`.
 
+### Single Measurement per Mass Value
+
+**Decision**: A mass value is one measurement in one unit — `MassValue::Exact(MassMeasurement)` / `Range { unit, min, max }` (both range endpoints share the unit, so min ≤ max is validated without conversion). `MassConfig` carries a single required `default_unit`, used for the attach-time seed and for presenting an empty value. Planned measures (distance) should copy this shape.
+
+**History**: Mass values were originally `Vec<MassMeasurement>` with aggregate semantics — each element an independent fact summing to the whole (`[220 lb, 100 kg]` = 440 lb), motivated by not reformatting mixed-unit user input. A survey of training-log use cases found no case where that's the natural shape; every mixed-unit scenario falls into one of three buckets, each better served another way:
+- *Entry-time arithmetic* (mixed kg/lb plate loading, ruck pack sums) — the tracked quantity is the single total (which `index_float` already assumes), and a flat list doesn't capture the loadout faithfully anyway (no plate counts or per-side structure). A plate-math input helper is the right future tool.
+- *Genuinely separate facts* (recipe ingredients, intervals, triathlon legs) — multiple values or child entries; aggregating them into one value is the wrong model.
+- *Mixed-radix presentation of one quantity* (5'11", 12 st 6 lb, 7 lb 8 oz) — a display format, like the temporal type's `hh:mm:ss`. If wanted later, the upgrade path is a compound *display unit* (e.g. feet+inches) over a single stored magnitude — not a list of independent measurements.
+
+The "don't reformat user input" concern is covered by storing the user's chosen unit per value (a stored value's unit may differ from `default_unit`).
+
 ### No owner_id on Values
 
 **Decision**: Values do not carry an `owner_id`. Ownership is derived from the entry.
@@ -100,8 +111,7 @@ A handful of UX questions were raised while building the first round of attribut
 - **Mode = stored value + local override.** There's no DB representation of an "empty range", so toggling writes nothing; a local override covers the gap until a commit (or abandonment) makes the stored value agree. Toggling range→exact collapses to min.
 - **Prefill:** entering range mode, min inherits the exact value, max starts empty — prefilling both would let the debounce auto-commit a degenerate `5 – 5`.
 - **Incomplete ranges never commit** (the mid-typing skip convention, extended): blur with half a range abandons the edit and resyncs.
-- **Inverted ranges (min > max) hold during the debounce window and swap at blur/commit.** Select swaps at pick-commit (filtering the option list instead would deadlock raising min past the stored max). Mass swaps per-unit — same-unit comparison, no conversion involved.
-- **Mass commits are whole-value** (`MassValue::Range` is one value): every unit with content needs a complete pair; untouched empty default units are skipped. Multi-unit ranges are supported as a list of per-unit pills, though single-unit values remain the expected case.
+- **Inverted ranges (min > max) hold during the debounce window and swap at blur/commit.** Select swaps at pick-commit (filtering the option list instead would deadlock raising min past the stored max). Mass swaps too — a range's endpoints share one unit, so the comparison needs no conversion (and core validates min ≤ max on write).
 
 ### Clear-value semantics
 There is no UI affordance for "this attribute has no value." For numeric and mass, an emptied input commits `0` rather than nothing — a stop-gap that loses the distinction between "intentionally zero" and "cleared." A proper clear path needs either a dedicated clear control (cluttering each row), an `UpdateAttributeValue` variant that writes `None`, or a dedicated `ClearAttributeValue` action. Likely belongs in the per-attribute focus menu.
@@ -119,7 +129,7 @@ A user can add or remove an attribute on any entry (log or template). `AttachVal
 Per-attribute controls live in the focused attribute's action bar (keyboard accessory on iOS, popover on macOS, sheet header for picker kinds) rather than a permanent per-row menu. *Clear*, *Remove*, and *Range vs. exact* are wired; *Units* remains a placeholder. Mid-session presentation changes (the Range checkbox) reach the bar through `AttributeBarPublisher`, which re-publishes when an action's value-state changes — actions carry presentation as data and compare with a closure-blind `Equatable`.
 
 ### Unit selection / conversion for measures
-`MassConfig.default_units` is now editable in the attribute profile (`AttributeDetailView` → Mass config) via `UpdateAttribute(Mass(SetDefaultUnits(..)))`; add/remove is allowed since changing the default units doesn't invalidate existing values. Still deferred: per-*entry* unit selection in the log editor (today it derives "units to show" from the union of plan/actual measurements, falling back to defaults, then `[Pound]`) and conversion between units (e.g. the user replaces `lb` with `kg` while a value exists) — a natural place for a pure helper in core (e.g. `MassValue::with_units(...)`), independent of the editor's UI state.
+`MassConfig.default_unit` is editable in the attribute profile (`AttributeDetailView` → Mass config) via `UpdateAttribute(Mass(SetDefaultUnit(..)))`; it's unconstrained since stored values carry their own unit. Still deferred: per-*entry* unit selection in the log editor (today the pill renders in `display_unit` — the actual value's unit, else the plan's, else `default_unit`) and conversion between units (e.g. the user switches a value from `lb` to `kg`) — a natural place for a pure helper in core (e.g. `MassValue::converted_to(unit)`), independent of the editor's UI state.
 
 ### Stateful "EditingAttribute" abstraction in core
 Considered: a stateful editor type in core, reachable from any client, that holds intermediate edit state, runs validation, and handles unit redistribution for measures. Deferred in favor of a simpler arrangement:

@@ -58,8 +58,8 @@ impl Attribute {
 
     /// The scalar config default mapped to an `AttributeValue`, if this type has
     /// one. Numeric and Select carry a scalar default; Mass has only
-    /// `default_units` and returns `None` here (use `seed_value` to build a Mass
-    /// seed from its units).
+    /// `default_unit` and returns `None` here (use `seed_value` to build a Mass
+    /// seed from its unit).
     pub fn default_value(&self) -> Option<AttributeValue> {
         match &self.config {
             AttributeConfig::Numeric(c) => c
@@ -90,23 +90,16 @@ impl Attribute {
 
     /// Build the seed `Value` used when attaching this attribute to an entry.
     /// Both `plan` and `actual` are set to the resolved default. Scalar types use
-    /// `default_value`; Mass constructs a zero-magnitude `MassMeasurement` per
-    /// `default_unit` (or `None` when there are no default units). The composite
-    /// key is `(entry_id, self.id)`.
+    /// `default_value`; Mass constructs a zero-magnitude `MassMeasurement` in the
+    /// config's `default_unit`. The composite key is `(entry_id, self.id)`.
     pub fn seed_value(&self, entry_id: Uuid) -> Value {
         let seed = match &self.config {
-            AttributeConfig::Mass(c) if !c.default_units.is_empty() => {
-                let measurements = c
-                    .default_units
-                    .iter()
-                    .map(|unit| MassMeasurement {
-                        unit: unit.clone(),
-                        value: 0.0,
-                    })
-                    .collect();
-                Some(AttributeValue::Mass(MassValue::Exact(measurements)))
+            AttributeConfig::Mass(c) => {
+                Some(AttributeValue::Mass(MassValue::Exact(MassMeasurement {
+                    unit: c.default_unit.clone(),
+                    value: 0.0,
+                })))
             }
-            AttributeConfig::Mass(_) => None,
             _ => self.default_value(),
         };
         Value {
@@ -154,7 +147,9 @@ impl AttributeConfig {
         match self {
             AttributeConfig::Numeric(c) => c.validate(),
             AttributeConfig::Select(c) => c.validate(),
-            AttributeConfig::Mass(c) => c.validate(),
+            // Mass has no cross-field coherence to check: any single
+            // `default_unit` is valid.
+            AttributeConfig::Mass(_) => Ok(()),
         }
     }
 
@@ -339,62 +334,38 @@ impl SelectConfig {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MassConfig {
-    pub default_units: Vec<MassUnit>,
+    /// Unit used for the attach-time seed value and for presenting an empty
+    /// (cleared) value. A stored value carries its own unit and may differ.
+    pub default_unit: MassUnit,
 }
 
 impl MassConfig {
-    /// Validate the config itself: default units must be unique. (Note
-    /// `SetDefaultUnits` normalizes by deduping instead of rejecting; this
-    /// guards the create path, where the config arrives whole.)
-    pub fn validate(&self) -> Result<()> {
-        for (i, unit) in self.default_units.iter().enumerate() {
-            if self.default_units[..i].contains(unit) {
-                return Err(ValidationError::InvalidMassConfig(format!(
-                    "duplicate default unit ({unit:?})"
-                ))
-                .into());
-            }
-        }
-        Ok(())
-    }
-
-    /// Structural checks only: measurement lists must be non-empty with finite
-    /// magnitudes and no duplicate units. Comparing range endpoints (min <= max)
-    /// requires unit conversion, which is deferred — see
-    /// docs/attributes-design.md "Unit selection / conversion for measures".
+    /// Validate a mass value against this config: magnitudes must be finite,
+    /// and range endpoints ordered (min <= max) — both endpoints share one
+    /// unit, so no conversion is involved. The unit itself is unconstrained;
+    /// `default_unit` only picks the presentation default.
     pub fn validate_value(&self, value: &MassValue) -> Result<()> {
-        fn check(label: &str, measurements: &[MassMeasurement]) -> Result<()> {
-            if measurements.is_empty() {
+        let finite = |label: &str, v: f64| -> Result<()> {
+            if !v.is_finite() {
                 return Err(ValidationError::InvalidValue(format!(
-                    "{label} must have at least one measurement"
+                    "{label} magnitude ({v}) must be finite"
                 ))
                 .into());
-            }
-            let mut seen: Vec<&MassUnit> = Vec::with_capacity(measurements.len());
-            for m in measurements {
-                if !m.value.is_finite() {
-                    return Err(ValidationError::InvalidValue(format!(
-                        "{label} magnitude ({}) must be finite",
-                        m.value
-                    ))
-                    .into());
-                }
-                if seen.contains(&&m.unit) {
-                    return Err(ValidationError::InvalidValue(format!(
-                        "{label} has a duplicate unit ({:?})",
-                        m.unit
-                    ))
-                    .into());
-                }
-                seen.push(&m.unit);
             }
             Ok(())
-        }
+        };
         match value {
-            MassValue::Exact(m) => check("mass value", m),
-            MassValue::Range { min, max } => {
-                check("mass range min", min)?;
-                check("mass range max", max)
+            MassValue::Exact(m) => finite("mass value", m.value),
+            MassValue::Range { unit: _, min, max } => {
+                finite("mass range min", *min)?;
+                finite("mass range max", *max)?;
+                if min > max {
+                    return Err(ValidationError::InvalidValue(format!(
+                        "range min ({min}) is above range max ({max})"
+                    ))
+                    .into());
+                }
+                Ok(())
             }
         }
     }
@@ -475,32 +446,21 @@ pub enum SelectValue {
     Range { min: String, max: String },
 }
 
+/// One measurement in one unit. Composite formats (e.g. "5 lb 4 oz") are a
+/// presentation concern — see docs/attributes-design.md "Single measurement
+/// per value".
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MassValue {
-    Exact(Vec<MassMeasurement>),
-    Range {
-        min: Vec<MassMeasurement>,
-        max: Vec<MassMeasurement>,
-    },
+    Exact(MassMeasurement),
+    /// Both endpoints share one unit, so ordering needs no conversion.
+    Range { unit: MassUnit, min: f64, max: f64 },
 }
 
 impl MassValue {
-    pub fn defined_units(&self) -> Vec<MassUnit> {
+    pub fn unit(&self) -> &MassUnit {
         match self {
-            MassValue::Exact(measurements) => measurements.iter().map(|m| m.unit.clone()).collect(),
-            MassValue::Range { min, max } => {
-                let min_units: Vec<_> = min.iter().map(|m| m.unit.clone()).collect();
-                let union: Vec<MassUnit> = min_units
-                    .iter()
-                    .chain(
-                        max.iter()
-                            .map(|m| &m.unit)
-                            .filter(|m| !min_units.contains(m)),
-                    )
-                    .cloned()
-                    .collect();
-                union
-            }
+            MassValue::Exact(m) => &m.unit,
+            MassValue::Range { unit, .. } => unit,
         }
     }
 }
@@ -618,39 +578,32 @@ mod tests {
         assert!(select(&[], None).validate().is_ok());
         assert!(select(&["a", "b"], Some("b")).validate().is_ok());
 
-        // Mass: duplicate default units.
-        assert!(MassConfig {
-            default_units: vec![MassUnit::Pound, MassUnit::Pound]
-        }
-        .validate()
-        .is_err());
-        assert!(MassConfig {
-            default_units: vec![MassUnit::Pound, MassUnit::Kilogram]
-        }
-        .validate()
-        .is_ok());
     }
 
     #[test]
     fn mass_validation() {
         let cfg = MassConfig {
-            default_units: vec![],
+            default_unit: MassUnit::Pound,
         };
         let m = |unit, value| MassMeasurement { unit, value };
+        // The value's unit is free to differ from the config default.
         assert!(cfg
-            .validate_value(&MassValue::Exact(vec![
-                m(MassUnit::Pound, 45.0),
-                m(MassUnit::Kilogram, 20.0),
-            ]))
+            .validate_value(&MassValue::Exact(m(MassUnit::Kilogram, 20.0)))
             .is_ok());
-        assert!(rejected_validation(&cfg.validate_value(&MassValue::Exact(vec![])))); // empty
-        assert!(rejected_validation(&cfg.validate_value(&MassValue::Exact(vec![
-            m(MassUnit::Pound, 45.0),
-            m(MassUnit::Pound, 25.0), // duplicate unit
-        ]))));
-        assert!(rejected_validation(&cfg.validate_value(&MassValue::Exact(vec![m(
-            MassUnit::Pound,
-            f64::INFINITY
-        )]))));
+        assert!(cfg
+            .validate_value(&MassValue::Range {
+                unit: MassUnit::Pound,
+                min: 45.0,
+                max: 55.0,
+            })
+            .is_ok());
+        assert!(rejected_validation(&cfg.validate_value(&MassValue::Exact(
+            m(MassUnit::Pound, f64::INFINITY)
+        ))));
+        assert!(rejected_validation(&cfg.validate_value(&MassValue::Range {
+            unit: MassUnit::Pound,
+            min: 55.0,
+            max: 45.0, // inverted
+        })));
     }
 }

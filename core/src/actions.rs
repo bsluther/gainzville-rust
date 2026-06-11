@@ -274,9 +274,9 @@ pub enum SelectChange {
 
 #[derive(Debug, Clone)]
 pub enum MassChange {
-    /// Replace the default unit set. Not additive-constrained — changing units
-    /// doesn't invalidate existing values — so add/remove are both allowed.
-    SetDefaultUnits(Vec<MassUnit>),
+    /// Replace the default unit. Not additive-constrained — stored values
+    /// carry their own unit, so changing the default invalidates nothing.
+    SetDefaultUnit(MassUnit),
 }
 
 /// Update an entry's structural/metadata fields. Deliberately excludes

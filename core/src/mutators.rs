@@ -943,15 +943,8 @@ pub async fn update_attribute(
                 return Err(DomainError::Rejected(RejectReason::AttributeMismatch));
             };
             match change {
-                MassChange::SetDefaultUnits(units) => {
-                    // Dedupe while preserving order.
-                    let mut deduped = Vec::with_capacity(units.len());
-                    for unit in units {
-                        if !deduped.contains(unit) {
-                            deduped.push(unit.clone());
-                        }
-                    }
-                    cfg.default_units = deduped;
+                MassChange::SetDefaultUnit(unit) => {
+                    cfg.default_unit = unit.clone();
                 }
             }
         }
