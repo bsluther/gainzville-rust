@@ -5,6 +5,7 @@ enum GvSpacing {
     static let md: CGFloat =  8
     static let lg: CGFloat = 12
     static let xl: CGFloat = 24
+    static let xxl: CGFloat = 48
 
     // MARK: - Entry tokens
     static let entrySpacing: CGFloat              = lg  // inner padding & VStack gap

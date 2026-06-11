@@ -1,22 +1,37 @@
 import SwiftUI
 
 // Editor for mass (and, in the future, other measure-typed) attributes. Renders
-// one number-input pill + short unit label per in-use unit. Empty fields render
-// as empty placeholders, not "0", per the user-facing spec.
+// one pill + short unit label per in-use unit. Empty fields render as empty
+// placeholders, not "0", per the user-facing spec.
 //
 // Unit selection and conversion are deferred (see docs/attributes-design.md
 // "Unit selection / conversion for measures") — the view shows the union of
 // plan/actual measurement units and the attribute's `defaultUnits`, with
 // `[Pound]` as the ultimate fallback.
+//
+// Range editing: each unit's pill switches between one exact input and a
+// min–max pair via the action bar's Range toggle. `MassValue.range` is one
+// value, so the commit is whole-value: every unit with content must have a
+// complete, parseable pair (per-unit inverted pairs hold during the debounce
+// and swap at blur). Mode is derived from the stored value with a local
+// override covering the gap between toggling and the first commit.
 struct MassAttribute: View {
     let entry: Entry
     let pair: MassAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
 
-    @State private var values: [MassUnit: String] = [:]
+    private struct FieldKey: Hashable {
+        let unit: MassUnit
+        let endpoint: RangeEndpoint
+    }
+
+    @State private var minValues: [MassUnit: String] = [:]
+    @State private var maxValues: [MassUnit: String] = [:]
+    // Range/exact presentation override while the stored value disagrees.
+    // nil = follow stored.
+    @State private var modeOverride: Bool?
     @State private var debounceTask: Task<Void, Never>?
-    @FocusState private var focusedUnit: MassUnit?
-    @EnvironmentObject private var focusModel: AttributeFocusModel
+    @FocusState private var focusedField: FieldKey?
     // Set by Remove so the focus-loss handler skips flushNow() — flushing
     // would dispatch an update against the just-deleted row.
     @State private var pendingRemoval = false
@@ -25,14 +40,24 @@ struct MassAttribute: View {
     // owner token needs both ids.
     private var focusToken: String { "\(entry.id)/\(pair.attrId)" }
 
+    private var storedIsRange: Bool {
+        if case .range = pair.actual { return true }
+        return false
+    }
+
+    private var isRangeMode: Bool { modeOverride ?? storedIsRange }
+
     // The bar actions for this attribute, defined once and rendered identically
-    // by both surfaces (iOS keyboard bar via the focus model, macOS popover).
+    // by both surfaces (iOS keyboard bar via AttributeBarPublisher, macOS popover).
     private var barActions: [AttributeBarAction] {
-        .mass(remove: {
-            pendingRemoval = true
-            forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
-            focusedUnit = nil
-        })
+        .mass(
+            range: (active: isRangeMode, toggle: toggleRange),
+            remove: {
+                pendingRemoval = true
+                forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+                focusedField = nil
+            }
+        )
     }
 
     var body: some View {
@@ -41,23 +66,38 @@ struct MassAttribute: View {
                 massField(unit: unit)
             }
         }
-        .onAppear { syncEditState() }
+        .onAppear {
+            syncEditState()
+            #if os(macOS)
+            AttributePopoverClicks.install()
+            #endif
+        }
         .onChange(of: pair.actual) { _, _ in
             // Skip mid-edit to avoid clobbering keystrokes.
-            if focusedUnit == nil { syncEditState() }
+            guard focusedField == nil else { return }
+            modeOverride = nil
+            syncEditState()
         }
-        .onChange(of: values) { _, _ in scheduleDebounce() }
-        .onChange(of: focusedUnit) { _, newFocus in
-            if newFocus != nil {
-                focusModel.focus(focusToken, actions: barActions)
-            } else {
-                focusModel.clear(focusToken)
+        .onChange(of: minValues) { _, _ in scheduleDebounce() }
+        .onChange(of: maxValues) { _, _ in scheduleDebounce() }
+        .attributeBarActions(
+            token: focusToken,
+            isFocused: focusedField != nil,
+            actions: barActions
+        )
+        .onChange(of: focusedField) { _, focused in
+            if focused == nil {
                 if pendingRemoval {
                     pendingRemoval = false
                     debounceTask?.cancel()
                     debounceTask = nil
-                } else {
-                    flushNow()
+                } else if !flushNow(isBlur: true) {
+                    // Nothing committed that changes the stored mode: abandon
+                    // any in-flight range entry and resync. (After a range
+                    // commit the refresh clears the override instead, so the
+                    // pills don't flash exact while the write lands.)
+                    modeOverride = nil
+                    syncEditState()
                 }
             }
         }
@@ -66,18 +106,11 @@ struct MassAttribute: View {
     @ViewBuilder
     private func massField(unit: MassUnit) -> some View {
         HStack(spacing: GvSpacing.sm) {
-            TextField(rangePlaceholder(for: unit), text: bindingFor(unit))
-                .textFieldStyle(.plain)
-                #if os(iOS)
-                .keyboardType(.decimalPad)
-                #endif
-                .multilineTextAlignment(.center)
-                .focused($focusedUnit, equals: unit)
-                .frame(minWidth: GvSpacing.minAttributeInputWidth)
-                .gvAttributePill()
-                .fixedSize(horizontal: true, vertical: false)
-                .gvSelectAllOnFocus(isFocused: focusedUnit == unit)
-                .onSubmit { focusedUnit = nil }
+            RangePill(isRange: isRangeMode) {
+                endpointField(unit, .min)
+            } maxInput: {
+                endpointField(unit, .max)
+            }
             Text(unit.shortLabel)
                 // Monospaced + padded labels give every unit a consistent width
                 // so the pills line up across rows regardless of unit length.
@@ -85,28 +118,67 @@ struct MassAttribute: View {
                 .foregroundStyle(Color.entryTextSecondary)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        // macOS (GV-36): anchor the action-bar popover to the focused unit field
-        // (driven directly off focusedUnit so the arrow points at the field, not
-        // the whole row). Closing it (click-away/Enter) ends editing.
+        // macOS (GV-36): anchor the action-bar popover to the unit's pill
+        // (driven off the focused field's unit so the arrow points at the pill,
+        // not the whole row). Closing it (click-away/Enter) ends editing.
         #if os(macOS)
         .popover(
-            isPresented: Binding(get: { focusedUnit == unit }, set: { if !$0 { focusedUnit = nil } }),
+            isPresented: Binding(
+                get: { focusedField?.unit == unit },
+                // Popover dismissal is the session boundary — but transient
+                // popovers consume the dismissing click, so complete the
+                // click's intent instead of tearing the session down when it
+                // landed on a text field (see AttributePopoverClicks and the
+                // numeric editor's dismissal handler for the full story).
+                set: { shown in
+                    guard !shown else { return }
+                    guard let hit = AttributePopoverClicks.consumedTextFieldHit() else {
+                        focusedField = nil
+                        return
+                    }
+                    guard !AttributePopoverClicks.isFirstResponder(hit) else { return }
+                    DispatchQueue.main.async {
+                        let ok = hit.window?.makeFirstResponder(hit) ?? false
+                        if !ok { focusedField = nil }
+                    }
+                }
+            ),
             arrowEdge: .top
         ) {
             AttributeSheetBar(
                 title: pair.name,
                 actions: barActions,
-                onDismiss: { focusedUnit = nil }
+                onDismiss: { focusedField = nil }
             )
             .frame(width: 280)
         }
         #endif
     }
 
-    private func bindingFor(_ unit: MassUnit) -> Binding<String> {
+    private func endpointField(_ unit: MassUnit, _ endpoint: RangeEndpoint) -> some View {
+        TextField("", text: binding(unit, endpoint))
+            .textFieldStyle(.plain)
+            #if os(iOS)
+            .keyboardType(.decimalPad)
+            #endif
+            .multilineTextAlignment(.center)
+            .focused($focusedField, equals: FieldKey(unit: unit, endpoint: endpoint))
+            .frame(minWidth: GvSpacing.minAttributeInputWidth)
+            .gvSelectAllOnFocus(isFocused: focusedField == FieldKey(unit: unit, endpoint: endpoint))
+            .onSubmit {
+                // Hardware-keyboard nicety: Enter in min advances to max.
+                focusedField = (endpoint == .min && isRangeMode)
+                    ? FieldKey(unit: unit, endpoint: .max)
+                    : nil
+            }
+    }
+
+    private func binding(_ unit: MassUnit, _ endpoint: RangeEndpoint) -> Binding<String> {
         Binding(
-            get: { values[unit] ?? "" },
-            set: { values[unit] = $0 }
+            get: { endpoint == .min ? (minValues[unit] ?? "") : (maxValues[unit] ?? "") },
+            set: {
+                if endpoint == .min { minValues[unit] = $0 } else { maxValues[unit] = $0 }
+            }
         )
     }
 
@@ -154,42 +226,78 @@ struct MassAttribute: View {
         }
     }
 
-    // MARK: - Range placeholder
+    // MARK: - Range toggle
 
-    /// For range-valued mass, show "min – max" per unit as placeholder.
-    /// Range collapses to Exact on first commit (see attributes-design.md).
-    private func rangePlaceholder(for unit: MassUnit) -> String {
-        guard case .range(let mins, let maxes) = pair.actual else { return "" }
-        let lo = mins.first(where: { $0.unit == unit })?.value
-        let hi = maxes.first(where: { $0.unit == unit })?.value
-        switch (lo, hi) {
-        case (.some(let l), .some(let h)): return "\(format(l)) – \(format(h))"
-        case (.some(let l), .none):        return format(l)
-        case (.none, .some(let h)):        return format(h)
-        case (.none, .none):               return ""
+    private func toggleRange() {
+        if isRangeMode {
+            debounceTask?.cancel()
+            debounceTask = nil
+            modeOverride = false
+            // Collapse to min: live min fields where they parse, stored values
+            // elsewhere. Nothing to write when the range was never committed.
+            if case .range(let lo, _) = pair.actual {
+                let collapsed = collapseMinMeasurements(fallback: lo)
+                for m in collapsed { minValues[m.unit] = format(m.value) }
+                forestVM.updateAttributeValue(
+                    entryId: entry.id,
+                    attributeId: pair.attrId,
+                    field: .actual,
+                    value: .mass(.exact(collapsed))
+                )
+            }
+            maxValues = [:]
+            if let f = focusedField, f.endpoint == .max {
+                focusedField = FieldKey(unit: f.unit, endpoint: .min)
+            }
+        } else {
+            modeOverride = true
+            // Min fields keep the exact values already in them; max fields
+            // start empty — prefilling them too would let the debounce
+            // auto-commit a degenerate "x – x" the user never typed. Entering
+            // the max is the natural next action, so move focus there
+            // (keyboard focus moves don't dismiss the macOS popover).
+            maxValues = [:]
+            if let unit = focusedField?.unit {
+                focusedField = FieldKey(unit: unit, endpoint: .max)
+            }
         }
+    }
+
+    private func collapseMinMeasurements(fallback: [MassMeasurement]) -> [MassMeasurement] {
+        var out: [MassMeasurement] = []
+        for unit in unitsToShow {
+            if let v = parse(minValues[unit] ?? "") {
+                out.append(MassMeasurement(unit: unit, value: v))
+            } else if let f = fallback.first(where: { $0.unit == unit }) {
+                out.append(f)
+            }
+        }
+        return out.isEmpty ? fallback : out
     }
 
     // MARK: - Sync cache → shadow
 
     private func syncEditState() {
-        var next: [MassUnit: String] = [:]
-        switch pair.actual {
-        case .none, .range:
-            // Empty / range: render empty fields. Range placeholder shows the value.
-            for unit in unitsToShow {
-                next[unit] = ""
-            }
-        case .exact(let measurements):
-            for unit in unitsToShow {
-                if let m = measurements.first(where: { $0.unit == unit }) {
-                    next[unit] = format(m.value)
-                } else {
-                    next[unit] = ""
-                }
+        var nextMin: [MassUnit: String] = [:]
+        var nextMax: [MassUnit: String] = [:]
+        let fill = { (side: [MassMeasurement], unit: MassUnit) -> String in
+            side.first(where: { $0.unit == unit }).map { self.format($0.value) } ?? ""
+        }
+        for unit in unitsToShow {
+            switch pair.actual {
+            case nil:
+                nextMin[unit] = ""
+                nextMax[unit] = ""
+            case .exact(let measurements):
+                nextMin[unit] = fill(measurements, unit)
+                nextMax[unit] = ""
+            case .range(let lo, let hi):
+                nextMin[unit] = fill(lo, unit)
+                nextMax[unit] = fill(hi, unit)
             }
         }
-        values = next
+        minValues = nextMin
+        maxValues = nextMax
     }
 
     // MARK: - Commit shadow → cache
@@ -197,32 +305,83 @@ struct MassAttribute: View {
     private func scheduleDebounce() {
         debounceTask?.cancel()
         debounceTask = nil
-        guard let new = buildMeasurements(), shouldCommit(new) else { return }
+        guard pendingCommit(isBlur: false) != nil else { return }
         debounceTask = Task {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             guard !Task.isCancelled else { return }
-            await MainActor.run { flushNow() }
+            await MainActor.run { flushNow(isBlur: false) }
         }
     }
 
-    private func flushNow() {
+    /// Commit the pending value, if any. Returns true when the dispatched
+    /// commit creates or keeps a range — the blur handler uses this to avoid
+    /// resetting presentation mode underneath an in-flight range write.
+    @discardableResult
+    private func flushNow(isBlur: Bool) -> Bool {
         debounceTask?.cancel()
         debounceTask = nil
-        guard let new = buildMeasurements(), shouldCommit(new) else { return }
+        guard let value = pendingCommit(isBlur: isBlur) else { return false }
         forestVM.updateAttributeValue(
             entryId: entry.id,
             attributeId: pair.attrId,
             field: .actual,
-            value: .mass(.exact(new))
+            value: .mass(value)
         )
+        if case .range = value { return true }
+        return false
     }
 
-    /// Build measurements from shadow values for displayed units.
+    private func pendingCommit(isBlur: Bool) -> MassValue? {
+        if isRangeMode {
+            return buildRange(isBlur: isBlur)
+        }
+        guard let new = buildExactMeasurements(), !new.isEmpty, !sameAsCurrentExact(new) else {
+            return nil
+        }
+        return .exact(new)
+    }
+
+    /// Build the whole range from shadow pairs, or nil when there's nothing to
+    /// commit. `MassValue.range` is one value, so this is all-or-nothing:
+    /// - A unit with both fields empty that isn't part of the stored range is
+    ///   skipped (an untouched default unit shouldn't block the commit).
+    /// - Every other unit must have a complete, parseable pair.
+    /// - An inverted pair (min > max) holds the commit during the debounce
+    ///   window and swaps at blur — same-unit comparison, so no conversion
+    ///   is involved (core defers cross-unit ordering checks entirely).
+    private func buildRange(isBlur: Bool) -> MassValue? {
+        let storedRangeUnits: Set<MassUnit> = {
+            if case .range(let lo, let hi) = pair.actual {
+                return Set((lo + hi).map { $0.unit })
+            }
+            return []
+        }()
+        var mins: [MassMeasurement] = []
+        var maxes: [MassMeasurement] = []
+        for unit in unitsToShow {
+            let rawMin = (minValues[unit] ?? "").trimmingCharacters(in: .whitespaces)
+            let rawMax = (maxValues[unit] ?? "").trimmingCharacters(in: .whitespaces)
+            if rawMin.isEmpty, rawMax.isEmpty, !storedRangeUnits.contains(unit) {
+                continue
+            }
+            guard var lo = parse(rawMin), var hi = parse(rawMax) else { return nil }
+            if lo > hi {
+                guard isBlur else { return nil }
+                swap(&lo, &hi)
+            }
+            mins.append(MassMeasurement(unit: unit, value: lo))
+            maxes.append(MassMeasurement(unit: unit, value: hi))
+        }
+        guard !mins.isEmpty, !sameAsCurrentRange(mins, maxes) else { return nil }
+        return .range(min: mins, max: maxes)
+    }
+
+    /// Build exact measurements from the min-side shadow values.
     /// - Empty field: include `0` only if the unit is already part of the stored
     ///   exact value (so emptying clears-to-0); otherwise skip the unit, so an
     ///   un-touched empty field doesn't pollute a fresh value.
     /// - Non-parseable input: returns nil, skipping commit while user is mid-typing.
-    private func buildMeasurements() -> [MassMeasurement]? {
+    private func buildExactMeasurements() -> [MassMeasurement]? {
         var out: [MassMeasurement] = []
         let currentExactUnits: Set<MassUnit> = {
             if case .exact(let m) = pair.actual {
@@ -231,33 +390,41 @@ struct MassAttribute: View {
             return []
         }()
         for unit in unitsToShow {
-            let raw = (values[unit] ?? "").trimmingCharacters(in: .whitespaces)
+            let raw = (minValues[unit] ?? "").trimmingCharacters(in: .whitespaces)
             if raw.isEmpty {
                 if currentExactUnits.contains(unit) {
                     out.append(MassMeasurement(unit: unit, value: 0))
                 }
                 continue
             }
-            guard let parsed = Self.formatter.number(from: raw)?.doubleValue else {
-                return nil
-            }
+            guard let parsed = parse(raw) else { return nil }
             out.append(MassMeasurement(unit: unit, value: parsed))
         }
         return out
     }
 
-    private func shouldCommit(_ new: [MassMeasurement]) -> Bool {
-        if new.isEmpty { return false }
-        return !sameAsCurrent(new)
+    private func parse(_ raw: String) -> Double? {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return Self.formatter.number(from: trimmed)?.doubleValue
     }
 
-    /// Order-insensitive comparison against the stored Exact value.
-    private func sameAsCurrent(_ new: [MassMeasurement]) -> Bool {
+    private func sameAsCurrentExact(_ new: [MassMeasurement]) -> Bool {
         guard case .exact(let cur) = pair.actual else { return false }
-        if cur.count != new.count { return false }
-        let curMap = Dictionary(uniqueKeysWithValues: cur.map { ($0.unit, $0.value) })
-        let newMap = Dictionary(uniqueKeysWithValues: new.map { ($0.unit, $0.value) })
-        return curMap == newMap
+        return measurementsEqual(cur, new)
+    }
+
+    private func sameAsCurrentRange(_ mins: [MassMeasurement], _ maxes: [MassMeasurement]) -> Bool {
+        guard case .range(let curLo, let curHi) = pair.actual else { return false }
+        return measurementsEqual(curLo, mins) && measurementsEqual(curHi, maxes)
+    }
+
+    /// Order-insensitive comparison of measurement lists.
+    private func measurementsEqual(_ a: [MassMeasurement], _ b: [MassMeasurement]) -> Bool {
+        guard a.count == b.count else { return false }
+        let aMap = Dictionary(uniqueKeysWithValues: a.map { ($0.unit, $0.value) })
+        let bMap = Dictionary(uniqueKeysWithValues: b.map { ($0.unit, $0.value) })
+        return aMap == bMap
     }
 
     // MARK: - Formatting

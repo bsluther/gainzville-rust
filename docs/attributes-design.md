@@ -95,8 +95,13 @@ State 2 is needed because users can add/remove attributes per entry independentl
 
 A handful of UX questions were raised while building the first round of attribute views in the Swift app (`Features/Log/Attributes/`). They are recorded here so the rationale isn't lost.
 
-### Range editing
-`Numeric`, `Select`, and `Mass` values each support both `Exact` and `Range` variants in core, but the current editors only commit `Exact`. Existing `Range` values display read-only as `"min – max"`; first interaction throws away the range and starts the editor empty, so a save commits `Exact`. Range *editing* needs a deliberate UX decision (dual-input, ordered-grade-only, slider, etc.) before being built. The likely surface for switching a single attribute between range and exact mode is the per-attribute focus menu (below).
+### Range editing (implemented)
+`Numeric`, `Select`, and `Mass` editors support both `Exact` and `Range` values. The action bar's Range checkbox toggles a pill between one exact input and a min–max pair (`RangePill`: two borderless inputs around a hyphen, the shared border on the composite). Select shows Range only when the config is `ordered`, and its two triggers share one options presentation with a min/max endpoint switcher. Semantics, decided deliberately:
+- **Mode = stored value + local override.** There's no DB representation of an "empty range", so toggling writes nothing; a local override covers the gap until a commit (or abandonment) makes the stored value agree. Toggling range→exact collapses to min.
+- **Prefill:** entering range mode, min inherits the exact value, max starts empty — prefilling both would let the debounce auto-commit a degenerate `5 – 5`.
+- **Incomplete ranges never commit** (the mid-typing skip convention, extended): blur with half a range abandons the edit and resyncs.
+- **Inverted ranges (min > max) hold during the debounce window and swap at blur/commit.** Select swaps at pick-commit (filtering the option list instead would deadlock raising min past the stored max). Mass swaps per-unit — same-unit comparison, no conversion involved.
+- **Mass commits are whole-value** (`MassValue::Range` is one value): every unit with content needs a complete pair; untouched empty default units are skipped. Multi-unit ranges are supported as a list of per-unit pills, though single-unit values remain the expected case.
 
 ### Clear-value semantics
 There is no UI affordance for "this attribute has no value." For numeric and mass, an emptied input commits `0` rather than nothing — a stop-gap that loses the distinction between "intentionally zero" and "cleared." A proper clear path needs either a dedicated clear control (cluttering each row), an `UpdateAttributeValue` variant that writes `None`, or a dedicated `ClearAttributeValue` action. Likely belongs in the per-attribute focus menu.
@@ -110,8 +115,8 @@ A user can add or remove an attribute on any entry (log or template). `AttachVal
 ### Plan vs Actual toggle
 `Value` carries both `plan` and `actual`. The figma shows a Plan/Log toggle on the entry; the data model is ready, but the toggle UI isn't built. `FfiUpdateAttributeValue.field` is plumbed through; the Swift editors hardcode `field: .actual` and would change to read a binding when the toggle exists.
 
-### Per-attribute focus state
-We expect to host per-attribute configuration via a focused-attribute menu rather than cluttering every row with a permanent menu button. At most one attribute is focused at a time; the focused attribute reveals options like *clear value*, *pick units* (for measures), *toggle range vs. exact*, and other type-specific affordances. This is the natural home for several deferred items above.
+### Per-attribute focus state (implemented as the action bar)
+Per-attribute controls live in the focused attribute's action bar (keyboard accessory on iOS, popover on macOS, sheet header for picker kinds) rather than a permanent per-row menu. *Clear*, *Remove*, and *Range vs. exact* are wired; *Units* remains a placeholder. Mid-session presentation changes (the Range checkbox) reach the bar through `AttributeBarPublisher`, which re-publishes when an action's value-state changes — actions carry presentation as data and compare with a closure-blind `Equatable`.
 
 ### Unit selection / conversion for measures
 `MassConfig.default_units` is now editable in the attribute profile (`AttributeDetailView` → Mass config) via `UpdateAttribute(Mass(SetDefaultUnits(..)))`; add/remove is allowed since changing the default units doesn't invalidate existing values. Still deferred: per-*entry* unit selection in the log editor (today it derives "units to show" from the union of plan/actual measurements, falling back to defaults, then `[Pound]`) and conversion between units (e.g. the user replaces `lb` with `kg` while a value exists) — a natural place for a pure helper in core (e.g. `MassValue::with_units(...)`), independent of the editor's UI state.

@@ -17,12 +17,14 @@ import SwiftUI
 // bar, a sheet, or a popover.
 
 /// The bar's vocabulary: presentation (label/icon/color) lives here; behavior
-/// arrives as associated closures. `units` and `range` are placeholder no-ops
-/// until their backing features (unit selection, exact/range switching) land.
+/// arrives as associated closures. `units` is a placeholder no-op until unit
+/// selection lands. `range` is a checkbox-style toggle between exact and range
+/// editing; `active` is presentation state and participates in `==` so the
+/// keyboard bar re-publishes when the mode flips mid-session.
 enum AttributeBarAction: Identifiable {
     case clear(() -> Void)
     case units
-    case range
+    case range(active: Bool, toggle: () -> Void)
     case remove(() -> Void)
 
     var id: String { label }
@@ -40,7 +42,7 @@ enum AttributeBarAction: Identifiable {
         switch self {
         case .clear: "x.square"
         case .units: "ruler"
-        case .range: "arrow.left.and.right.square"
+        case .range(let active, _): active ? "checkmark.square" : "square"
         case .remove: "trash.fill"
         }
     }
@@ -53,7 +55,25 @@ enum AttributeBarAction: Identifiable {
     func run() {
         switch self {
         case .clear(let f), .remove(let f): f()
-        case .units, .range: break
+        case .range(_, let toggle): toggle()
+        case .units: break
+        }
+    }
+}
+
+// Equality covers presentation state only — closures are deliberately excluded.
+// Behavior stays fresh regardless (closures capture live @State storage); this
+// == answers exactly one question: does the keyboard bar need re-publishing?
+// (See AttributeBarPublisher in AttributeFocusModel.swift.)
+extension AttributeBarAction: Equatable {
+    static func == (a: Self, b: Self) -> Bool {
+        switch (a, b) {
+        case (.clear, .clear), (.units, .units), (.remove, .remove):
+            return true
+        case (.range(let x, _), .range(let y, _)):
+            return x == y
+        default:
+            return false
         }
     }
 }
@@ -64,17 +84,30 @@ enum AttributeBarAction: Identifiable {
 // something to clear; temporal is intrinsic to the entry so it takes no
 // `remove`.
 extension Array where Element == AttributeBarAction {
-    static func numeric(remove: @escaping () -> Void) -> Self {
-        [.range, .remove(remove)]
+    static func numeric(
+        range: (active: Bool, toggle: () -> Void),
+        remove: @escaping () -> Void
+    ) -> Self {
+        [.range(active: range.active, toggle: range.toggle), .remove(remove)]
     }
 
-    static func mass(remove: @escaping () -> Void) -> Self {
-        [.units, .range, .remove(remove)]
+    static func mass(
+        range: (active: Bool, toggle: () -> Void),
+        remove: @escaping () -> Void
+    ) -> Self {
+        [.units, .range(active: range.active, toggle: range.toggle), .remove(remove)]
     }
 
-    // TODO: Range only when the attribute is `ordered`.
-    static func select(clear: (() -> Void)?, remove: @escaping () -> Void) -> Self {
-        (clear.map { [.clear($0)] } ?? []) + [.range, .remove(remove)]
+    // `range` is supplied only when the attribute is `ordered` — unordered
+    // selects have no range values (core rejects them).
+    static func select(
+        clear: (() -> Void)?,
+        range: (active: Bool, toggle: () -> Void)?,
+        remove: @escaping () -> Void
+    ) -> Self {
+        (clear.map { [.clear($0)] } ?? [])
+            + (range.map { [.range(active: $0.active, toggle: $0.toggle)] } ?? [])
+            + [.remove(remove)]
     }
 
     static func temporal(clear: (() -> Void)?) -> Self {
