@@ -48,7 +48,9 @@ impl Arbitrary for Entry {
             activity_id: activity_choice.map(|a| a.id),
             id: Uuid::arbitrary(rng, context),
             name,
-            display_as_sets: rng.random_bool(0.5),
+            // Never generated: display_as_sets is earned via ConvertToSets /
+            // UpdateEntry(SetDisplayAsSets); create_entry rejects it at birth.
+            display_as_sets: false,
             is_sequence,
             is_complete,
             is_template: false,

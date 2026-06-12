@@ -81,6 +81,12 @@ impl PostgresServer {
             Action::UpdateEntry(action) => {
                 mutators::update_entry(&mut executor, self.io.as_ref(), action).await?
             }
+            Action::ConvertToSets(action) => {
+                mutators::convert_to_sets(&mut executor, self.io.as_ref(), action).await?
+            }
+            Action::DuplicateEntry(action) => {
+                mutators::duplicate_entry(&mut executor, self.io.as_ref(), action).await?
+            }
         };
 
         // TODO: log mutation in this transaction.

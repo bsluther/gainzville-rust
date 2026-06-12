@@ -1,21 +1,24 @@
 use chrono::{DateTime, Utc};
+use fractional_index::FractionalIndex;
 use uuid::Uuid;
 
 use crate::{
     actions::{
-        Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
-        DeleteEntryRecursive, EntryChange, MassChange, MoveEntry, NumericChange, SelectChange,
-        UpdateAttribute, UpdateAttributeValue, UpdateEntry, UpdateEntryCompletion, ValueField,
+        Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
+        CreateEntry, CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
+        DeleteEntryRecursive, DuplicateEntry, EntryChange, MassChange, MoveEntry, NumericChange,
+        SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntry, UpdateEntryCompletion,
+        ValueField,
     },
     delta::{AnyDelta, Delta},
     error::{DomainError, RejectReason, Result},
     forest::Forest,
-    instantiation::instantiate_subtree,
+    instantiation::{duplicate_subtree, instantiate_subtree},
     io::Io,
     models::{
         actor::{Actor, ActorKind},
         attribute::{AttributeConfig, NumericValue, SelectValue, Value},
+        entry::{Entry, Position, Temporal},
         user::User,
     },
     queries::{
@@ -51,6 +54,66 @@ fn validate_template_temporal(
     if is_template && (temporal.start().is_some() || temporal.end().is_some()) {
         return Err(DomainError::Rejected(RejectReason::Precondition(
             "template entries cannot have a start or end time (duration only)",
+        )));
+    }
+    Ok(())
+}
+
+/// Load an entry's subtree (the entry plus all descendants) as a `Forest` for
+/// structural checks. There is no dedicated children query; `FindDescendants`
+/// is cheap at the scale of a single sequence.
+async fn load_subtree_forest(
+    executor: &mut impl AnyQueryExecutor,
+    entry_id: Uuid,
+) -> Result<Forest> {
+    Ok(Forest::from(
+        executor.execute(FindDescendants { entry_id }).await?,
+    ))
+}
+
+/// The activity constraint a sets sequence imposes on an incoming member:
+/// `None` when the sequence has no members yet (unconstrained), otherwise
+/// `Some(activity)` — the value every member shares (`Some(id)` for an
+/// activity, `None` for all-anonymous) that the incoming member must match.
+/// Members of an already-flagged sequence that disagree are an observed
+/// invariant violation, not a rejection.
+fn sets_member_activity_constraint(
+    parent_id: Uuid,
+    members: &[&Entry],
+) -> Result<Option<Option<Uuid>>> {
+    let Some((first, rest)) = members.split_first() else {
+        return Ok(None);
+    };
+    if rest.iter().any(|m| m.activity_id != first.activity_id) {
+        return Err(DomainError::InvariantViolation {
+            invariant: "sets members share one activity",
+            context: format!("sequence '{}'", parent_id),
+        });
+    }
+    Ok(Some(first.activity_id))
+}
+
+/// The shape `display_as_sets` requires at the moment the flag is set: a
+/// sequence with at least one member, all members instances of one activity
+/// (or all anonymous). Validated against any loaded forest — a stored subtree
+/// or an in-memory template tree. Disagreement here is a rejection, not an
+/// invariant violation: the flag isn't set yet, so heterogeneous members are
+/// legal state.
+fn validate_sets_shape(entry: &Entry, forest: &Forest) -> Result<()> {
+    if !entry.is_sequence {
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "display_as_sets requires a sequence entry",
+        )));
+    }
+    let members = forest.children(entry.id);
+    let Some((first, rest)) = members.split_first() else {
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "display_as_sets requires at least one member",
+        )));
+    };
+    if rest.iter().any(|m| m.activity_id != first.activity_id) {
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "sets members must share one activity",
         )));
     }
     Ok(())
@@ -150,6 +213,12 @@ pub async fn create_activity(
         )));
     }
 
+    // Sets invariants hold inside templates too: any flagged template entry
+    // must already have the sets shape.
+    for entry in action.template.iter().filter(|e| e.display_as_sets) {
+        validate_sets_shape(entry, &template_forest)?;
+    }
+
     let insert_activity = Delta::Insert { new: activity };
     let insert_templates: Vec<AnyDelta> = action
         .template
@@ -184,6 +253,15 @@ pub async fn create_entry(
         ))));
     }
 
+    // display_as_sets is earned, not born: a fresh entry has no members, so
+    // it cannot satisfy the sets shape (>=1 member). The flag is set later
+    // via ConvertToSets / UpdateEntry(SetDisplayAsSets).
+    if action.entry.display_as_sets {
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "a new entry cannot have display_as_sets set",
+        )));
+    }
+
     // Check if referenced activity exists.
     if let Some(activity_id) = action.entry.activity_id {
         if executor
@@ -212,6 +290,21 @@ pub async fn create_entry(
                 return Err(DomainError::Rejected(RejectReason::Precondition(
                     "child entry must match its parent's template/log kind",
                 )));
+            }
+
+            // Joining a sets sequence: the new member must match the members'
+            // shared activity (or shared anonymity).
+            if parent.display_as_sets {
+                let forest = load_subtree_forest(executor, parent.id).await?;
+                if let Some(required) =
+                    sets_member_activity_constraint(parent.id, &forest.children(parent.id))?
+                {
+                    if action.entry.activity_id != required {
+                        return Err(DomainError::Rejected(RejectReason::Precondition(
+                            "sets members must share one activity",
+                        )));
+                    }
+                }
             }
         }
     }
@@ -283,6 +376,21 @@ pub async fn create_entry_from_activity(
             return Err(DomainError::Rejected(RejectReason::Precondition(
                 "instantiated subtree must match its parent's template/log kind",
             )));
+        }
+
+        // Joining a sets sequence: the instantiated root is an entry of this
+        // activity, which must match the members' shared activity.
+        if parent.display_as_sets {
+            let forest = load_subtree_forest(executor, parent.id).await?;
+            if let Some(required) =
+                sets_member_activity_constraint(parent.id, &forest.children(parent.id))?
+            {
+                if required != Some(action.activity_id) {
+                    return Err(DomainError::Rejected(RejectReason::Precondition(
+                        "sets members must share one activity",
+                    )));
+                }
+            }
         }
     } else if !action.is_template
         && action.temporal.start().is_none()
@@ -433,6 +541,23 @@ pub async fn move_entry(
                 "log entry cannot be a child of a template entry",
             )));
         }
+
+        // Joining a sets sequence: the incoming member must match the
+        // members' shared activity (or shared anonymity). A same-parent
+        // reorder passes trivially — the mover is one of the members the
+        // constraint is computed from.
+        if parent.display_as_sets {
+            let forest = load_subtree_forest(executor, parent.id).await?;
+            if let Some(required) =
+                sets_member_activity_constraint(parent.id, &forest.children(parent.id))?
+            {
+                if entry.activity_id != required {
+                    return Err(DomainError::Rejected(RejectReason::Precondition(
+                        "sets members must share one activity",
+                    )));
+                }
+            }
+        }
     } else if !entry.is_template {
         // Log entries at root must be placed on the timeline; templates are
         // exempt (they live outside the timeline).
@@ -440,6 +565,28 @@ pub async fn move_entry(
             return Err(DomainError::Rejected(RejectReason::Precondition(
                 "root entry must have defined start or end time",
             )));
+        }
+    }
+
+    // Leaving a sets sequence: its last member cannot leave (display_as_sets
+    // requires >=1 member — break out or delete the whole sequence instead).
+    if let Some(old_position) = &entry.position {
+        let parent_changed =
+            action.position.as_ref().map(|p| p.parent_id) != Some(old_position.parent_id);
+        if parent_changed {
+            let old_parent = executor
+                .execute(FindEntryById {
+                    entry_id: old_position.parent_id,
+                })
+                .await?;
+            if old_parent.is_some_and(|p| p.display_as_sets) {
+                let forest = load_subtree_forest(executor, old_position.parent_id).await?;
+                if forest.children(old_position.parent_id).len() <= 1 {
+                    return Err(DomainError::Rejected(RejectReason::Precondition(
+                        "cannot remove the last member of a sets sequence",
+                    )));
+                }
+            }
         }
     }
 
@@ -497,6 +644,24 @@ pub async fn delete_entry_recursive(
         )));
     }
 
+    // The last member of a sets sequence cannot be deleted (display_as_sets
+    // requires >=1 member — break out or delete the sequence itself instead).
+    if let Some(parent_id) = root.parent_id() {
+        let parent = executor
+            .execute(FindEntryById {
+                entry_id: parent_id,
+            })
+            .await?;
+        if parent.is_some_and(|p| p.display_as_sets) {
+            let forest = load_subtree_forest(executor, parent_id).await?;
+            if forest.children(parent_id).len() <= 1 {
+                return Err(DomainError::Rejected(RejectReason::Precondition(
+                    "cannot remove the last member of a sets sequence",
+                )));
+            }
+        }
+    }
+
     // Create delete deltas for entry and descendants.
     let entry_deltas: Vec<AnyDelta> = subtree
         .into_iter()
@@ -516,6 +681,208 @@ pub async fn delete_entry_recursive(
         id: io.uuid(),
         timestamp: io.current_time_wall_clock(),
         action: action.into(),
+        changes: deltas,
+    })
+}
+
+/// Convert an entry into a sets sequence (see `ConvertToSets`): one mutation
+/// that inserts the anonymous sequence at the entry's position and reparents
+/// the entry under it as the sole member, splitting the temporal — the
+/// sequence takes the start/end, the entry keeps only its duration.
+pub async fn convert_to_sets(
+    executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
+    action: ConvertToSets,
+) -> Result<Mutation> {
+    let Some(entry) = executor
+        .execute(FindEntryById {
+            entry_id: action.entry_id,
+        })
+        .await?
+    else {
+        return Err(DomainError::Rejected(RejectReason::NotFound(
+            "entry that does not exist cannot be converted to sets".to_string(),
+        )));
+    };
+
+    if action.actor_id != entry.owner_id {
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
+            "actor '{}' is not the owner of entry '{}'",
+            action.actor_id, entry.id
+        ))));
+    }
+
+    // An activity template's root must keep activity_id == activity.id, and
+    // the wrap sequence is anonymous — converting the root would break the
+    // template-tree rule.
+    if entry.is_template && entry.position.is_none() {
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "cannot convert an activity template root to sets",
+        )));
+    }
+
+    if executor
+        .execute(FindEntryById {
+            entry_id: action.sequence_id,
+        })
+        .await?
+        .is_some()
+    {
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "sequence_id already in use",
+        )));
+    }
+
+    // The anonymous sequence takes the entry's place among its siblings; if
+    // the entry is itself a set member, anonymity must satisfy the parent's
+    // member-activity constraint.
+    if let Some(position) = &entry.position {
+        let parent = executor
+            .execute(FindEntryById {
+                entry_id: position.parent_id,
+            })
+            .await?;
+        if parent.is_some_and(|p| p.display_as_sets) {
+            let forest = load_subtree_forest(executor, position.parent_id).await?;
+            let siblings: Vec<&Entry> = forest
+                .children(position.parent_id)
+                .into_iter()
+                .filter(|m| m.id != entry.id)
+                .collect();
+            if let Some(required) = sets_member_activity_constraint(position.parent_id, &siblings)?
+            {
+                if required.is_some() {
+                    return Err(DomainError::Rejected(RejectReason::Precondition(
+                        "sets members must share one activity",
+                    )));
+                }
+            }
+        }
+    }
+
+    // The sequence owns the entry's timeline slot (start/end); the entry
+    // keeps only its duration.
+    let sequence_temporal = Temporal::parse(entry.temporal.start(), entry.temporal.end(), None)?;
+    let member_temporal = Temporal::parse(None, None, entry.temporal.duration())?;
+
+    // The sequence inherits the entry's root placement, so the root rule
+    // carries over: a log root must already be on the timeline.
+    if entry.position.is_none()
+        && !entry.is_template
+        && sequence_temporal.start().is_none()
+        && sequence_temporal.end().is_none()
+    {
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "root entry must have defined start or end time",
+        )));
+    }
+
+    let sequence = Entry {
+        id: action.sequence_id,
+        activity_id: None,
+        owner_id: entry.owner_id,
+        name: None,
+        position: entry.position.clone(),
+        is_template: entry.is_template,
+        display_as_sets: true,
+        is_sequence: true,
+        is_complete: false,
+        temporal: sequence_temporal,
+    };
+
+    let member_update = entry
+        .update()
+        .position(Some(Position {
+            parent_id: action.sequence_id,
+            frac_index: FractionalIndex::default(),
+        }))
+        .temporal(member_temporal)
+        .to_delta();
+
+    Ok(Mutation {
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
+        action: Action::ConvertToSets(action),
+        changes: vec![Delta::Insert { new: sequence }.into(), member_update.into()],
+    })
+}
+
+/// Duplicate an entry's subtree in place (see `DuplicateEntry`): an exact
+/// copy with fresh ids, inserted immediately after the source among its
+/// siblings.
+pub async fn duplicate_entry(
+    executor: &mut impl AnyQueryExecutor,
+    io: &dyn Io,
+    action: DuplicateEntry,
+) -> Result<Mutation> {
+    let subtree = executor
+        .execute(FindDescendants {
+            entry_id: action.entry_id,
+        })
+        .await?;
+    let Some(entry) = subtree.iter().find(|e| e.id == action.entry_id).cloned() else {
+        return Err(DomainError::Rejected(RejectReason::NotFound(
+            "entry that does not exist cannot be duplicated".to_string(),
+        )));
+    };
+
+    if action.actor_id != entry.owner_id {
+        return Err(DomainError::Rejected(RejectReason::Unauthorized(format!(
+            "actor '{}' is not the owner of entry '{}'",
+            action.actor_id, entry.id
+        ))));
+    }
+
+    // Each activity has exactly one template root; duplicating it would mint
+    // a second.
+    if entry.is_template && entry.position.is_none() {
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "cannot duplicate an activity template root",
+        )));
+    }
+
+    // The copy lands immediately after the source among its siblings; a
+    // forest root duplicates in place (same temporal, adjacent in the day
+    // view).
+    let root_position = match &entry.position {
+        None => None,
+        Some(position) => {
+            let forest = load_subtree_forest(executor, position.parent_id).await?;
+            let siblings = forest.children(position.parent_id);
+            let successor = siblings
+                .iter()
+                .skip_while(|e| e.id != entry.id)
+                .nth(1)
+                .map(|e| e.id);
+            let slot = forest
+                .position_between(position.parent_id, Some(entry.id), successor)
+                .ok_or_else(|| DomainError::InvariantViolation {
+                    invariant: "sibling order yields an insertion slot",
+                    context: format!("entry '{}' in parent '{}'", entry.id, position.parent_id),
+                })?;
+            Some(slot)
+        }
+    };
+
+    let subtree_ids: Vec<Uuid> = subtree.iter().map(|e| e.id).collect();
+    let values = executor
+        .execute(FindValuesForEntries {
+            entry_ids: subtree_ids,
+        })
+        .await?;
+
+    let (entries, values) = duplicate_subtree(io, entry.id, &subtree, &values, root_position);
+
+    let mut deltas: Vec<AnyDelta> = entries
+        .into_iter()
+        .map(|e| Delta::Insert { new: e }.into())
+        .collect();
+    deltas.extend(values.into_iter().map(|v| Delta::Insert { new: v }.into()));
+
+    Ok(Mutation {
+        id: io.uuid(),
+        timestamp: io.current_time_wall_clock(),
+        action: Action::DuplicateEntry(action),
         changes: deltas,
     })
 }
@@ -1009,6 +1376,15 @@ pub async fn update_entry(
                 });
             }
 
+            // A sets sequence relies on being a sequence — and becoming a
+            // scalar would silently deep-delete the members. Break out of
+            // sets first.
+            if !is_sequence && entry.display_as_sets {
+                return Err(DomainError::Rejected(RejectReason::Precondition(
+                    "a sets sequence cannot become a scalar (break out of sets first)",
+                )));
+            }
+
             // Converting sequence -> scalar: a scalar can't hold children, so
             // delete the entire descendant subtree (and its attribute values).
             if !is_sequence {
@@ -1036,6 +1412,27 @@ pub async fn update_entry(
             }
 
             let update = entry.update().is_sequence(*is_sequence).to_delta();
+            deltas.push(update.into());
+        }
+        EntryChange::SetDisplayAsSets(display_as_sets) => {
+            if entry.display_as_sets == *display_as_sets {
+                // No-op.
+                return Ok(Mutation {
+                    id: io.uuid(),
+                    timestamp: io.current_time_wall_clock(),
+                    action: Action::UpdateEntry(action),
+                    changes: vec![],
+                });
+            }
+
+            // Setting the flag requires the sets shape; clearing it
+            // ("breaking out") is always legal.
+            if *display_as_sets {
+                let forest = load_subtree_forest(executor, entry.id).await?;
+                validate_sets_shape(&entry, &forest)?;
+            }
+
+            let update = entry.update().display_as_sets(*display_as_sets).to_delta();
             deltas.push(update.into());
         }
     }

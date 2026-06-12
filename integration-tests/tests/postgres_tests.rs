@@ -173,5 +173,7 @@ fn action_kind(action: &Action) -> &'static str {
         Action::UpdateAttributeValue(_) => "UpdateAttributeValue",
         Action::UpdateAttribute(_) => "UpdateAttribute",
         Action::UpdateEntry(_) => "UpdateEntry",
+        Action::ConvertToSets(_) => "ConvertToSets",
+        Action::DuplicateEntry(_) => "DuplicateEntry",
     }
 }

@@ -2,10 +2,11 @@ use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
 use gv_core::{
     actions::{
-        Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
-        DeleteEntryRecursive, EntryChange, MassChange, MoveEntry, NumericChange, SelectChange,
-        UpdateAttribute, UpdateAttributeValue, UpdateEntry, UpdateEntryCompletion, ValueField,
+        Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
+        CreateEntry, CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
+        DeleteEntryRecursive, DuplicateEntry, EntryChange, MassChange, MoveEntry, NumericChange,
+        SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntry, UpdateEntryCompletion,
+        ValueField,
     },
     models::{
         activity::{Activity, ActivityName},
@@ -595,6 +596,7 @@ pub struct UpdateAttribute {
 #[uniffi::remote(Enum)]
 pub enum EntryChange {
     SetIsSequence(bool),
+    SetDisplayAsSets(bool),
 }
 
 #[uniffi::remote(Record)]
@@ -602,6 +604,19 @@ pub struct UpdateEntry {
     pub actor_id: Uuid,
     pub entry_id: Uuid,
     pub change: EntryChange,
+}
+
+#[uniffi::remote(Record)]
+pub struct ConvertToSets {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub sequence_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+pub struct DuplicateEntry {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
 }
 
 #[uniffi::remote(Enum)]
@@ -620,4 +635,6 @@ pub enum Action {
     UpdateAttributeValue(UpdateAttributeValue),
     UpdateAttribute(UpdateAttribute),
     UpdateEntry(UpdateEntry),
+    ConvertToSets(ConvertToSets),
+    DuplicateEntry(DuplicateEntry),
 }
