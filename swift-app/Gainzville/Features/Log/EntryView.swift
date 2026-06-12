@@ -310,12 +310,23 @@ private struct SetsBody: View {
     @Binding var selectedMemberId: String?
     let memberAttributes: [AttributePair]
 
+    // Matches the card border, which is keyed off the members the same way
+    // (see EntryView.displaysAsSequence).
+    private var separatorColor: Color {
+        members.contains { $0.isSequence } ? .entrySequenceBorder : .entryScalarBorder
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.entrySpacing) {
             // Time first: it describes the whole sequence of members, so it
             // sits hierarchically above the per-set picker.
             TemporalAttribute(entry: sequence)
             SetsControl(members: members, selectedMemberId: $selectedMemberId)
+            // Separates the sequence's sets control row from the per-set rows below.
+            Rectangle()
+                .fill(separatorColor)
+                .frame(height: GvSpacing.entryScalarBorderWidth)
+                .padding(.vertical, GvSpacing.md)
             if let member = selectedMember {
                 // Re-key on the member so editor state (focus, in-progress
                 // edits) never carries across set switches.
@@ -349,7 +360,7 @@ private struct SetsControl: View {
 
     var body: some View {
         AttributeRow(label: "Sets") {
-            HStack(spacing: GvSpacing.md) {
+            HStack(spacing: GvSpacing.lg) {
                 ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
                     Button {
                         selectedMemberId = member.id
