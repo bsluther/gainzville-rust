@@ -96,17 +96,19 @@ sequence, but the effect is to complete all descendant entries.
 The goal of the following is to support the standard conception of "sets" and "reps" in athletics
 within the Gainzville model.
 
-**Sets** are sequences of entries where each entry is an instance of the same activity. Each set
-(e.g. entry) may have different attribute/value pairs associated with it. Entries belonging to the
-same set have a parent pointer to that set and the column value `as_set = true`. The UI presented
-is significantly different than a standard sequence of entries: the user sees the common activity
-(or entry name, if the entry is anonymous) and carousel-like picker to choose between sets. Roughly:
+**Sets** are sequences of entries where each entry (a **set member**) is an instance of the same
+activity. The sequence carries `display_as_sets = true`, telling the UI to hide the sequence level
+and present the repeated member as a single entry with a carousel-like picker to choose between
+sets. Roughly:
 ```
 Push-Up
-  Set    [1], 2, 3, +
+  Sets    1, [2], 3, +, −
 ```
-A user can "break out" the sets to return to the standard sequence of entries view and remove the
-constraint that entries are homogenous. The above would result in something like:
+Each member may have different attributes and values (set 1: 5 reps, set 2: 7 reps). While the flag
+is set, core enforces that the sequence has at least one member and that all members share one
+activity (or are all anonymous). A user can "break out" the sets — clear the flag — to return to
+the standard sequence view, where members may diverge freely. The above would result in something
+like:
 ```
 ________________
 |             *|
@@ -115,6 +117,8 @@ ________________
 | Push-Up      |
 ----------------
 ```
+See [Sets design](./sets-design.md) for the full design: invariants, action semantics
+(`ConvertToSets`, `DuplicateEntry`, `SetDisplayAsSets`), and the temporal model for sets.
 
 **Reps** are repetition of the same entry with the same attribute values. They are represented
 internally by a special numeric attribute called, unsuprisingly, Reps. They are interpreted as
