@@ -347,7 +347,9 @@ class ForestViewModel: ObservableObject {
     /// mounts with a fresh identity, which would otherwise collapse it.
     func convertToSets(entry: Entry) {
         guard let core else { return }
-        let sequenceId = UUID().uuidString
+        // Lowercased to match ids as core emits them — consumePendingExpanded
+        // compares against forest entry ids, which round-trip lowercase.
+        let sequenceId = UUID().uuidString.lowercased()
         pendingExpandedEntryIds.insert(sequenceId)
         try? core.runAction(action: .convertToSets(ConvertToSets(
             actorId: SYSTEM_ACTOR_ID,
