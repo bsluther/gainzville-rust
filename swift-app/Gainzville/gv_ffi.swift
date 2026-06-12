@@ -6689,6 +6689,20 @@ public func FfiConverterTypeUuid_lower(_ value: Uuid) -> RustBuffer {
     return FfiConverterTypeUuid.lower(value)
 }
 
+/**
+ * Unit conversion for mass values; the logic lives in core
+ * (`MassValue::converted_to`). uniffi can't attach methods to remote data
+ * enums, so pure helpers cross the boundary as free functions and the Swift
+ * side wraps them back into extension methods (`MassValue.converted(to:)`).
+ */
+public func massValueConvertedTo(value: MassValue, unit: MassUnit) -> MassValue  {
+    return try!  FfiConverterTypeMassValue_lift(try! rustCall() {
+    uniffi_gv_ffi_fn_func_mass_value_converted_to(
+        FfiConverterTypeMassValue_lower(value),
+        FfiConverterTypeMassUnit_lower(unit),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -6704,6 +6718,9 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_gv_ffi_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_gv_ffi_checksum_func_mass_value_converted_to() != 39437) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_corelistener_on_data_changed() != 48934) {
         return InitializationResult.apiChecksumMismatch

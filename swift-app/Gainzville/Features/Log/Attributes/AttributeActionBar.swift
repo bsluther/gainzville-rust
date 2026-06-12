@@ -16,14 +16,30 @@ import SwiftUI
 // feed it to every surface they own, so a kind looks the same on the keyboard
 // bar, a sheet, or a popover.
 
+/// One entry in the Units menu: a unit's display label, whether it's the one
+/// currently shown, and the action selecting it. Kept as plain labels +
+/// closures so the bar stays measure-agnostic (mass today, distance later).
+struct UnitOption: Identifiable, Equatable {
+    let label: String
+    let isSelected: Bool
+    let select: () -> Void
+
+    var id: String { label }
+
+    // Same equality contract as the bar actions: presentation only.
+    static func == (a: Self, b: Self) -> Bool {
+        a.label == b.label && a.isSelected == b.isSelected
+    }
+}
+
 /// The bar's vocabulary: presentation (label/icon/color) lives here; behavior
-/// arrives as associated closures. `units` is a placeholder no-op until unit
-/// selection lands. `range` is a checkbox-style toggle between exact and range
-/// editing; `active` is presentation state and participates in `==` so the
-/// keyboard bar re-publishes when the mode flips mid-session.
+/// arrives as associated closures. `units` renders as a menu of its options
+/// rather than a plain button. `range` is a checkbox-style toggle between
+/// exact and range editing; `active` is presentation state and participates
+/// in `==` so the keyboard bar re-publishes when the mode flips mid-session.
 enum AttributeBarAction: Identifiable {
     case clear(() -> Void)
-    case units
+    case units(options: [UnitOption])
     case range(active: Bool, toggle: () -> Void)
     case remove(() -> Void)
 
@@ -56,7 +72,7 @@ enum AttributeBarAction: Identifiable {
         switch self {
         case .clear(let f), .remove(let f): f()
         case .range(_, let toggle): toggle()
-        case .units: break
+        case .units: break // Rendered as a Menu; selection runs per-option.
         }
     }
 }
@@ -68,8 +84,10 @@ enum AttributeBarAction: Identifiable {
 extension AttributeBarAction: Equatable {
     static func == (a: Self, b: Self) -> Bool {
         switch (a, b) {
-        case (.clear, .clear), (.units, .units), (.remove, .remove):
+        case (.clear, .clear), (.remove, .remove):
             return true
+        case (.units(let x), .units(let y)):
+            return x == y
         case (.range(let x, _), .range(let y, _)):
             return x == y
         default:
@@ -92,10 +110,15 @@ extension Array where Element == AttributeBarAction {
     }
 
     static func mass(
+        units: [UnitOption],
         range: (active: Bool, toggle: () -> Void),
         remove: @escaping () -> Void
     ) -> Self {
-        [.units, .range(active: range.active, toggle: range.toggle), .remove(remove)]
+        [
+            .units(options: units),
+            .range(active: range.active, toggle: range.toggle),
+            .remove(remove),
+        ]
     }
 
     // `range` is supplied only when the attribute is `ordered` — unordered
@@ -132,12 +155,35 @@ struct AttributeActionBar: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: GvSpacing.xl) {
                     ForEach(actions) { action in
-                        Button(action: action.run) {
-                            Label(action.label, systemImage: action.icon)
-                                .font(.attrLabel)
-                                .foregroundStyle(action.color)
+                        if case .units(let options) = action {
+                            // A system Menu gives the unit list anchored
+                            // presentation + dismissal for free on both the
+                            // iOS keyboard bar and the macOS popover.
+                            Menu {
+                                ForEach(options) { option in
+                                    Button(action: option.select) {
+                                        if option.isSelected {
+                                            Label(option.label, systemImage: "checkmark")
+                                        } else {
+                                            Text(option.label)
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Label(action.label, systemImage: action.icon)
+                                    .font(.attrLabel)
+                                    .foregroundStyle(action.color)
+                            }
+                            .menuIndicator(.hidden)
+                            .buttonStyle(.plain)
+                        } else {
+                            Button(action: action.run) {
+                                Label(action.label, systemImage: action.icon)
+                                    .font(.attrLabel)
+                                    .foregroundStyle(action.color)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, GvSpacing.sm)

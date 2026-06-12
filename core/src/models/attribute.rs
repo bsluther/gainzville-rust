@@ -173,6 +173,17 @@ fn at_most_two_decimals(v: f64) -> bool {
     v.trunc() == v || (v * 100.0).round() / 100.0 == v
 }
 
+/// Round to the 2-decimal cap. Values already at the cap pass through
+/// untouched — that branch also keeps huge magnitudes intact, where `v * 100.0`
+/// would overflow to infinity.
+fn round_to_two_decimals(v: f64) -> f64 {
+    if at_most_two_decimals(v) {
+        v
+    } else {
+        (v * 100.0).round() / 100.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NumericConfig {
     pub min: Option<f64>,
@@ -408,6 +419,26 @@ pub enum MassUnit {
     Pound,
 }
 
+impl MassUnit {
+    /// Conversion factor to the SI base unit: kilograms per 1 of this unit.
+    /// All factors are exact by definition (the international avoirdupois
+    /// pound is defined as 0.45359237 kg).
+    pub fn kilograms_per_unit(&self) -> f64 {
+        match self {
+            MassUnit::Gram => 0.001,
+            MassUnit::Kilogram => 1.0,
+            MassUnit::Pound => 0.45359237,
+        }
+    }
+
+    /// Convert a magnitude from `self` to `to` at full precision, routing
+    /// through the base unit (`self` → kg → `to`) so each new unit adds one
+    /// factor rather than a row of pairwise conversions.
+    pub fn convert(&self, value: f64, to: &MassUnit) -> f64 {
+        value * self.kilograms_per_unit() / to.kilograms_per_unit()
+    }
+}
+
 ///// Values /////
 
 #[derive(Debug, Clone, PartialEq)]
@@ -491,6 +522,28 @@ impl MassValue {
         match self {
             MassValue::Exact(m) => &m.unit,
             MassValue::Range { unit, .. } => unit,
+        }
+    }
+
+    /// A copy of this value re-expressed in `unit`. Magnitudes are rounded to
+    /// the 2-decimal cap so the result is writable as-is — `validate_value`
+    /// would reject a full-precision conversion. Same-unit conversion returns
+    /// the value unchanged, so repeated re-selection never drifts.
+    pub fn converted_to(&self, unit: MassUnit) -> MassValue {
+        if *self.unit() == unit {
+            return self.clone();
+        }
+        match self {
+            MassValue::Exact(m) => MassValue::Exact(MassMeasurement {
+                value: round_to_two_decimals(m.unit.convert(m.value, &unit)),
+                unit,
+            }),
+            // Positive factors and monotone rounding preserve min <= max.
+            MassValue::Range { unit: from, min, max } => MassValue::Range {
+                min: round_to_two_decimals(from.convert(*min, &unit)),
+                max: round_to_two_decimals(from.convert(*max, &unit)),
+                unit,
+            },
         }
     }
 }
@@ -680,5 +733,39 @@ mod tests {
             min: 45.005,
             max: 55.0,
         })));
+    }
+
+    #[test]
+    fn mass_conversion() {
+        let m = |unit, value| MassValue::Exact(MassMeasurement { unit, value });
+        // Exact factor between metric units.
+        assert_eq!(
+            m(MassUnit::Kilogram, 1.5).converted_to(MassUnit::Gram),
+            m(MassUnit::Gram, 1500.0)
+        );
+        // 20 lb = 9.0718474 kg, rounded to the 2-decimal cap.
+        assert_eq!(
+            m(MassUnit::Pound, 20.0).converted_to(MassUnit::Kilogram),
+            m(MassUnit::Kilogram, 9.07)
+        );
+        // Same-unit conversion is identity, not a rounded round trip.
+        assert_eq!(
+            m(MassUnit::Pound, 20.0).converted_to(MassUnit::Pound),
+            m(MassUnit::Pound, 20.0)
+        );
+        // Ranges convert both endpoints in one move.
+        assert_eq!(
+            MassValue::Range {
+                unit: MassUnit::Pound,
+                min: 45.0,
+                max: 55.0,
+            }
+            .converted_to(MassUnit::Kilogram),
+            MassValue::Range {
+                unit: MassUnit::Kilogram,
+                min: 20.41,
+                max: 24.95,
+            }
+        );
     }
 }

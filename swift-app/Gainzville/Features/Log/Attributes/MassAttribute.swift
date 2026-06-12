@@ -5,8 +5,9 @@ import SwiftUI
 // (the stored value's unit, else the attribute's default). Empty fields render
 // as empty placeholders, not "0", per the user-facing spec.
 //
-// Unit switching and conversion are deferred (see docs/attributes-design.md
-// "Unit selection / conversion for measures").
+// Unit switching: the bar's Units menu re-expresses the current value via
+// core's conversion (see docs/attributes-design.md "Unit selection /
+// conversion for measures").
 //
 // Range editing: the pill switches between one exact input and a min–max pair
 // via the action bar's Range toggle. Both endpoints share the value's unit.
@@ -22,6 +23,11 @@ struct MassAttribute: View {
     // Range/exact presentation override while the stored value disagrees.
     // nil = follow stored.
     @State private var modeOverride: Bool?
+    // Unit picked from the bar while no stored value carries it yet (the unit
+    // lives on the value, so an empty field has nowhere durable to put the
+    // choice). The next committed value adopts it; abandoning the edit session
+    // drops it back to the stored/default unit. nil = follow stored.
+    @State private var unitOverride: MassUnit?
     @State private var debounceTask: Task<Void, Never>?
     @FocusState private var focusedField: RangeEndpoint?
     // Set by Remove so the focus-loss handler skips flushNow() — flushing
@@ -39,16 +45,24 @@ struct MassAttribute: View {
 
     private var isRangeMode: Bool { modeOverride ?? storedIsRange }
 
-    /// Mirrors `MassAttributePair::display_unit()` from core: the actual
-    /// value's unit, else the plan's, else the config default.
+    /// Mirrors `MassAttributePair::display_unit()` from core — the actual
+    /// value's unit, else the plan's, else the config default — with the
+    /// session's picked-but-uncommitted unit layered on top.
     private var displayUnit: MassUnit {
-        pair.actual?.unit ?? pair.plan?.unit ?? pair.config.defaultUnit
+        unitOverride ?? pair.actual?.unit ?? pair.plan?.unit ?? pair.config.defaultUnit
     }
 
     // The bar actions for this attribute, defined once and rendered identically
     // by both surfaces (iOS keyboard bar via AttributeBarPublisher, macOS popover).
     private var barActions: [AttributeBarAction] {
         .mass(
+            units: MassUnit.pickerCases.map { unit in
+                UnitOption(
+                    label: unit.menuLabel,
+                    isSelected: unit == displayUnit,
+                    select: { selectUnit(unit) }
+                )
+            },
             range: (active: isRangeMode, toggle: toggleRange),
             remove: {
                 pendingRemoval = true
@@ -72,6 +86,7 @@ struct MassAttribute: View {
             // Skip mid-edit to avoid clobbering keystrokes.
             guard focusedField == nil else { return }
             modeOverride = nil
+            unitOverride = nil
             syncEditState()
         }
         .onChange(of: minValue) { _, _ in scheduleDebounce() }
@@ -93,6 +108,7 @@ struct MassAttribute: View {
                     // resyncs instead — resyncing here would flash the stale
                     // stored value until the write lands.)
                     modeOverride = nil
+                    unitOverride = nil
                     syncEditState()
                 }
             }
@@ -207,6 +223,48 @@ struct MassAttribute: View {
             maxValue = ""
             if focusedField != nil { focusedField = .max }
         }
+    }
+
+    // MARK: - Unit selection
+
+    /// Switch the editor (and any current value) to `unit`. The value being
+    /// re-united is whatever the user sees: a parseable pending edit when one
+    /// exists, else the stored actual. Conversion happens in core
+    /// (`MassValue::converted_to` via FFI), rounded to the 2-decimal cap.
+    /// Plan values are left alone for now.
+    private func selectUnit(_ unit: MassUnit) {
+        guard unit != displayUnit else { return }
+        debounceTask?.cancel()
+        debounceTask = nil
+        let current: MassValue?
+        switch pendingCommit(isBlur: true) {
+        case .set(let value): current = value
+        // An emptied field has nothing to convert; the clear itself still
+        // dispatches on blur via the normal flush path.
+        case .clear: current = nil
+        case nil: current = pair.actual
+        }
+        unitOverride = unit
+        guard let current else { return }
+        let converted = current.converted(to: unit)
+        // Reflect the converted magnitudes immediately — the mid-edit guard
+        // skips the write's refresh sync while a field is focused. The
+        // debounce these writes schedule is benign: when it fires, the
+        // dispatch below has already made it a no-op (or an identical write).
+        switch converted {
+        case .exact(let m):
+            minValue = format(m.value)
+            maxValue = ""
+        case .range(_, let lo, let hi):
+            minValue = format(lo)
+            maxValue = format(hi)
+        }
+        forestVM.updateAttributeValue(
+            entryId: entry.id,
+            attributeId: pair.attrId,
+            field: .actual,
+            value: .mass(converted)
+        )
     }
 
     // MARK: - Sync cache → shadow
@@ -336,9 +394,27 @@ private extension MassValue {
         case .range(let unit, _, _): return unit
         }
     }
+
+    /// Method-style sugar over the FFI free function (uniffi can't attach
+    /// methods to data enums); the conversion itself runs in core.
+    func converted(to unit: MassUnit) -> MassValue {
+        massValueConvertedTo(value: self, unit: unit)
+    }
 }
 
 private extension MassUnit {
+    // The generated enum isn't CaseIterable (conformance can't be synthesized
+    // outside the declaring file), so the menu order is spelled out here.
+    static let pickerCases: [MassUnit] = [.gram, .kilogram, .pound]
+
+    var menuLabel: String {
+        switch self {
+        case .gram:     return "Grams (g)"
+        case .kilogram: return "Kilograms (kg)"
+        case .pound:    return "Pounds (lb)"
+        }
+    }
+
     var shortLabel: String {
         switch self {
         // Pad single-char units to two chars so, under a monospaced font, every

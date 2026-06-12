@@ -235,6 +235,15 @@ pub enum MassValue {
     Range { unit: MassUnit, min: f64, max: f64 },
 }
 
+/// Unit conversion for mass values; the logic lives in core
+/// (`MassValue::converted_to`). uniffi can't attach methods to remote data
+/// enums, so pure helpers cross the boundary as free functions and the Swift
+/// side wraps them back into extension methods (`MassValue.converted(to:)`).
+#[uniffi::export]
+pub fn mass_value_converted_to(value: MassValue, unit: MassUnit) -> MassValue {
+    value.converted_to(unit)
+}
+
 #[uniffi::remote(Enum)]
 pub enum AttributeValue {
     Numeric(NumericValue),
