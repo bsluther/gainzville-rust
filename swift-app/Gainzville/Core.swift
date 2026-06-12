@@ -328,6 +328,50 @@ class ForestViewModel: ObservableObject {
             change: .setIsSequence(isSequence)
         )))
     }
+
+    /// Toggle the sets presentation. Setting it requires the sets shape
+    /// (sequence, ≥1 member, members share one activity — enforced in core);
+    /// clearing it ("break out") is always legal.
+    func setDisplayAsSets(entryId: String, displayAsSets: Bool) {
+        guard let core else { return }
+        try? core.runAction(action: .updateEntry(UpdateEntry(
+            actorId: SYSTEM_ACTOR_ID,
+            entryId: entryId,
+            change: .setDisplayAsSets(displayAsSets)
+        )))
+    }
+
+    /// Convert an entry into a sets sequence. The sequence id is minted here
+    /// so the replacement card can be marked expanded before the forest
+    /// refresh swaps it in — the entry's card unmounts and the sequence's
+    /// mounts with a fresh identity, which would otherwise collapse it.
+    func convertToSets(entry: Entry) {
+        guard let core else { return }
+        let sequenceId = UUID().uuidString
+        pendingExpandedEntryIds.insert(sequenceId)
+        try? core.runAction(action: .convertToSets(ConvertToSets(
+            actorId: SYSTEM_ACTOR_ID,
+            entryId: entry.id,
+            sequenceId: sequenceId
+        )))
+    }
+
+    /// Deep-copy an entry's subtree (exact copy, fresh ids), inserted
+    /// immediately after the source among its siblings.
+    func duplicateEntry(entry: Entry) {
+        guard let core else { return }
+        try? core.runAction(action: .duplicateEntry(DuplicateEntry(
+            actorId: SYSTEM_ACTOR_ID,
+            entryId: entry.id
+        )))
+    }
+
+    // Cards that should mount expanded, consumed once by EntryView.onAppear.
+    private var pendingExpandedEntryIds: Set<String> = []
+
+    func consumePendingExpanded(_ entryId: String) -> Bool {
+        pendingExpandedEntryIds.remove(entryId) != nil
+    }
 }
 
 // Per-entry view model: subscribes once to `findEntryJoinById` for its
@@ -343,8 +387,12 @@ class EntryViewModel: ObservableObject {
     private var entryId: String?
     private var core: GainzvilleCore?
 
+    /// Idempotent for the same entry id; calling with a different id
+    /// re-targets the VM (dropping the old subscription auto-removes its
+    /// query from the Rust cache). Sets cards use this to follow the
+    /// selected member.
     func start(core: GainzvilleCore, dataChange: DataChange, entryId: String) {
-        guard self.entryId == nil else { return }
+        guard self.entryId != entryId else { return }
         self.core = core
         self.entryId = entryId
         subscription = try? core.subscribeQuery(query: .findEntryJoinById(FindEntryJoinById(entryId: entryId)))

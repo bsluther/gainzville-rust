@@ -1682,6 +1682,64 @@ public func FfiConverterTypeAttribute_lower(_ value: Attribute) -> RustBuffer {
 }
 
 
+public struct ConvertToSets: Equatable, Hashable {
+    public var actorId: Uuid
+    public var entryId: Uuid
+    public var sequenceId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(actorId: Uuid, entryId: Uuid, sequenceId: Uuid) {
+        self.actorId = actorId
+        self.entryId = entryId
+        self.sequenceId = sequenceId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ConvertToSets: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConvertToSets: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConvertToSets {
+        return
+            try ConvertToSets(
+                actorId: FfiConverterTypeUuid.read(from: &buf), 
+                entryId: FfiConverterTypeUuid.read(from: &buf), 
+                sequenceId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ConvertToSets, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.actorId, into: &buf)
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+        FfiConverterTypeUuid.write(value.sequenceId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConvertToSets_lift(_ buf: RustBuffer) throws -> ConvertToSets {
+    return try FfiConverterTypeConvertToSets.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConvertToSets_lower(_ value: ConvertToSets) -> RustBuffer {
+    return FfiConverterTypeConvertToSets.lower(value)
+}
+
+
 public struct CreateActivity: Equatable, Hashable {
     public var actorId: Uuid
     public var activity: Activity
@@ -2127,6 +2185,60 @@ public func FfiConverterTypeDeleteEntryRecursive_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeDeleteEntryRecursive_lower(_ value: DeleteEntryRecursive) -> RustBuffer {
     return FfiConverterTypeDeleteEntryRecursive.lower(value)
+}
+
+
+public struct DuplicateEntry: Equatable, Hashable {
+    public var actorId: Uuid
+    public var entryId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(actorId: Uuid, entryId: Uuid) {
+        self.actorId = actorId
+        self.entryId = entryId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension DuplicateEntry: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDuplicateEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DuplicateEntry {
+        return
+            try DuplicateEntry(
+                actorId: FfiConverterTypeUuid.read(from: &buf), 
+                entryId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DuplicateEntry, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.actorId, into: &buf)
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDuplicateEntry_lift(_ buf: RustBuffer) throws -> DuplicateEntry {
+    return try FfiConverterTypeDuplicateEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDuplicateEntry_lower(_ value: DuplicateEntry) -> RustBuffer {
+    return FfiConverterTypeDuplicateEntry.lower(value)
 }
 
 
@@ -4060,6 +4172,10 @@ public enum Action: Equatable, Hashable {
     )
     case updateEntry(UpdateEntry
     )
+    case convertToSets(ConvertToSets
+    )
+    case duplicateEntry(DuplicateEntry
+    )
 
 
 
@@ -4121,6 +4237,12 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         )
         
         case 14: return .updateEntry(try FfiConverterTypeUpdateEntry.read(from: &buf)
+        )
+        
+        case 15: return .convertToSets(try FfiConverterTypeConvertToSets.read(from: &buf)
+        )
+        
+        case 16: return .duplicateEntry(try FfiConverterTypeDuplicateEntry.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -4199,6 +4321,16 @@ public struct FfiConverterTypeAction: FfiConverterRustBuffer {
         case let .updateEntry(v1):
             writeInt(&buf, Int32(14))
             FfiConverterTypeUpdateEntry.write(v1, into: &buf)
+            
+        
+        case let .convertToSets(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterTypeConvertToSets.write(v1, into: &buf)
+            
+        
+        case let .duplicateEntry(v1):
+            writeInt(&buf, Int32(16))
+            FfiConverterTypeDuplicateEntry.write(v1, into: &buf)
             
         }
     }
@@ -5085,6 +5217,8 @@ public enum EntryChange: Equatable, Hashable {
     
     case setIsSequence(Bool
     )
+    case setDisplayAsSets(Bool
+    )
 
 
 
@@ -5109,6 +5243,9 @@ public struct FfiConverterTypeEntryChange: FfiConverterRustBuffer {
         case 1: return .setIsSequence(try FfiConverterBool.read(from: &buf)
         )
         
+        case 2: return .setDisplayAsSets(try FfiConverterBool.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5119,6 +5256,11 @@ public struct FfiConverterTypeEntryChange: FfiConverterRustBuffer {
         
         case let .setIsSequence(v1):
             writeInt(&buf, Int32(1))
+            FfiConverterBool.write(v1, into: &buf)
+            
+        
+        case let .setDisplayAsSets(v1):
+            writeInt(&buf, Int32(2))
             FfiConverterBool.write(v1, into: &buf)
             
         }

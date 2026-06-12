@@ -43,14 +43,29 @@ struct EntryView: View {
     @EnvironmentObject var dataChange: DataChange
     @EnvironmentObject var dragState: DragState
     @StateObject private var vm = EntryViewModel()
+    // For sets cards: joined data of the selected member, whose identity and
+    // attributes are what the card displays (the sequence level is hidden).
+    @StateObject private var selectedMemberVM = EntryViewModel()
     @State private var isExpanded = false
+    // nil tracks the last member, so a "+" duplicate (appended at the end)
+    // becomes selected automatically when the forest refreshes.
+    @State private var selectedMemberId: String?
+
+    private var setsMembers: [Entry] {
+        entry.displayAsSets ? forestVM.children(of: entry.id) : []
+    }
+
+    private var selectedMember: Entry? {
+        setsMembers.first { $0.id == selectedMemberId } ?? setsMembers.last
+    }
 
     // Single source of truth lives in core (`EntryJoin::display_name`),
     // surfaced via `EntryJoin.displayName`. Empty string covers the
     // single render frame between view appear and the subscription
     // populating the cache; SwiftUI swaps in the real value immediately.
+    // Sets sequences are anonymous; their cards title as the selected member.
     var displayName: String {
-        vm.entryJoin?.displayName ?? ""
+        (entry.displayAsSets ? selectedMemberVM : vm).entryJoin?.displayName ?? ""
     }
 
     var body: some View {
@@ -58,12 +73,22 @@ struct EntryView: View {
             EntryHeader(
                 entry: entry,
                 displayName: displayName,
-                activityName: vm.entryJoin?.activity?.name,
+                activityName: (entry.displayAsSets ? selectedMemberVM : vm).entryJoin?.activity?.name,
                 isExpanded: isExpanded,
                 onToggle: { isExpanded.toggle() }
             )
             if isExpanded {
-                EntryBody(entry: entry, attributes: vm.entryJoin?.attributes ?? [])
+                if entry.displayAsSets {
+                    SetsBody(
+                        sequence: entry,
+                        members: setsMembers,
+                        selectedMember: selectedMember,
+                        selectedMemberId: $selectedMemberId,
+                        memberAttributes: selectedMemberVM.entryJoin?.attributes ?? []
+                    )
+                } else {
+                    EntryBody(entry: entry, attributes: vm.entryJoin?.attributes ?? [])
+                }
             }
         }
         // Pin to the parent's proposal. Over-eager value content can't inflate
@@ -86,7 +111,19 @@ struct EntryView: View {
             onDayRootDrop: onDayRootDrop
         ))
         .onAppear {
+            // Pre-marked by actions that swap this card's identity (e.g.
+            // ConvertToSets replacing an entry with its new sets sequence).
+            if forestVM.consumePendingExpanded(entry.id) {
+                isExpanded = true
+            }
             vm.start(core: coreEnv.core, dataChange: dataChange, entryId: entry.id)
+        }
+        // Runs on appear and whenever the selection (or membership) changes;
+        // start is idempotent per id and re-targets across ids.
+        .task(id: selectedMember?.id) {
+            if let memberId = selectedMember?.id {
+                selectedMemberVM.start(core: coreEnv.core, dataChange: dataChange, entryId: memberId)
+            }
         }
     }
 }
@@ -249,6 +286,107 @@ private struct ChildrenSection: View {
     }
 }
 
+// MARK: - Sets
+
+// Body for a display_as_sets sequence. The sequence level is hidden: the card
+// shows the Sets picker, the sequence's one Time row (the sequence owns the
+// timeline slot; member temporal stays hidden), then the SELECTED member's
+// attributes, children, and footer. Set numbers are the members' sibling order.
+private struct SetsBody: View {
+    let sequence: Entry
+    let members: [Entry]
+    let selectedMember: Entry?
+    @Binding var selectedMemberId: String?
+    let memberAttributes: [AttributePair]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: GvSpacing.entrySpacing) {
+            SetsControl(members: members, selectedMemberId: $selectedMemberId)
+            TemporalAttribute(entry: sequence)
+            if let member = selectedMember {
+                // Re-key on the member so editor state (focus, in-progress
+                // edits) never carries across set switches.
+                Group {
+                    AttributesSection(entry: member, attributes: memberAttributes)
+                    if member.isSequence {
+                        ChildrenSection(parent: member)
+                    }
+                    EntryFooter(entry: member)
+                }
+                .id(member.id)
+            }
+        }
+        .padding(.horizontal, GvSpacing.entrySpacing)
+        .padding(.top, GvSpacing.entrySpacing)
+    }
+}
+
+// The attribute-like "Sets" row: numbered pills in sibling order, "+"
+// duplicates the LAST member and appends (selection follows the new set),
+// "−" deletes the SELECTED member and selects its predecessor. "−" disables
+// at one member; core also rejects removing a sets sequence's last member.
+private struct SetsControl: View {
+    let members: [Entry]
+    @Binding var selectedMemberId: String?
+    @EnvironmentObject private var forestVM: ForestViewModel
+
+    private var selectedIndex: Int {
+        members.firstIndex { $0.id == selectedMemberId } ?? members.count - 1
+    }
+
+    var body: some View {
+        AttributeRow(label: "Sets") {
+            HStack(spacing: GvSpacing.md) {
+                ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
+                    Button {
+                        selectedMemberId = member.id
+                    } label: {
+                        Text("\(index + 1)")
+                            .font(.attrField)
+                            .foregroundStyle(index == selectedIndex ? Color.entryTextPrimary : Color.entryTextSecondary)
+                            .frame(minWidth: 28, minHeight: 28)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(index == selectedIndex ? Color.gvNeutral800 : .clear)
+                            )
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button(action: addSet) {
+                    Image(systemName: "plus")
+                        .foregroundStyle(Color.entryTextPrimary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Button(action: removeSelected) {
+                    Image(systemName: "minus")
+                        .foregroundStyle(members.count > 1 ? Color.entryTextPrimary : Color.entryTextSecondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(members.count <= 1)
+            }
+        }
+    }
+
+    private func addSet() {
+        guard let last = members.last else { return }
+        forestVM.duplicateEntry(entry: last)
+        // nil tracks the last member, which is the new copy after refresh.
+        selectedMemberId = nil
+    }
+
+    private func removeSelected() {
+        guard members.count > 1 else { return }
+        let index = selectedIndex
+        selectedMemberId = index > 0 ? members[index - 1].id : members[1].id
+        forestVM.deleteEntry(entry: members[index])
+    }
+}
+
 // MARK: - Footer
 
 private struct EntryFooter: View {
@@ -330,12 +468,27 @@ private struct EntryMenuContent: View {
 
     var body: some View {
         let isRoot = entry.position == nil
+        // Core rejects duplicating or converting an activity template root
+        // (both would break the unique-template-root rule) — don't offer them.
+        let isTemplateRoot = entry.isTemplate && isRoot
         NavigationStack {
             ScrollView {
                 VStack(spacing: GvSpacing.md) {
                     // Group 1 — workflow
-                    GvMenuRow("Duplicate", icon: "doc.on.doc")
-                    GvMenuRow("Add set", icon: "rectangle.stack.badge.plus")
+                    if !isTemplateRoot {
+                        GvMenuRow("Duplicate", icon: "doc.on.doc") {
+                            forestVM.duplicateEntry(entry: entry)
+                        }
+                        if entry.displayAsSets {
+                            GvMenuRow("Break out", icon: "rectangle.stack") {
+                                forestVM.setDisplayAsSets(entryId: entry.id, displayAsSets: false)
+                            }
+                        } else {
+                            GvMenuRow("With sets", icon: "rectangle.stack.badge.plus") {
+                                forestVM.convertToSets(entry: entry)
+                            }
+                        }
+                    }
                     if entry.isSequence {
                         GvMenuRow("Add entry", icon: "plus.circle")
                     }
