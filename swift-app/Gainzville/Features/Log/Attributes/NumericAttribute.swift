@@ -86,11 +86,10 @@ struct NumericAttribute: View {
                         debounceTask?.cancel()
                         debounceTask = nil
                     } else if !flushNow(isBlur: true) {
-                        // Nothing committed that changes the stored mode:
-                        // abandon any in-flight range entry and resync. (After
-                        // a range commit the refresh clears the override
-                        // instead, so the pill doesn't flash exact while the
-                        // write lands.)
+                        // Nothing committed: abandon any in-flight range entry
+                        // and resync. (When a commit was dispatched, its
+                        // refresh resyncs instead — resyncing here would flash
+                        // the stale stored value until the write lands.)
                         modeOverride = nil
                         syncEditState()
                     }
@@ -220,29 +219,37 @@ struct NumericAttribute: View {
         }
     }
 
-    /// Commit the pending value, if any. Returns true when the dispatched
-    /// commit creates or keeps a range — the blur handler uses this to avoid
-    /// resetting presentation mode underneath an in-flight range write.
+    /// Commit the pending write, if any. Returns true when a write was
+    /// dispatched — the blur handler skips its abandon-resync then, since the
+    /// write's refresh will resync the shadow (and clear the mode override)
+    /// once it lands; resyncing eagerly would flash the stale stored value.
     @discardableResult
     private func flushNow(isBlur: Bool) -> Bool {
         debounceTask?.cancel()
         debounceTask = nil
-        guard let value = pendingCommit(isBlur: isBlur) else { return false }
-        forestVM.updateAttributeValue(
-            entryId: entry.id,
-            attributeId: pair.attrId,
-            field: .actual,
-            value: .numeric(value)
-        )
-        if case .range = value { return true }
-        return false
+        switch pendingCommit(isBlur: isBlur) {
+        case nil:
+            return false
+        case .clear:
+            forestVM.clearAttributeValue(entryId: entry.id, attributeId: pair.attrId, field: .actual)
+            return true
+        case .set(let value):
+            forestVM.updateAttributeValue(
+                entryId: entry.id,
+                attributeId: pair.attrId,
+                field: .actual,
+                value: .numeric(value)
+            )
+            return true
+        }
     }
 
-    /// The value a commit would write right now, or nil when there's nothing
-    /// to commit: input that doesn't parse (mid-typing), an unchanged value,
-    /// an incomplete range, or — during the debounce window only — an inverted
-    /// range (min > max), which blur repairs by swapping instead.
-    private func pendingCommit(isBlur: Bool) -> NumericValue? {
+    /// The write a commit would dispatch right now, or nil when there's
+    /// nothing to commit: input that doesn't parse (mid-typing), an unchanged
+    /// value, an incomplete range, or — during the debounce window only — an
+    /// inverted range (min > max), which blur repairs by swapping instead.
+    /// An emptied exact field clears the stored value (it does not write 0).
+    private func pendingCommit(isBlur: Bool) -> PendingWrite<NumericValue>? {
         if isRangeMode {
             guard var lo = parseEndpoint(editMin), var hi = parseEndpoint(editMax) else {
                 return nil
@@ -254,10 +261,13 @@ struct NumericAttribute: View {
             if case .range(let curLo, let curHi) = pair.actual, curLo == lo, curHi == hi {
                 return nil
             }
-            return .range(min: lo, max: hi)
+            return .set(.range(min: lo, max: hi))
         }
-        guard let v = buildExact(), !sameAsCurrentExact(v) else { return nil }
-        return .exact(v)
+        if editMin.trimmingCharacters(in: .whitespaces).isEmpty {
+            return pair.actual == nil ? nil : .clear
+        }
+        guard let v = parseEndpoint(editMin), !sameAsCurrentExact(v) else { return nil }
+        return .set(.exact(v))
     }
 
     /// Parse one range endpoint from its shadow string, clamped and rounded.
@@ -266,18 +276,6 @@ struct NumericAttribute: View {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty,
               let parsed = Self.formatter.number(from: trimmed)?.doubleValue else {
-            return nil
-        }
-        return clamp(parsed)
-    }
-
-    /// Build a clamped, optionally-rounded exact value from the min shadow string.
-    /// - Empty input → 0 (per docs/attributes-design.md "Clear-value semantics" deferral).
-    /// - Non-parseable input → nil (skip commit while user is mid-typing, e.g. "3.").
-    private func buildExact() -> Double? {
-        let trimmed = editMin.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { return 0 }
-        guard let parsed = Self.formatter.number(from: trimmed)?.doubleValue else {
             return nil
         }
         return clamp(parsed)

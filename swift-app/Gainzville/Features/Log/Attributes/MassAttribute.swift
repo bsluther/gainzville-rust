@@ -88,10 +88,10 @@ struct MassAttribute: View {
                     debounceTask?.cancel()
                     debounceTask = nil
                 } else if !flushNow(isBlur: true) {
-                    // Nothing committed that changes the stored mode: abandon
-                    // any in-flight range entry and resync. (After a range
-                    // commit the refresh clears the override instead, so the
-                    // pills don't flash exact while the write lands.)
+                    // Nothing committed: abandon any in-flight range entry and
+                    // resync. (When a commit was dispatched, its refresh
+                    // resyncs instead — resyncing here would flash the stale
+                    // stored value until the write lands.)
                     modeOverride = nil
                     syncEditState()
                 }
@@ -238,32 +238,45 @@ struct MassAttribute: View {
         }
     }
 
-    /// Commit the pending value, if any. Returns true when the dispatched
-    /// commit creates or keeps a range — the blur handler uses this to avoid
-    /// resetting presentation mode underneath an in-flight range write.
+    /// Commit the pending write, if any. Returns true when a write was
+    /// dispatched — the blur handler skips its abandon-resync then, since the
+    /// write's refresh will resync the shadow (and clear the mode override)
+    /// once it lands; resyncing eagerly would flash the stale stored value.
     @discardableResult
     private func flushNow(isBlur: Bool) -> Bool {
         debounceTask?.cancel()
         debounceTask = nil
-        guard let value = pendingCommit(isBlur: isBlur) else { return false }
-        forestVM.updateAttributeValue(
-            entryId: entry.id,
-            attributeId: pair.attrId,
-            field: .actual,
-            value: .mass(value)
-        )
-        if case .range = value { return true }
-        return false
+        switch pendingCommit(isBlur: isBlur) {
+        case nil:
+            return false
+        case .clear:
+            forestVM.clearAttributeValue(entryId: entry.id, attributeId: pair.attrId, field: .actual)
+            return true
+        case .set(let value):
+            forestVM.updateAttributeValue(
+                entryId: entry.id,
+                attributeId: pair.attrId,
+                field: .actual,
+                value: .mass(value)
+            )
+            return true
+        }
     }
 
-    private func pendingCommit(isBlur: Bool) -> MassValue? {
+    /// An emptied exact field clears the stored value (it does not write 0);
+    /// non-parseable input commits nothing while the user is mid-typing.
+    private func pendingCommit(isBlur: Bool) -> PendingWrite<MassValue>? {
         if isRangeMode {
-            return buildRange(isBlur: isBlur)
+            guard let range = buildRange(isBlur: isBlur) else { return nil }
+            return .set(range)
         }
-        guard let new = buildExactMeasurement(), !sameAsCurrentExact(new) else {
-            return nil
+        if minValue.trimmingCharacters(in: .whitespaces).isEmpty {
+            return pair.actual == nil ? nil : .clear
         }
-        return .exact(new)
+        guard let parsed = parse(minValue) else { return nil }
+        let new = MassMeasurement(unit: displayUnit, value: parsed)
+        guard !sameAsCurrentExact(new) else { return nil }
+        return .set(.exact(new))
     }
 
     /// Build the range from the field pair, or nil when there's nothing to
@@ -278,22 +291,6 @@ struct MassAttribute: View {
         }
         guard !sameAsCurrentRange(unit: displayUnit, min: lo, max: hi) else { return nil }
         return .range(unit: displayUnit, min: lo, max: hi)
-    }
-
-    /// Build the exact measurement from the min-side field.
-    /// - Empty field: commit 0 only when a stored exact value exists (so
-    ///   emptying clears-to-0); otherwise there's nothing to commit.
-    /// - Non-parseable input: nil, skipping commit while user is mid-typing.
-    private func buildExactMeasurement() -> MassMeasurement? {
-        let raw = minValue.trimmingCharacters(in: .whitespaces)
-        if raw.isEmpty {
-            if case .exact = pair.actual {
-                return MassMeasurement(unit: displayUnit, value: 0)
-            }
-            return nil
-        }
-        guard let parsed = parse(raw) else { return nil }
-        return MassMeasurement(unit: displayUnit, value: parsed)
     }
 
     private func parse(_ raw: String) -> Double? {
