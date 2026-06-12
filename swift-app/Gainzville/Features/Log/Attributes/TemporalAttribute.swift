@@ -287,12 +287,10 @@ private struct DatePickerPill: View {
             if date != nil {
                 TimeFieldMacOS(selection: pickerDate, isFocused: isTimeFocused, onFocusChange: { isTimeFocused = $0 })
                     .fixedSize()
-                    .padding(.leading, GvSpacing.sm)
-                    .padding(.trailing, GvSpacing.lg)
-                    .padding(.vertical, GvSpacing.sm)
-                    .frame(minHeight: GvSpacing.minAttributeHeight)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.gvSurface))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gvDivider, lineWidth: 1))
+                    // The bezel-less NSDatePicker cell reserves slack below the
+                    // text, so centering its box leaves the glyphs a touch high.
+                    .offset(y: 1)
+                    .gvAttributePill()
                     .popover(isPresented: $isTimeFocused, arrowEdge: .top) {
                         AttributeSheetBar(title: "Time", actions: barActions, onDismiss: { isTimeFocused = false })
                             .frame(width: 280)
@@ -521,7 +519,7 @@ private struct TimeFieldMacOS: NSViewRepresentable {
         picker.datePickerElements = .hourMinuteSecond
         picker.isBezeled = false
         picker.drawsBackground = false
-        picker.textColor = NSColor(Color.gvTextPrimary)
+        picker.textColor = NSColor(Color.entryTextPrimary)
         picker.dateValue = selection
         picker.target = context.coordinator
         picker.action = #selector(Coordinator.dateChanged(_:))

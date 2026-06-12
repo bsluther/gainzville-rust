@@ -23,6 +23,17 @@ struct LogView: View {
                         ForEach(dayRoots, id: \.id) { entry in
                             EntryView(entry: entry, onDayRootDrop: handleDayRootDrop)
                         }
+                        // Trailing scroll headroom: attribute editors
+                        // (sheets/popovers) can cover an entry near the bottom
+                        // of the log, and scrolling while one is open isn't
+                        // possible — the user has to pre-scroll the entry clear
+                        // of where the editor will appear. 600pt clears the
+                        // tallest editor (the 0.7-fraction date sheet on a
+                        // ~850pt iPhone). Deliberately a content item, not
+                        // .contentMargins: keyboard avoidance keeps bottom
+                        // margins visible, over-scrolling the focused field off
+                        // the top; trailing content is scrolled only as needed.
+                        Color.clear.frame(height: 600)
                     }
                     .padding(.horizontal, GvSpacing.lg)
                     .padding(.vertical, GvSpacing.xl)

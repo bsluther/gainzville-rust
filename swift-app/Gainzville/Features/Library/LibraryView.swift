@@ -20,6 +20,7 @@ struct LibraryView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .tint(.gvBlue500)
             .padding()
 
             switch selectedTab {

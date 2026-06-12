@@ -74,6 +74,7 @@ struct AttributeDetailView: View {
 
                 GvDetailSection(title: "Config") {
                     configEditor
+                        .padding(.top, GvSpacing.lg)
                 }
             }
             .padding(GvSpacing.xl)
@@ -110,12 +111,15 @@ private struct ConfigRow<Control: View>: View {
         HStack {
             Text(label)
                 .font(.gvBody)
-                .foregroundStyle(Color.gvTextSecondary)
+                .foregroundStyle(Color.gvTextPrimary)
             Spacer()
             control()
         }
     }
 }
+
+// Editable config controls get the brighter border; read-only ones recede.
+private let editableBorder = Color.gvNeutral400
 
 /// Read-only pill, styled like an editable one but non-interactive — used for
 /// config fields that aren't editable in this phase (min, max, options).
@@ -124,7 +128,7 @@ private struct ReadOnlyPill: View {
     var body: some View {
         Text(text.isEmpty ? gvEmptyPillText : text)
             .frame(minWidth: GvSpacing.minAttributeInputWidth)
-            .gvAttributePill(borderColor: .gvNeutral400)
+            .gvAttributePill()
     }
 }
 
@@ -135,7 +139,7 @@ private struct NumericConfigEditor: View {
     let onSetDefault: (Double?) -> Void
 
     var body: some View {
-        VStack(spacing: GvSpacing.md) {
+        VStack(spacing: GvSpacing.xl) {
             ConfigRow(label: "Default") {
                 NumericDefaultField(config: config, onCommit: onSetDefault)
             }
@@ -146,7 +150,7 @@ private struct NumericConfigEditor: View {
                 // the editable controls (no toggle action wired in this phase).
                 Image(systemName: config.integer ? "checkmark.square" : "square")
                     .resizable().scaledToFit().frame(width: 20, height: 20)
-                    .foregroundStyle(Color.gvNeutral400)
+                    .foregroundStyle(Color.entryTextSecondary)
             }
         }
     }
@@ -176,7 +180,7 @@ private struct NumericDefaultField: View {
             #endif
             .focused($focused)
             .frame(minWidth: GvSpacing.minAttributeInputWidth)
-            .gvAttributePill()
+            .gvAttributePill(borderColor: editableBorder)
             .fixedSize(horizontal: true, vertical: false)
             // numberPad/decimalPad have no return key, so onSubmit never fires;
             // the Done button resigns first responder, which commits via the
@@ -226,12 +230,12 @@ private struct SelectConfigEditor: View {
     @State private var isPicking = false
 
     var body: some View {
-        VStack(spacing: GvSpacing.md) {
+        VStack(spacing: GvSpacing.xl) {
             ConfigRow(label: "Default") {
                 Button { isPicking = true } label: {
                     Text(config.default ?? "None")
                         .frame(minWidth: GvSpacing.minAttributeInputWidth)
-                        .gvAttributePill()
+                        .gvAttributePill(borderColor: editableBorder)
                 }
                 .buttonStyle(.plain)
                 .platformPopover(isPresented: $isPicking) {
@@ -253,16 +257,18 @@ private struct SelectConfigEditor: View {
             ConfigRow(label: "Ordered") {
                 Image(systemName: config.ordered ? "checkmark.square" : "square")
                     .resizable().scaledToFit().frame(width: 20, height: 20)
-                    .foregroundStyle(Color.gvNeutral400)
+                    .foregroundStyle(Color.entryTextSecondary)
             }
         }
     }
 }
 
-/// Option picker including a "None" row to clear the default.
+/// Option picker. Offers a "None" row to clear the default unless the config
+/// requires a value (e.g. mass's default unit).
 private struct DefaultOptionList: View {
     let options: [String]
     let selection: String?
+    var includeNone = true
     let onPick: (String?) -> Void
 
     var body: some View {
@@ -277,7 +283,9 @@ private struct DefaultOptionList: View {
     private var list: some View {
         ScrollView {
             VStack(spacing: 0) {
-                row(label: "None", value: nil, isSelected: selection == nil)
+                if includeNone {
+                    row(label: "None", value: nil, isSelected: selection == nil)
+                }
                 ForEach(options, id: \.self) { option in
                     row(label: option, value: option, isSelected: option == selection)
                 }
@@ -311,26 +319,33 @@ private struct MassConfigEditor: View {
     let config: MassConfig
     let onSetUnit: (MassUnit) -> Void
 
-    // Stable display order for the unit rows.
+    @State private var isPicking = false
+
+    // Stable display order for the unit options.
     private let allUnits: [MassUnit] = [.gram, .kilogram, .pound]
 
     var body: some View {
-        VStack(spacing: GvSpacing.md) {
-            Text("Default unit")
-                .font(.gvBody)
-                .foregroundStyle(Color.gvTextSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            // Single-select: checking a unit replaces the previous default.
-            ForEach(allUnits, id: \.self) { unit in
-                HStack {
-                    Text(label(for: unit))
-                        .font(.gvBody)
-                        .foregroundStyle(Color.gvTextPrimary)
-                    Spacer()
-                    GvCheckbox(checked: config.defaultUnit == unit) {
-                        if config.defaultUnit != unit { onSetUnit(unit) }
+        ConfigRow(label: "Default unit") {
+            Button { isPicking = true } label: {
+                Text(label(for: config.defaultUnit))
+                    .frame(minWidth: GvSpacing.minAttributeInputWidth)
+                    .gvAttributePill(borderColor: editableBorder)
+            }
+            .buttonStyle(.plain)
+            .platformPopover(isPresented: $isPicking) {
+                // No "None" row: a mass config always has a default unit.
+                DefaultOptionList(
+                    options: allUnits.map(label(for:)),
+                    selection: label(for: config.defaultUnit),
+                    includeNone: false,
+                    onPick: { picked in
+                        if let unit = allUnits.first(where: { label(for: $0) == picked }),
+                           unit != config.defaultUnit {
+                            onSetUnit(unit)
+                        }
+                        isPicking = false
                     }
-                }
+                )
             }
         }
     }
