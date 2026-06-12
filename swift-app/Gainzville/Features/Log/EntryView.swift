@@ -59,6 +59,13 @@ struct EntryView: View {
         setsMembers.first { $0.id == selectedMemberId } ?? setsMembers.last
     }
 
+    // Sets cards style as their members: a set of scalars reads as one scalar
+    // entry (filled, subtle border), a set of sequences keeps the sequence
+    // look. Display only — drag/drop keys off the real model fields.
+    private var displaysAsSequence: Bool {
+        entry.displayAsSets ? setsMembers.contains { $0.isSequence } : entry.isSequence
+    }
+
     // Single source of truth lives in core (`EntryJoin::display_name`),
     // surfaced via `EntryJoin.displayName`. Empty string covers the
     // single render frame between view appear and the subscription
@@ -72,6 +79,7 @@ struct EntryView: View {
         VStack(spacing: 0) {
             EntryHeader(
                 entry: entry,
+                attributeTarget: entry.displayAsSets ? (selectedMember ?? entry) : entry,
                 displayName: displayName,
                 activityName: (entry.displayAsSets ? selectedMemberVM : vm).entryJoin?.activity?.name,
                 isExpanded: isExpanded,
@@ -101,7 +109,7 @@ struct EntryView: View {
         // overlay's centered stroke on the straight edges but not at the corners
         // (where the path curves inward), making the corners look ~2x too thick.
         .frame(maxWidth: .infinity, alignment: .leading)
-        .entryContainerStyle(isSequence: entry.isSequence)
+        .entryContainerStyle(isSequence: displaysAsSequence)
         // Drop delegate: forwards to day-root for root scalars; forbids drops
         // (blocking the day-root indicator) for everything else. See
         // EntryDragDrop.swift for the full hit-test layering rationale.
@@ -147,6 +155,9 @@ extension View {
 
 private struct EntryHeader: View {
     let entry: Entry
+    // The entry whose attributes the card displays and the menu edits — the
+    // selected set member on sets cards, the entry itself otherwise.
+    let attributeTarget: Entry
     let displayName: String
     let activityName: String?
     let isExpanded: Bool
@@ -181,7 +192,7 @@ private struct EntryHeader: View {
                 }
                 .buttonStyle(.plain)
                 .platformPopover(isPresented: $isMenuPresented) {
-                    EntryMenuContent(entry: entry, entryName: displayName, activityName: activityName, isPresented: $isMenuPresented)
+                    EntryMenuContent(entry: entry, attributeTarget: attributeTarget, entryName: displayName, activityName: activityName, isPresented: $isMenuPresented)
                 }
             } else {
                 FillCheckbox(checked: entry.isComplete, onToggle: {
@@ -301,8 +312,10 @@ private struct SetsBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.entrySpacing) {
-            SetsControl(members: members, selectedMemberId: $selectedMemberId)
+            // Time first: it describes the whole sequence of members, so it
+            // sits hierarchically above the per-set picker.
             TemporalAttribute(entry: sequence)
+            SetsControl(members: members, selectedMemberId: $selectedMemberId)
             if let member = selectedMember {
                 // Re-key on the member so editor state (focus, in-progress
                 // edits) never carries across set switches.
@@ -461,6 +474,10 @@ private struct FillCheckbox: View {
 
 private struct EntryMenuContent: View {
     let entry: Entry
+    // Attribute-scoped items (Edit attributes, View activity) target this
+    // entry — the selected set member on sets cards, where the card shows the
+    // member's attributes and the sequence is anonymous.
+    let attributeTarget: Entry
     let entryName: String
     let activityName: String?
     @Binding var isPresented: Bool
@@ -498,7 +515,7 @@ private struct EntryMenuContent: View {
                     // Group 2 — attributes
                     GvMenuRow("Add attribute", icon: "tag")
                     NavigationLink {
-                        EditAttributesView(entry: entry, entryName: entryName, hasActivity: entry.activityId != nil, isPresented: $isPresented)
+                        EditAttributesView(entry: attributeTarget, entryName: entryName, hasActivity: attributeTarget.activityId != nil, isPresented: $isPresented)
                     } label: {
                         HStack(spacing: GvSpacing.lg) {
                             Image(systemName: "slider.horizontal.3").frame(width: 20)
@@ -516,9 +533,9 @@ private struct EntryMenuContent: View {
                     .buttonStyle(.plain)
 
                     // Group 3 — conditional navigation
-                    if entry.activityId != nil || !isRoot {
+                    if attributeTarget.activityId != nil || !isRoot {
                         GvMenuDivider()
-                        if entry.activityId != nil {
+                        if attributeTarget.activityId != nil {
                             GvMenuRow("View activity", icon: "figure.run")
                         }
                         if !isRoot {

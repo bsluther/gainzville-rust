@@ -93,6 +93,12 @@ Rejected on activity template roots (each activity has exactly one template root
 `true` validates the sets shape; `false` ("break out") is always legal and returns the sequence to
 the standard nested-cards view, after which members may diverge. Re-flagging re-validates.
 
+Breaking out also **names the wrapper** when it has no name: `"<first member's display name>
+Sets"`, following the canonical display-name rule (member's own name, else its activity's name; a
+fully anonymous member leaves the sequence unnamed rather than producing "Unnamed Sets"). The
+rename rides the same `Delta::Update` as the flag — one atomic mutation — and never clobbers an
+existing name.
+
 ## Temporal model
 
 The sets sequence has a **normal temporal obeying all existing rules** — the root invariant and
@@ -147,8 +153,6 @@ collision-free. Duplicates mint fresh UUIDs, so concurrent duplicates cannot col
   member temporal's duration.
 - **Conversion affordance in the add-attributes UI**: the Sets control presents like an
   attribute, so "add Sets" may belong next to "add attribute" rather than in the entry menu.
-- Break-out leaves an anonymous wrapper card titled "Unnamed" (existing behavior for all
-  anonymous sequences); revisit if it grates.
 
 ## Decision log
 

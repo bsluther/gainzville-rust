@@ -343,7 +343,9 @@ pub enum EntryChange {
     /// Toggle the sets presentation. Setting it requires the sets shape: a
     /// sequence with at least one member, all members instances of one
     /// activity (or all anonymous). Clearing it ("breaking out") is always
-    /// legal.
+    /// legal and, when the sequence has no name, also names it
+    /// "<first member's display name> Sets" so the broken-out card stays
+    /// recognizable instead of rendering as "Unnamed".
     SetDisplayAsSets(bool),
     // Future: SetName(Option<String>), completion.
 }

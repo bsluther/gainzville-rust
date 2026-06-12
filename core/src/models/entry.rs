@@ -269,6 +269,11 @@ impl EntryUpdater {
         self
     }
 
+    pub fn name(mut self, name: Option<String>) -> Self {
+        self.new.name = name;
+        self
+    }
+
     pub fn display_as_sets(mut self, display_as_sets: bool) -> Self {
         self.new.display_as_sets = display_as_sets;
         self

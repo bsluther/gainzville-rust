@@ -93,6 +93,36 @@ fn sets_member_activity_constraint(
     Ok(Some(first.activity_id))
 }
 
+/// The display name of a sequence's first member, following the canonical
+/// fallback rule (`EntryJoin`'s `compute_display_name`): the member's own
+/// name, else its activity's name. `None` when there are no members or the
+/// first member is fully anonymous — no "Unnamed" fallback; the caller leaves
+/// the sequence unnamed instead.
+async fn first_member_display_name(
+    executor: &mut impl AnyQueryExecutor,
+    parent_id: Uuid,
+) -> Result<Option<String>> {
+    let forest = load_subtree_forest(executor, parent_id).await?;
+    let children = forest.children(parent_id);
+    let Some(first) = children.first() else {
+        return Ok(None);
+    };
+    if let Some(name) = first.name.as_deref() {
+        if !name.is_empty() {
+            return Ok(Some(name.to_string()));
+        }
+    }
+    if let Some(activity_id) = first.activity_id {
+        if let Some(activity) = executor
+            .execute(FindActivityById { id: activity_id })
+            .await?
+        {
+            return Ok(Some(activity.name.to_string()));
+        }
+    }
+    Ok(None)
+}
+
 /// The shape `display_as_sets` requires at the moment the flag is set: a
 /// sequence with at least one member, all members instances of one activity
 /// (or all anonymous). Validated against any loaded forest — a stored subtree
@@ -1425,15 +1455,27 @@ pub async fn update_entry(
                 });
             }
 
-            // Setting the flag requires the sets shape; clearing it
-            // ("breaking out") is always legal.
             if *display_as_sets {
+                // Setting the flag requires the sets shape.
                 let forest = load_subtree_forest(executor, entry.id).await?;
                 validate_sets_shape(&entry, &forest)?;
+                deltas.push(entry.update().display_as_sets(true).to_delta().into());
+            } else {
+                // Breaking out is always legal. The wrapper is typically
+                // anonymous (ConvertToSets creates it that way) and would
+                // display as "Unnamed" once it renders as an ordinary
+                // sequence, so derive a name from the first member — only
+                // when no name is already set.
+                let mut update = entry.update().display_as_sets(false);
+                if entry.name.is_none() {
+                    if let Some(member_name) =
+                        first_member_display_name(executor, entry.id).await?
+                    {
+                        update = update.name(Some(format!("{member_name} Sets")));
+                    }
+                }
+                deltas.push(update.to_delta().into());
             }
-
-            let update = entry.update().display_as_sets(*display_as_sets).to_delta();
-            deltas.push(update.into());
         }
     }
 

@@ -2061,6 +2061,84 @@ async fn test_sets_min_member_guards(pool: SqlitePool) {
 }
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_break_out_names_sequence(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    let set_flag = |entry_id, value| {
+        UpdateEntry {
+            actor_id: user.actor_id,
+            entry_id,
+            change: EntryChange::SetDisplayAsSets(value),
+        }
+        .into()
+    };
+    let name_of = |entry: Option<Entry>| entry.and_then(|e| e.name);
+
+    // Activity-backed members: name derives from the activity.
+    let activity = Activity {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: ActivityName::parse("Bench Press".to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    client
+        .run_action(activity.clone().into_create_activity(Uuid::new_v4()).into())
+        .await
+        .unwrap();
+    let (sequence, _) = seed_sets_sequence(&client, user.actor_id, Some(activity.id), 2).await;
+    client
+        .run_action(set_flag(sequence.id, false))
+        .await
+        .unwrap();
+    assert_eq!(
+        name_of(find_entry(&client, sequence.id).await),
+        Some("Bench Press Sets".to_string())
+    );
+
+    // Fully anonymous members leave the sequence unnamed (no "Unnamed Sets").
+    let (sequence2, _) = seed_sets_sequence(&client, user.actor_id, None, 1).await;
+    client
+        .run_action(set_flag(sequence2.id, false))
+        .await
+        .unwrap();
+    assert_eq!(
+        name_of(find_entry(&client, sequence2.id).await),
+        None,
+        "anonymous unnamed member derives no name"
+    );
+
+    // A sequence that already has a name keeps it.
+    let mut named = log_entry(user.actor_id, None, None);
+    named.name = Some("My Workout".to_string());
+    named.is_sequence = true;
+    named.temporal = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+    let member = log_entry(
+        user.actor_id,
+        Some(activity.id),
+        child_position(named.id, FractionalIndex::default()),
+    );
+    run_actions(
+        &client,
+        [
+            CreateEntry::from(named.clone()).into(),
+            CreateEntry::from(member.clone()).into(),
+        ],
+    )
+    .await;
+    client.run_action(set_flag(named.id, true)).await.unwrap();
+    client.run_action(set_flag(named.id, false)).await.unwrap();
+    assert_eq!(
+        name_of(find_entry(&client, named.id).await),
+        Some("My Workout".to_string()),
+        "an existing name is never clobbered"
+    );
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
 async fn test_create_entry_born_flagged_rejected(pool: SqlitePool) {
     let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
     let user = create_user(&client).await;
