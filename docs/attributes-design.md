@@ -71,6 +71,14 @@ State 2 is needed because users can add/remove attributes per entry independentl
 
 The "don't reformat user input" concern is covered by storing the user's chosen unit per value (a stored value's unit may differ from `default_unit`).
 
+### Two-Decimal Precision Cap
+
+**Decision**: Numeric and mass magnitudes — values, range endpoints, and numeric config bounds/defaults — are capped at two decimal places. No training-log quantity plausibly needs finer precision (4.523 miles, 8.872 kg), and unbounded decimals make for unwieldy inputs. A solid simple rule now; relax later if a real need appears.
+
+- **Mutators reject rather than round** (via `validate_value` / config `validate`), preserving the intent captured in the action. Clients are responsible for rounding before dispatch — the Swift editors round at parse/clamp time, so a typed third decimal snaps on commit. Any future action producer (e.g. LLM import) must round likewise, since one over-precise value rejects the whole action.
+- **The f64 check is a round-trip, not a digit test**: `v.trunc() == v || (v * 100.0).round() / 100.0 == v`. A digit test like `(v * 100.0).trunc() == v * 100.0` falsely rejects user-typed values such as `0.29` (whose product is `28.999…96`); the integer guard covers magnitudes where `v * 100.0` overflows.
+- Generators snap to the 2-decimal grid the same way; bounds-derived values stay in range because rounding is monotonic and valid bounds are themselves grid points.
+
 ### No owner_id on Values
 
 **Decision**: Values do not carry an `owner_id`. Ownership is derived from the entry.

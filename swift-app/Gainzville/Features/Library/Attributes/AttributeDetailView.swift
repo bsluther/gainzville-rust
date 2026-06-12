@@ -200,7 +200,13 @@ private struct NumericDefaultField: View {
         }
         if let lo = config.min { v = Swift.max(v, lo) }
         if let hi = config.max { v = Swift.min(v, hi) }
-        if config.integer { v = v.rounded() }
+        // Core rejects defaults beyond 2 decimal places, so round before
+        // dispatch — a rejected write would fail silently.
+        if config.integer {
+            v = v.rounded()
+        } else {
+            v = (v * 100).rounded() / 100
+        }
         if v != config.default { onCommit(v) }
         text = format(v)
     }

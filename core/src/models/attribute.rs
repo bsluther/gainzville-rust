@@ -162,6 +162,17 @@ impl AttributeConfig {
     }
 }
 
+/// Numeric magnitudes (values and config bounds) are capped at two decimal
+/// places — finer precision has no real use and makes inputs unwieldy. On an
+/// f64, "has at most 2 decimals" means: the nearest double to some 2-decimal
+/// number, checked by round-tripping through that rounding. (A digit test like
+/// `(v * 100.0).trunc() == v * 100.0` falsely rejects user-typed values such
+/// as 0.29, whose product is 28.999…96.) The integer guard covers magnitudes
+/// where `v * 100.0` overflows to infinity.
+fn at_most_two_decimals(v: f64) -> bool {
+    v.trunc() == v || (v * 100.0).round() / 100.0 == v
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NumericConfig {
     pub min: Option<f64>,
@@ -188,8 +199,8 @@ impl NumericConfig {
     }
 
     /// Validate the config itself: bounds must be finite (and integers when
-    /// `integer`) and ordered (min <= max); the default, when present, must be
-    /// valid as a value.
+    /// `integer`), at most 2 decimal places, and ordered (min <= max); the
+    /// default, when present, must be valid as a value.
     pub fn validate(&self) -> Result<()> {
         for (label, bound) in [("min", self.min), ("max", self.max)] {
             if let Some(v) = bound {
@@ -202,6 +213,12 @@ impl NumericConfig {
                 if self.integer && v.trunc() != v {
                     return Err(ValidationError::InvalidNumericConfig(format!(
                         "{label} ({v}) must be an integer"
+                    ))
+                    .into());
+                }
+                if !at_most_two_decimals(v) {
+                    return Err(ValidationError::InvalidNumericConfig(format!(
+                        "{label} ({v}) must have at most 2 decimal places"
                     ))
                     .into());
                 }
@@ -222,8 +239,8 @@ impl NumericConfig {
     }
 
     /// Validate a numeric value against this config: finite, integer when the
-    /// config demands it, within min/max. Range endpoints are each checked and
-    /// must be ordered (min <= max).
+    /// config demands it, at most 2 decimal places, within min/max. Range
+    /// endpoints are each checked and must be ordered (min <= max).
     pub fn validate_value(&self, value: &NumericValue) -> Result<()> {
         let check = |v: f64| -> Result<()> {
             if !v.is_finite() {
@@ -234,6 +251,12 @@ impl NumericConfig {
             if self.integer && v.trunc() != v {
                 return Err(ValidationError::InvalidValue(format!(
                     "value ({v}) must be an integer"
+                ))
+                .into());
+            }
+            if !at_most_two_decimals(v) {
+                return Err(ValidationError::InvalidValue(format!(
+                    "value ({v}) must have at most 2 decimal places"
                 ))
                 .into());
             }
@@ -340,25 +363,32 @@ pub struct MassConfig {
 }
 
 impl MassConfig {
-    /// Validate a mass value against this config: magnitudes must be finite,
-    /// and range endpoints ordered (min <= max) — both endpoints share one
-    /// unit, so no conversion is involved. The unit itself is unconstrained;
-    /// `default_unit` only picks the presentation default.
+    /// Validate a mass value against this config: magnitudes must be finite
+    /// with at most 2 decimal places, and range endpoints ordered (min <= max)
+    /// — both endpoints share one unit, so no conversion is involved. The unit
+    /// itself is unconstrained; `default_unit` only picks the presentation
+    /// default.
     pub fn validate_value(&self, value: &MassValue) -> Result<()> {
-        let finite = |label: &str, v: f64| -> Result<()> {
+        let check = |label: &str, v: f64| -> Result<()> {
             if !v.is_finite() {
                 return Err(ValidationError::InvalidValue(format!(
                     "{label} magnitude ({v}) must be finite"
                 ))
                 .into());
             }
+            if !at_most_two_decimals(v) {
+                return Err(ValidationError::InvalidValue(format!(
+                    "{label} magnitude ({v}) must have at most 2 decimal places"
+                ))
+                .into());
+            }
             Ok(())
         };
         match value {
-            MassValue::Exact(m) => finite("mass value", m.value),
+            MassValue::Exact(m) => check("mass value", m.value),
             MassValue::Range { unit: _, min, max } => {
-                finite("mass range min", *min)?;
-                finite("mass range max", *max)?;
+                check("mass range min", *min)?;
+                check("mass range max", *max)?;
                 if min > max {
                     return Err(ValidationError::InvalidValue(format!(
                         "range min ({min}) is above range max ({max})"
@@ -532,6 +562,34 @@ mod tests {
     }
 
     #[test]
+    fn numeric_precision_validation() {
+        let cfg = NumericConfig {
+            min: None,
+            max: None,
+            integer: false,
+            default: None,
+        };
+        // 0.29 is not exactly representable (0.29 * 100.0 == 28.999…96); the
+        // check must not reject values the user can actually type.
+        assert!(cfg.validate_value(&NumericValue::Exact(0.29)).is_ok());
+        assert!(cfg.validate_value(&NumericValue::Exact(4.52)).is_ok());
+        assert!(cfg.validate_value(&NumericValue::Exact(-3.99)).is_ok());
+        // Huge magnitudes are integers; v * 100.0 overflowing must not reject.
+        assert!(cfg.validate_value(&NumericValue::Exact(1e307)).is_ok());
+        assert!(rejected_validation(
+            &cfg.validate_value(&NumericValue::Exact(4.523))
+        ));
+        assert!(rejected_validation(&cfg.validate_value(&NumericValue::Range {
+            min: 1.001,
+            max: 9.0
+        })));
+        assert!(rejected_validation(&cfg.validate_value(&NumericValue::Range {
+            min: 1.0,
+            max: 8.999
+        })));
+    }
+
+    #[test]
     fn select_validation() {
         let opts = |ordered| SelectConfig {
             options: vec!["low".to_string(), "mid".to_string(), "high".to_string()],
@@ -566,6 +624,11 @@ mod tests {
         assert!(NumericConfig::new(Some(0.0), Some(10.0), false, Some(11.0)).is_err());
         assert!(NumericConfig::new(Some(0.5), None, true, None).is_err());
         assert!(NumericConfig::new(Some(0.0), Some(10.0), true, Some(5.0)).is_ok());
+        // Bounds and defaults are capped at 2 decimal places like values.
+        assert!(NumericConfig::new(Some(0.125), None, false, None).is_err());
+        assert!(NumericConfig::new(None, Some(9.999), false, None).is_err());
+        assert!(NumericConfig::new(None, None, false, Some(1.234)).is_err());
+        assert!(NumericConfig::new(Some(0.25), Some(9.75), false, Some(1.29)).is_ok());
 
         // Select: duplicate options, non-member default; empty options allowed.
         let select = |options: &[&str], default: Option<&str>| SelectConfig {
@@ -604,6 +667,18 @@ mod tests {
             unit: MassUnit::Pound,
             min: 55.0,
             max: 45.0, // inverted
+        })));
+        // Magnitudes share the 2-decimal precision cap.
+        assert!(cfg
+            .validate_value(&MassValue::Exact(m(MassUnit::Kilogram, 8.29)))
+            .is_ok());
+        assert!(rejected_validation(&cfg.validate_value(&MassValue::Exact(
+            m(MassUnit::Kilogram, 8.872)
+        ))));
+        assert!(rejected_validation(&cfg.validate_value(&MassValue::Range {
+            unit: MassUnit::Pound,
+            min: 45.005,
+            max: 55.0,
         })));
     }
 }

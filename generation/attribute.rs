@@ -46,7 +46,10 @@ impl Arbitrary for NumericConfig {
 
         let rand_val = |rng: &mut R, lo: f64, hi: f64| -> f64 {
             let v = rng.random_range(lo..hi);
-            if integer { v.round() } else { v }
+            // Snapping to the 2-decimal grid keeps v within [lo, hi]: lo/hi are
+            // themselves grid points (or generated bounds-free), and rounding
+            // is monotonic.
+            if integer { v.round() } else { (v * 100.0).round() / 100.0 }
         };
 
         let min: Option<f64> = maybe(rng, 0.5, |rng| rand_val(rng, 0.0, 1000.0));
@@ -184,7 +187,13 @@ impl ArbitraryFrom<&NumericConfig> for NumericValue {
             let lo = config.min.unwrap_or(0.0);
             let hi = config.max.unwrap_or(lo + 1000.0);
             let v = rng.random_range(lo..hi);
-            if config.integer { v.round() } else { v }
+            // A valid config's bounds sit on the 2-decimal grid, so the snap
+            // stays within them (rounding is monotonic).
+            if config.integer {
+                v.round()
+            } else {
+                (v * 100.0).round() / 100.0
+            }
         };
 
         match rng.random_range(0..=1) {
@@ -233,7 +242,10 @@ impl ArbitraryFrom<&MassConfig> for MassValue {
     ) -> Self {
         let all_units = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
         let rand_unit = |rng: &mut R| pick(&all_units[..], rng).unwrap().clone();
-        let rand_magnitude = |rng: &mut R| -> f64 { rng.random_range(0.0..500.0) };
+        let rand_magnitude = |rng: &mut R| -> f64 {
+            let v: f64 = rng.random_range(0.0..500.0);
+            (v * 100.0).round() / 100.0
+        };
 
         match rng.random_range(0..=1) {
             0 => MassValue::Exact(MassMeasurement {

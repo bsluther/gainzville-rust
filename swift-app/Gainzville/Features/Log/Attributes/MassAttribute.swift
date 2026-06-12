@@ -295,8 +295,13 @@ struct MassAttribute: View {
 
     private func parse(_ raw: String) -> Double? {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return nil }
-        return Self.formatter.number(from: trimmed)?.doubleValue
+        guard !trimmed.isEmpty,
+              let parsed = Self.formatter.number(from: trimmed)?.doubleValue else {
+            return nil
+        }
+        // Core rejects magnitudes beyond 2 decimal places, so round before
+        // dispatch — a rejected write would fail silently.
+        return (parsed * 100).rounded() / 100
     }
 
     private func sameAsCurrentExact(_ new: MassMeasurement) -> Bool {
@@ -314,7 +319,7 @@ struct MassAttribute: View {
     private static let formatter: NumberFormatter = {
         let f = NumberFormatter()
         f.numberStyle = .decimal
-        f.maximumFractionDigits = 6
+        f.maximumFractionDigits = 2
         f.usesGroupingSeparator = false
         return f
     }()

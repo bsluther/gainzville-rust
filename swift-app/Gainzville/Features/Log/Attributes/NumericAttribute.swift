@@ -285,7 +285,13 @@ struct NumericAttribute: View {
         var v = value
         if let lo = pair.config.min { v = Swift.max(v, lo) }
         if let hi = pair.config.max { v = Swift.min(v, hi) }
-        if pair.config.integer { v = v.rounded() }
+        // Core rejects values beyond 2 decimal places, so round before
+        // dispatch — a rejected write would fail silently.
+        if pair.config.integer {
+            v = v.rounded()
+        } else {
+            v = (v * 100).rounded() / 100
+        }
         return v
     }
 
@@ -299,7 +305,7 @@ struct NumericAttribute: View {
     private static let formatter: NumberFormatter = {
         let f = NumberFormatter()
         f.numberStyle = .decimal
-        f.maximumFractionDigits = 6
+        f.maximumFractionDigits = 2
         f.usesGroupingSeparator = false
         return f
     }()
