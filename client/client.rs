@@ -3,15 +3,18 @@ use gv_core::error::DbErr;
 use gv_core::io::{Io, SystemIo};
 use gv_core::{
     DEFAULT_USER_ID,
-    actions::{Action, CreateUser},
+    actions::{Action, CreateActivity, CreateAttribute, CreateUser, CreateValue},
     error::Result,
     models::{
         activity::{Activity, ActivityName},
         user::User,
     },
     mutators,
-    queries::{AnyQuery, AnyQueryResponse, FindUserById, Query},
+    queries::{
+        AnyQuery, AnyQueryResponse, FindActivityById, FindAttributeById, FindUserById, Query,
+    },
     query_executor::QueryExecutor,
+    std_lib::StandardLibrary,
 };
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use std::{sync::Arc, time::Duration};
@@ -42,6 +45,7 @@ impl SqliteClient {
         let client = Self::from_pool(pool, Arc::new(SystemIo::default()));
         client.run_migrations().await?;
         client.seed_default_user().await?;
+        client.seed_std_lib().await?;
         Ok(client)
     }
 
@@ -61,6 +65,54 @@ impl SqliteClient {
         if existing.is_none() {
             let action: Action = CreateUser::from(User::default_user()).into();
             self.run_action(action).await?;
+        }
+        Ok(())
+    }
+
+    /// Seed the standard-library attributes and activities into a fresh database.
+    /// Idempotent: each item is keyed by a stable id (see `gv_core::std_lib`) and
+    /// created only if absent, so this is safe to run on every launch alongside
+    /// migrations. It does not reconcile edits — an item whose definition changed
+    /// in code is left untouched, and one the user deleted is re-created.
+    async fn seed_std_lib(&self) -> Result<()> {
+        for attribute in StandardLibrary::attributes() {
+            let exists = {
+                let mut conn = self.pool.acquire().await.db_err()?;
+                SqliteQueryExecutor::new(&mut *conn)
+                    .execute(FindAttributeById {
+                        attribute_id: attribute.id,
+                    })
+                    .await?
+            };
+            if exists.is_none() {
+                self.run_action(CreateAttribute::from(attribute).into())
+                    .await?;
+            }
+        }
+
+        for std_activity in StandardLibrary::activities() {
+            let exists = {
+                let mut conn = self.pool.acquire().await.db_err()?;
+                SqliteQueryExecutor::new(&mut *conn)
+                    .execute(FindActivityById {
+                        id: std_activity.activity.id,
+                    })
+                    .await?
+            };
+            if exists.is_some() {
+                continue;
+            }
+            let actor_id = std_activity.activity.owner_id;
+            let create = CreateActivity {
+                actor_id,
+                activity: std_activity.activity,
+                template: std_activity.template,
+            };
+            self.run_action(create.into()).await?;
+            for value in std_activity.template_values {
+                self.run_action(CreateValue { actor_id, value }.into())
+                    .await?;
+            }
         }
         Ok(())
     }
@@ -251,7 +303,7 @@ impl SqliteClient {
 pub mod tests {
     pub use super::*;
     pub use gv_core::SYSTEM_ACTOR_ID;
-    pub use gv_core::queries::{AnyQuery, FindActivityById, FindEntryJoinById};
+    pub use gv_core::queries::{AnyQuery, FindActivityById, FindEntryJoinById, SnapshotAll};
     pub use uuid::Uuid;
 
     /// Two subscriptions to the same query key share one cache entry; the entry
@@ -281,5 +333,34 @@ pub mod tests {
             client.read_cached_query(query).is_none(),
             "cache key must be evicted once the last subscriber drops"
         );
+    }
+
+    /// Std-lib seeding runs on every launch, so it must converge rather than
+    /// duplicate. This also exercises the seed path itself — template-tree
+    /// validation and value-on-template attachment — which the `from_pool`
+    /// tests bypass. A second pass over an already-seeded DB must be a no-op.
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+    fn test_seed_std_lib_is_idempotent(pool: SqlitePool) {
+        let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
+        client.seed_default_user().await.unwrap();
+
+        client.seed_std_lib().await.unwrap();
+        let first = client.run_query(SnapshotAll).await.unwrap();
+
+        // The first pass seeds every std-lib item exactly once.
+        assert_eq!(first.attributes.len(), StandardLibrary::attributes().len());
+        assert_eq!(first.activities.len(), StandardLibrary::activities().len());
+        assert!(
+            !first.attributes.is_empty() && !first.activities.is_empty(),
+            "seeding should have created std-lib items"
+        );
+
+        // A second pass over the same DB converges instead of duplicating.
+        client.seed_std_lib().await.unwrap();
+        let second = client.run_query(SnapshotAll).await.unwrap();
+        assert_eq!(first.attributes.len(), second.attributes.len());
+        assert_eq!(first.activities.len(), second.activities.len());
+        assert_eq!(first.entries.len(), second.entries.len());
+        assert_eq!(first.values.len(), second.values.len());
     }
 }
