@@ -203,6 +203,12 @@ impl SqliteClient {
             Action::UpdateEntry(action) => {
                 mutators::update_entry(&mut executor, self.io.as_ref(), action).await?
             }
+            Action::ConvertToSets(action) => {
+                mutators::convert_to_sets(&mut executor, self.io.as_ref(), action).await?
+            }
+            Action::DuplicateEntry(action) => {
+                mutators::duplicate_entry(&mut executor, self.io.as_ref(), action).await?
+            }
         };
 
         // TODO: write this mutation into the local mutation log.

@@ -6,10 +6,10 @@ use uuid::Uuid;
 use crate::{Arbitrary, GenerationContext, arbitrary_actor_id, gen_random_text, maybe, pick};
 use gv_core::{
     actions::{
-        Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue, EntryChange,
-        MassChange, MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateEntry,
-        UpdateEntryCompletion,
+        Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
+        CreateEntry, CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
+        DuplicateEntry, EntryChange, MassChange, MoveEntry, NumericChange, SelectChange,
+        UpdateAttribute, UpdateEntry, UpdateEntryCompletion,
     },
     models::{
         activity::Activity,
@@ -26,7 +26,7 @@ use gv_core::{
 /// TODO: add missing actions.
 impl Arbitrary for Action {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
-        let choice = rng.random_range(0..=11);
+        let choice = rng.random_range(0..=13);
         match choice {
             0 => CreateUser::arbitrary(rng, context).into(),
             1 => CreateActivity::arbitrary(rng, context).into(),
@@ -40,6 +40,8 @@ impl Arbitrary for Action {
             9 => UpdateAttribute::arbitrary(rng, context).into(),
             10 => UpdateEntry::arbitrary(rng, context).into(),
             11 => CreateEntryFromActivity::arbitrary(rng, context).into(),
+            12 => ConvertToSets::arbitrary(rng, context).into(),
+            13 => DuplicateEntry::arbitrary(rng, context).into(),
             _ => unreachable!(),
         }
     }
@@ -255,12 +257,62 @@ impl Arbitrary for CreateEntryFromActivity {
 
 impl Arbitrary for UpdateEntry {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
-        let (entry_id, actor_id) = arbitrary_entry_target(rng, context);
+        if rng.random_bool(0.5) {
+            let (entry_id, actor_id) = arbitrary_entry_target(rng, context);
+            return UpdateEntry {
+                actor_id,
+                entry_id,
+                change: EntryChange::SetIsSequence(rng.random_bool(0.5)),
+            };
+        }
+
+        // SetDisplayAsSets: bias toward entries that satisfy the sets shape
+        // (a sequence whose members share one activity) so the accept path is
+        // exercised; fall back to any target to keep reject paths covered.
+        let model = context.model();
+        let eligible: Vec<&Entry> = model
+            .entries()
+            .filter(|e| {
+                let mut members = model.entries().filter(|c| c.parent_id() == Some(e.id));
+                let Some(first) = members.next() else {
+                    return false;
+                };
+                e.is_sequence && members.all(|m| m.activity_id == first.activity_id)
+            })
+            .collect();
+        let target = if rng.random_bool(0.7) {
+            pick(&eligible, rng).copied()
+        } else {
+            None
+        };
+        let (entry_id, actor_id) = match target {
+            Some(e) => (e.id, e.owner_id),
+            None => arbitrary_entry_target(rng, context),
+        };
         UpdateEntry {
             actor_id,
             entry_id,
-            change: EntryChange::SetIsSequence(rng.random_bool(0.5)),
+            change: EntryChange::SetDisplayAsSets(rng.random_bool(0.5)),
         }
+    }
+}
+
+impl Arbitrary for ConvertToSets {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+        let (entry_id, actor_id) = arbitrary_entry_target(rng, context);
+        ConvertToSets {
+            actor_id,
+            entry_id,
+            // Mint from the generator's rng so the action reproduces.
+            sequence_id: Uuid::arbitrary(rng, context),
+        }
+    }
+}
+
+impl Arbitrary for DuplicateEntry {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
+        let (entry_id, actor_id) = arbitrary_entry_target(rng, context);
+        DuplicateEntry { actor_id, entry_id }
     }
 }
 

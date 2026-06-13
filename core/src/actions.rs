@@ -23,6 +23,8 @@ pub enum Action {
     UpdateAttributeValue(UpdateAttributeValue),
     UpdateAttribute(UpdateAttribute),
     UpdateEntry(UpdateEntry),
+    ConvertToSets(ConvertToSets),
+    DuplicateEntry(DuplicateEntry),
 }
 
 impl From<CreateUser> for Action {
@@ -144,6 +146,42 @@ pub struct MoveEntry {
     pub entry_id: Uuid,
     pub position: Option<Position>,
     pub temporal: Temporal,
+}
+
+/// Convert an entry into a sets sequence: insert an anonymous sequence at the
+/// entry's position and reparent the entry under it as the sole member (the
+/// first "set"). The sequence takes the entry's start/end — it owns the
+/// timeline slot — while the entry keeps only its duration. `sequence_id` is
+/// client-supplied (like `CreateEntry`'s client-built entry) so the caller can
+/// reference the new sequence before the mutation lands, e.g. to carry UI
+/// state across the swap.
+#[derive(Debug, Clone)]
+pub struct ConvertToSets {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+    pub sequence_id: Uuid,
+}
+
+impl From<ConvertToSets> for Action {
+    fn from(value: ConvertToSets) -> Self {
+        Action::ConvertToSets(value)
+    }
+}
+
+/// Duplicate an entry's subtree in place: an exact copy (attributes, values,
+/// temporal, completion) with fresh entry ids, inserted immediately after the
+/// source among its siblings. A forest root duplicates as another root with
+/// the same temporal, landing adjacent in the day view.
+#[derive(Debug, Clone)]
+pub struct DuplicateEntry {
+    pub actor_id: Uuid,
+    pub entry_id: Uuid,
+}
+
+impl From<DuplicateEntry> for Action {
+    fn from(value: DuplicateEntry) -> Self {
+        Action::DuplicateEntry(value)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -299,7 +337,15 @@ impl From<UpdateEntry> for Action {
 #[derive(Debug, Clone)]
 pub enum EntryChange {
     /// Toggle sequence/scalar. Becoming a scalar deletes all descendants (a
-    /// scalar cannot contain children).
+    /// scalar cannot contain children). Rejected while `display_as_sets` is
+    /// set (break out of sets first).
     SetIsSequence(bool),
-    // Future: SetName(Option<String>), SetDisplayAsSets(bool), completion.
+    /// Toggle the sets presentation. Setting it requires the sets shape: a
+    /// sequence with at least one member, all members instances of one
+    /// activity (or all anonymous). Clearing it ("breaking out") is always
+    /// legal and, when the sequence has no name, also names it
+    /// "<first member's display name> Sets" so the broken-out card stays
+    /// recognizable instead of rendering as "Unnamed".
+    SetDisplayAsSets(bool),
+    // Future: SetName(Option<String>), completion.
 }

@@ -3,10 +3,10 @@ use generation::{Arbitrary, SimulationContext};
 use gv_client::client::SqliteClient;
 use gv_core::{
     actions::{
-        Action, AttachValue, AttributeChange, CreateActivity, CreateAttribute, CreateEntry,
-        CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue, EntryChange,
-        MassChange, MoveEntry, NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue,
-        UpdateEntry, ValueField,
+        Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
+        CreateEntry, CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
+        DeleteEntryRecursive, DuplicateEntry, EntryChange, MassChange, MoveEntry, NumericChange,
+        SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntry, ValueField,
     },
     models::{
         activity::{Activity, ActivityName},
@@ -1304,4 +1304,968 @@ async fn arbitrary_entries_round_trip_through_all_entries(pool: SqlitePool) {
         let original = inserted.get(&got.id).expect("unknown id returned");
         assert_eq!(&got, original, "entry round-trip mismatch");
     }
+}
+
+// --- Sets (display_as_sets) ---
+
+fn log_entry(owner_id: Uuid, activity_id: Option<Uuid>, position: Option<Position>) -> Entry {
+    Entry {
+        id: Uuid::new_v4(),
+        activity_id,
+        owner_id,
+        name: None,
+        position,
+        is_template: false,
+        display_as_sets: false,
+        is_sequence: false,
+        is_complete: false,
+        temporal: Temporal::None,
+    }
+}
+
+fn child_position(parent_id: Uuid, frac_index: FractionalIndex) -> Option<Position> {
+    Some(Position {
+        parent_id,
+        frac_index,
+    })
+}
+
+async fn find_entry(client: &SqliteClient, id: Uuid) -> Option<Entry> {
+    let mut conn = client.pool.acquire().await.unwrap();
+    SqliteQueryExecutor::new(&mut *conn)
+        .execute(FindEntryById { entry_id: id })
+        .await
+        .unwrap()
+}
+
+/// A flagged sets sequence (root, on the timeline) with `member_count`
+/// members of the given activity, built through the public actions.
+async fn seed_sets_sequence(
+    client: &SqliteClient,
+    owner_id: Uuid,
+    activity_id: Option<Uuid>,
+    member_count: usize,
+) -> (Entry, Vec<Entry>) {
+    let mut sequence = log_entry(owner_id, None, None);
+    sequence.is_sequence = true;
+    sequence.temporal = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+    client
+        .run_action(CreateEntry::from(sequence.clone()).into())
+        .await
+        .unwrap();
+
+    let mut members = Vec::new();
+    let mut frac_index = FractionalIndex::default();
+    for _ in 0..member_count {
+        let member = log_entry(
+            owner_id,
+            activity_id,
+            child_position(sequence.id, frac_index.clone()),
+        );
+        client
+            .run_action(CreateEntry::from(member.clone()).into())
+            .await
+            .unwrap();
+        members.push(member);
+        frac_index = FractionalIndex::new_after(&frac_index);
+    }
+
+    client
+        .run_action(
+            UpdateEntry {
+                actor_id: owner_id,
+                entry_id: sequence.id,
+                change: EntryChange::SetDisplayAsSets(true),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    (sequence, members)
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_convert_to_sets_happy_path(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    let activity = Activity {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: ActivityName::parse("Bench Press".to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    client
+        .run_action(activity.clone().into_create_activity(Uuid::new_v4()).into())
+        .await
+        .unwrap();
+
+    let start = sqlx::types::chrono::Utc::now();
+    let mut entry = log_entry(user.actor_id, Some(activity.id), None);
+    entry.temporal = Temporal::StartAndDuration {
+        start,
+        duration_ms: 300_000,
+    };
+    entry.is_complete = true;
+    client
+        .run_action(CreateEntry::from(entry.clone()).into())
+        .await
+        .unwrap();
+
+    let sequence_id = Uuid::new_v4();
+    client
+        .run_action(
+            ConvertToSets {
+                actor_id: user.actor_id,
+                entry_id: entry.id,
+                sequence_id,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // The sequence takes the entry's root slot and start; anonymous, flagged.
+    let sequence = find_entry(&client, sequence_id).await.unwrap();
+    assert!(sequence.position.is_none(), "sequence takes the root slot");
+    assert!(sequence.is_sequence);
+    assert!(sequence.display_as_sets);
+    assert_eq!(sequence.activity_id, None);
+    assert_eq!(sequence.name, None);
+    assert_eq!(sequence.temporal, Temporal::Start { start });
+    assert!(!sequence.is_complete);
+
+    // The entry becomes the sole member, keeping only its duration.
+    let member = find_entry(&client, entry.id).await.unwrap();
+    assert_eq!(member.parent_id(), Some(sequence_id));
+    assert_eq!(member.temporal, Temporal::Duration { duration: 300_000 });
+    assert_eq!(member.activity_id, Some(activity.id));
+    assert!(member.is_complete, "member completion is untouched");
+
+    // The flag round-trips through AllEntries (Entry::arbitrary no longer
+    // generates it, so this is the persistence coverage for the column).
+    let mut conn = client.pool.acquire().await.unwrap();
+    let all = SqliteQueryExecutor::new(&mut *conn)
+        .execute(AllEntries)
+        .await
+        .unwrap();
+    assert!(
+        all.iter().any(|e| e.id == sequence_id && e.display_as_sets),
+        "display_as_sets must round-trip"
+    );
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_convert_to_sets_rejections(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    let activity = Activity {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: ActivityName::parse("Squat".to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    let template_root_id = Uuid::new_v4();
+    client
+        .run_action(
+            activity
+                .clone()
+                .into_create_activity(template_root_id)
+                .into(),
+        )
+        .await
+        .unwrap();
+
+    // An activity template root cannot be converted.
+    assert!(
+        client
+            .run_action(
+                ConvertToSets {
+                    actor_id: user.actor_id,
+                    entry_id: template_root_id,
+                    sequence_id: Uuid::new_v4(),
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "template root conversion must be rejected"
+    );
+
+    // The client-supplied sequence_id must be unused.
+    let mut on_timeline = log_entry(user.actor_id, None, None);
+    on_timeline.temporal = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+    client
+        .run_action(CreateEntry::from(on_timeline.clone()).into())
+        .await
+        .unwrap();
+    assert!(
+        client
+            .run_action(
+                ConvertToSets {
+                    actor_id: user.actor_id,
+                    entry_id: on_timeline.id,
+                    sequence_id: on_timeline.id,
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "colliding sequence_id must be rejected"
+    );
+
+    // A log root with no start/end cannot be converted: the sequence would
+    // land off the timeline.
+    let off_timeline = log_entry(user.actor_id, None, None);
+    client
+        .run_action(CreateEntry::from(off_timeline.clone()).into())
+        .await
+        .unwrap();
+    assert!(
+        client
+            .run_action(
+                ConvertToSets {
+                    actor_id: user.actor_id,
+                    entry_id: off_timeline.id,
+                    sequence_id: Uuid::new_v4(),
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "off-timeline root conversion must be rejected"
+    );
+
+    // A member of an activity-bearing sets sequence cannot be converted: the
+    // anonymous sequence would break the members' shared activity.
+    let (_, members) = seed_sets_sequence(&client, user.actor_id, Some(activity.id), 2).await;
+    assert!(
+        client
+            .run_action(
+                ConvertToSets {
+                    actor_id: user.actor_id,
+                    entry_id: members[0].id,
+                    sequence_id: Uuid::new_v4(),
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "converting a member among activity-bearing siblings must be rejected"
+    );
+
+    // Among all-anonymous members it is fine (anonymity matches).
+    let (_, anon_members) = seed_sets_sequence(&client, user.actor_id, None, 2).await;
+    client
+        .run_action(
+            ConvertToSets {
+                actor_id: user.actor_id,
+                entry_id: anon_members[0].id,
+                sequence_id: Uuid::new_v4(),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_duplicate_entry_exact_copy_after_source(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    let mut parent = log_entry(user.actor_id, None, None);
+    parent.is_sequence = true;
+    parent.temporal = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+    let fi1 = FractionalIndex::default();
+    let fi2 = FractionalIndex::new_after(&fi1);
+    let mut c1 = log_entry(user.actor_id, None, child_position(parent.id, fi1.clone()));
+    c1.is_sequence = true;
+    c1.is_complete = false;
+    c1.temporal = Temporal::Duration { duration: 90_000 };
+    let c2 = log_entry(user.actor_id, None, child_position(parent.id, fi2));
+    let mut c1a = log_entry(
+        user.actor_id,
+        None,
+        child_position(c1.id, FractionalIndex::default()),
+    );
+    c1a.is_complete = true;
+
+    let attribute = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: "Reps".to_string(),
+        description: None,
+        config: AttributeConfig::Numeric(NumericConfig {
+            min: None,
+            max: None,
+            integer: true,
+            default: None,
+        }),
+    };
+    let value = Value {
+        entry_id: c1a.id,
+        attribute_id: attribute.id,
+        index_float: Some(13.0),
+        index_string: None,
+        plan: None,
+        actual: Some(AttributeValue::Numeric(NumericValue::Exact(13.0))),
+    };
+
+    run_actions(
+        &client,
+        [
+            CreateEntry::from(parent.clone()).into(),
+            CreateEntry::from(c1.clone()).into(),
+            CreateEntry::from(c2.clone()).into(),
+            CreateEntry::from(c1a.clone()).into(),
+            CreateAttribute {
+                actor_id: user.actor_id,
+                attribute: attribute.clone(),
+            }
+            .into(),
+            CreateValue {
+                actor_id: user.actor_id,
+                value: value.clone(),
+            }
+            .into(),
+        ],
+    )
+    .await;
+
+    client
+        .run_action(
+            DuplicateEntry {
+                actor_id: user.actor_id,
+                entry_id: c1.id,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // The copy lands between c1 and c2 in sibling order.
+    let mut conn = client.pool.acquire().await.unwrap();
+    let subtree = SqliteQueryExecutor::new(&mut *conn)
+        .execute(FindDescendants {
+            entry_id: parent.id,
+        })
+        .await
+        .unwrap();
+    let forest = gv_core::forest::Forest::from(subtree);
+    let children: Vec<Uuid> = forest.children(parent.id).iter().map(|e| e.id).collect();
+    assert_eq!(children.len(), 3);
+    assert_eq!(children[0], c1.id);
+    assert_eq!(children[2], c2.id);
+    let dup_id = children[1];
+    assert_ne!(dup_id, c1.id);
+
+    // Exact copy: temporal/completion verbatim, subtree deep-copied with
+    // fresh ids, value re-keyed onto the copied grandchild.
+    let dup = forest.entry(dup_id).unwrap();
+    assert_eq!(dup.temporal, Temporal::Duration { duration: 90_000 });
+    assert!(dup.is_sequence);
+    let dup_children = forest.children(dup_id);
+    assert_eq!(dup_children.len(), 1);
+    let dup_grandchild = dup_children[0];
+    assert_ne!(dup_grandchild.id, c1a.id);
+    assert!(dup_grandchild.is_complete, "completion copies verbatim");
+
+    let dup_value = SqliteQueryExecutor::new(&mut *conn)
+        .execute(FindValueByKey {
+            entry_id: dup_grandchild.id,
+            attribute_id: attribute.id,
+        })
+        .await
+        .unwrap()
+        .expect("value must be re-keyed onto the copy");
+    assert_eq!(
+        dup_value.actual,
+        Some(AttributeValue::Numeric(NumericValue::Exact(13.0)))
+    );
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_duplicate_entry_roots(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    // A log root duplicates in place: same temporal, also a root.
+    let start = sqlx::types::chrono::Utc::now();
+    let mut root = log_entry(user.actor_id, None, None);
+    root.temporal = Temporal::Start { start };
+    client
+        .run_action(CreateEntry::from(root.clone()).into())
+        .await
+        .unwrap();
+    client
+        .run_action(
+            DuplicateEntry {
+                actor_id: user.actor_id,
+                entry_id: root.id,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    let mut conn = client.pool.acquire().await.unwrap();
+    let all = SqliteQueryExecutor::new(&mut *conn)
+        .execute(AllEntries)
+        .await
+        .unwrap();
+    let copies: Vec<&Entry> = all
+        .iter()
+        .filter(|e| e.position.is_none() && e.temporal == Temporal::Start { start })
+        .collect();
+    assert_eq!(copies.len(), 2, "copy is a root with the same temporal");
+
+    // An activity template root cannot be duplicated (it would mint a second
+    // template root for the activity).
+    let activity = Activity {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: ActivityName::parse("Deadlift".to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    let template_root_id = Uuid::new_v4();
+    client
+        .run_action(activity.into_create_activity(template_root_id).into())
+        .await
+        .unwrap();
+    assert!(
+        client
+            .run_action(
+                DuplicateEntry {
+                    actor_id: user.actor_id,
+                    entry_id: template_root_id,
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "template root duplication must be rejected"
+    );
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_set_display_as_sets_guards(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    let activity = Activity {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: ActivityName::parse("Pull Up".to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    client
+        .run_action(activity.clone().into_create_activity(Uuid::new_v4()).into())
+        .await
+        .unwrap();
+
+    let set_flag = |entry_id, value| {
+        UpdateEntry {
+            actor_id: user.actor_id,
+            entry_id,
+            change: EntryChange::SetDisplayAsSets(value),
+        }
+        .into()
+    };
+
+    // A scalar cannot be flagged.
+    let mut scalar = log_entry(user.actor_id, None, None);
+    scalar.temporal = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+    client
+        .run_action(CreateEntry::from(scalar.clone()).into())
+        .await
+        .unwrap();
+    assert!(client.run_action(set_flag(scalar.id, true)).await.is_err());
+
+    // An empty sequence cannot be flagged.
+    let mut empty = log_entry(user.actor_id, None, None);
+    empty.is_sequence = true;
+    empty.temporal = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+    client
+        .run_action(CreateEntry::from(empty.clone()).into())
+        .await
+        .unwrap();
+    assert!(client.run_action(set_flag(empty.id, true)).await.is_err());
+
+    // Heterogeneous members (activity + anonymous) cannot be flagged.
+    let fi1 = FractionalIndex::default();
+    let fi2 = FractionalIndex::new_after(&fi1);
+    let m1 = log_entry(
+        user.actor_id,
+        Some(activity.id),
+        child_position(empty.id, fi1),
+    );
+    let m2 = log_entry(user.actor_id, None, child_position(empty.id, fi2.clone()));
+    run_actions(
+        &client,
+        [
+            CreateEntry::from(m1.clone()).into(),
+            CreateEntry::from(m2.clone()).into(),
+        ],
+    )
+    .await;
+    assert!(client.run_action(set_flag(empty.id, true)).await.is_err());
+
+    // Homogeneous members flag fine; setting again is a no-op; a flagged
+    // sequence cannot become a scalar until broken out.
+    client
+        .run_action(
+            DeleteEntryRecursive {
+                actor_id: user.actor_id,
+                entry_id: m2.id,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    client.run_action(set_flag(empty.id, true)).await.unwrap();
+    assert!(find_entry(&client, empty.id).await.unwrap().display_as_sets);
+    client.run_action(set_flag(empty.id, true)).await.unwrap();
+
+    let to_scalar = UpdateEntry {
+        actor_id: user.actor_id,
+        entry_id: empty.id,
+        change: EntryChange::SetIsSequence(false),
+    };
+    assert!(
+        client.run_action(to_scalar.clone().into()).await.is_err(),
+        "flagged sequence cannot become a scalar"
+    );
+
+    // Break out, then scalar conversion works again.
+    client.run_action(set_flag(empty.id, false)).await.unwrap();
+    client.run_action(to_scalar.into()).await.unwrap();
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_sets_member_activity_guards(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    let make_activity = |name: &str| Activity {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: ActivityName::parse(name.to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    let activity_a = make_activity("Bench Press");
+    let activity_b = make_activity("Overhead Press");
+    run_actions(
+        &client,
+        [
+            activity_a.clone().into_create_activity(Uuid::new_v4()).into(),
+            activity_b.clone().into_create_activity(Uuid::new_v4()).into(),
+        ],
+    )
+    .await;
+
+    let (sequence, members) =
+        seed_sets_sequence(&client, user.actor_id, Some(activity_a.id), 2).await;
+    let append_position = || {
+        child_position(
+            sequence.id,
+            FractionalIndex::new_after(members[1].frac_index().unwrap()),
+        )
+    };
+
+    // CreateEntry into the flagged sequence: wrong activity and anonymous are
+    // rejected; the shared activity is accepted.
+    let wrong = log_entry(user.actor_id, Some(activity_b.id), append_position());
+    assert!(
+        client
+            .run_action(CreateEntry::from(wrong).into())
+            .await
+            .is_err()
+    );
+    let anonymous = log_entry(user.actor_id, None, append_position());
+    assert!(
+        client
+            .run_action(CreateEntry::from(anonymous).into())
+            .await
+            .is_err()
+    );
+    let matching = log_entry(user.actor_id, Some(activity_a.id), append_position());
+    client
+        .run_action(CreateEntry::from(matching.clone()).into())
+        .await
+        .unwrap();
+
+    // CreateEntryFromActivity into the flagged sequence: B rejected, A fine.
+    let instantiate = |activity_id| CreateEntryFromActivity {
+        actor_id: user.actor_id,
+        activity_id,
+        position: child_position(
+            sequence.id,
+            FractionalIndex::new_after(matching.frac_index().unwrap()),
+        ),
+        temporal: Temporal::None,
+        is_template: false,
+    };
+    assert!(
+        client
+            .run_action(instantiate(activity_b.id).into())
+            .await
+            .is_err()
+    );
+    client
+        .run_action(instantiate(activity_a.id).into())
+        .await
+        .unwrap();
+
+    // MoveEntry into the flagged sequence: wrong activity rejected, matching
+    // accepted; reordering existing members is fine.
+    let mut outsider = log_entry(user.actor_id, Some(activity_b.id), None);
+    outsider.temporal = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+    client
+        .run_action(CreateEntry::from(outsider.clone()).into())
+        .await
+        .unwrap();
+    let move_into = |entry_id| MoveEntry {
+        actor_id: user.actor_id,
+        entry_id,
+        position: child_position(
+            sequence.id,
+            FractionalIndex::new_before(members[0].frac_index().unwrap()),
+        ),
+        temporal: Temporal::None,
+    };
+    assert!(client.run_action(move_into(outsider.id).into()).await.is_err());
+    client
+        .run_action(move_into(members[1].id).into())
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_sets_min_member_guards(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    let (sequence, members) = seed_sets_sequence(&client, user.actor_id, None, 2).await;
+
+    // Deleting down to one member is fine; deleting the last is rejected.
+    client
+        .run_action(
+            DeleteEntryRecursive {
+                actor_id: user.actor_id,
+                entry_id: members[0].id,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        client
+            .run_action(
+                DeleteEntryRecursive {
+                    actor_id: user.actor_id,
+                    entry_id: members[1].id,
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "deleting the last member must be rejected"
+    );
+
+    // Moving the last member out is rejected.
+    assert!(
+        client
+            .run_action(
+                MoveEntry {
+                    actor_id: user.actor_id,
+                    entry_id: members[1].id,
+                    position: None,
+                    temporal: Temporal::Start {
+                        start: sqlx::types::chrono::Utc::now()
+                    },
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "moving the last member out must be rejected"
+    );
+
+    // The "+" flow: duplicating the last member appends a sibling copy.
+    client
+        .run_action(
+            DuplicateEntry {
+                actor_id: user.actor_id,
+                entry_id: members[1].id,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // Breaking out lifts the floor; deleting the whole sequence is always
+    // fine and removes the members with it.
+    client
+        .run_action(
+            UpdateEntry {
+                actor_id: user.actor_id,
+                entry_id: sequence.id,
+                change: EntryChange::SetDisplayAsSets(false),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    client
+        .run_action(
+            DeleteEntryRecursive {
+                actor_id: user.actor_id,
+                entry_id: members[1].id,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    let (sequence2, _) = seed_sets_sequence(&client, user.actor_id, None, 1).await;
+    client
+        .run_action(
+            DeleteEntryRecursive {
+                actor_id: user.actor_id,
+                entry_id: sequence2.id,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    assert!(find_entry(&client, sequence2.id).await.is_none());
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_break_out_names_sequence(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    let set_flag = |entry_id, value| {
+        UpdateEntry {
+            actor_id: user.actor_id,
+            entry_id,
+            change: EntryChange::SetDisplayAsSets(value),
+        }
+        .into()
+    };
+    let name_of = |entry: Option<Entry>| entry.and_then(|e| e.name);
+
+    // Activity-backed members: name derives from the activity.
+    let activity = Activity {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: ActivityName::parse("Bench Press".to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    client
+        .run_action(activity.clone().into_create_activity(Uuid::new_v4()).into())
+        .await
+        .unwrap();
+    let (sequence, _) = seed_sets_sequence(&client, user.actor_id, Some(activity.id), 2).await;
+    client
+        .run_action(set_flag(sequence.id, false))
+        .await
+        .unwrap();
+    assert_eq!(
+        name_of(find_entry(&client, sequence.id).await),
+        Some("Bench Press Sets".to_string())
+    );
+
+    // Fully anonymous members leave the sequence unnamed (no "Unnamed Sets").
+    let (sequence2, _) = seed_sets_sequence(&client, user.actor_id, None, 1).await;
+    client
+        .run_action(set_flag(sequence2.id, false))
+        .await
+        .unwrap();
+    assert_eq!(
+        name_of(find_entry(&client, sequence2.id).await),
+        None,
+        "anonymous unnamed member derives no name"
+    );
+
+    // A sequence that already has a name keeps it.
+    let mut named = log_entry(user.actor_id, None, None);
+    named.name = Some("My Workout".to_string());
+    named.is_sequence = true;
+    named.temporal = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+    let member = log_entry(
+        user.actor_id,
+        Some(activity.id),
+        child_position(named.id, FractionalIndex::default()),
+    );
+    run_actions(
+        &client,
+        [
+            CreateEntry::from(named.clone()).into(),
+            CreateEntry::from(member.clone()).into(),
+        ],
+    )
+    .await;
+    client.run_action(set_flag(named.id, true)).await.unwrap();
+    client.run_action(set_flag(named.id, false)).await.unwrap();
+    assert_eq!(
+        name_of(find_entry(&client, named.id).await),
+        Some("My Workout".to_string()),
+        "an existing name is never clobbered"
+    );
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_create_entry_born_flagged_rejected(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    let mut entry = log_entry(user.actor_id, None, None);
+    entry.is_sequence = true;
+    entry.display_as_sets = true;
+    entry.temporal = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+    assert!(
+        client
+            .run_action(CreateEntry::from(entry).into())
+            .await
+            .is_err(),
+        "a new entry cannot be born with display_as_sets"
+    );
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_sets_in_activity_templates(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+
+    let activity = Activity {
+        id: Uuid::new_v4(),
+        owner_id: user.actor_id,
+        name: ActivityName::parse("Core Series".to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    let template_entry = |activity_id, position, is_sequence, display_as_sets| Entry {
+        id: Uuid::new_v4(),
+        activity_id,
+        owner_id: user.actor_id,
+        name: Some("set".to_string()),
+        position,
+        is_template: true,
+        display_as_sets,
+        is_sequence,
+        is_complete: false,
+        temporal: Temporal::None,
+    };
+
+    // A template containing a flagged sequence with no members is rejected.
+    let bad_root = template_entry(Some(activity.id), None, true, false);
+    let bad_sets = template_entry(
+        None,
+        child_position(bad_root.id, FractionalIndex::default()),
+        true,
+        true,
+    );
+    assert!(
+        client
+            .run_action(
+                CreateActivity {
+                    actor_id: user.actor_id,
+                    activity: activity.clone(),
+                    template: vec![bad_root, bad_sets],
+                }
+                .into(),
+            )
+            .await
+            .is_err(),
+        "template with an empty sets sequence must be rejected"
+    );
+
+    // A valid sets template: root sequence -> flagged sequence -> 2 anonymous
+    // members.
+    let root = template_entry(Some(activity.id), None, true, false);
+    let sets = template_entry(
+        None,
+        child_position(root.id, FractionalIndex::default()),
+        true,
+        true,
+    );
+    let fi1 = FractionalIndex::default();
+    let fi2 = FractionalIndex::new_after(&fi1);
+    let member1 = template_entry(None, child_position(sets.id, fi1), false, false);
+    let member2 = template_entry(None, child_position(sets.id, fi2), false, false);
+    client
+        .run_action(
+            CreateActivity {
+                actor_id: user.actor_id,
+                activity: activity.clone(),
+                template: vec![root, sets.clone(), member1, member2],
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // Instantiation preserves display_as_sets into the log.
+    client
+        .run_action(
+            CreateEntryFromActivity {
+                actor_id: user.actor_id,
+                activity_id: activity.id,
+                position: None,
+                temporal: Temporal::Start {
+                    start: sqlx::types::chrono::Utc::now(),
+                },
+                is_template: false,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    let mut conn = client.pool.acquire().await.unwrap();
+    let all = SqliteQueryExecutor::new(&mut *conn)
+        .execute(AllEntries)
+        .await
+        .unwrap();
+    let instantiated_sets: Vec<&Entry> = all
+        .iter()
+        .filter(|e| !e.is_template && e.display_as_sets)
+        .collect();
+    assert_eq!(
+        instantiated_sets.len(),
+        1,
+        "instantiated subtree must preserve display_as_sets"
+    );
+    assert_ne!(instantiated_sets[0].id, sets.id, "instance has a fresh id");
+    let forest = gv_core::forest::Forest::from(all.clone());
+    assert_eq!(
+        forest.children(instantiated_sets[0].id).len(),
+        2,
+        "instantiated sets sequence keeps its members"
+    );
 }
