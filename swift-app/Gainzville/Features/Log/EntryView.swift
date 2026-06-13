@@ -309,11 +309,19 @@ private struct SetsBody: View {
     let selectedMember: Entry?
     @Binding var selectedMemberId: String?
     let memberAttributes: [AttributePair]
+    @Environment(\.entryContext) private var entryContext
 
     // Matches the card border, which is keyed off the members the same way
     // (see EntryView.displaysAsSequence).
     private var separatorColor: Color {
         members.contains { $0.isSequence } ? .entrySequenceBorder : .entryScalarBorder
+    }
+
+    // The selected member's footer supplies the bottom padding (its +Entry
+    // button or completion checkbox). A template scalar member shows neither,
+    // so pad explicitly in that case — mirrors EntryBody.needsBottomPadding.
+    private var needsBottomPadding: Bool {
+        entryContext.isTemplate && !(selectedMember?.isSequence ?? false)
     }
 
     var body: some View {
@@ -342,6 +350,7 @@ private struct SetsBody: View {
         }
         .padding(.horizontal, GvSpacing.entrySpacing)
         .padding(.top, GvSpacing.entrySpacing)
+        .padding(.bottom, needsBottomPadding ? GvSpacing.entrySpacing : 0)
     }
 }
 
