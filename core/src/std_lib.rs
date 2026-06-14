@@ -6,8 +6,8 @@ use crate::{
     models::{
         activity::{Activity, ActivityName},
         attribute::{
-            Attribute, AttributeValue, MassConfig, MassMeasurement, MassUnit, MassValue,
-            NumericConfig, NumericValue, SelectConfig, Value,
+            Attribute, AttributeValue, LengthConfig, LengthUnit, MassConfig, MassMeasurement,
+            MassUnit, MassValue, NumericConfig, NumericValue, SelectConfig, TextConfig, Value,
         },
         entry::{Entry, Position, Temporal},
     },
@@ -34,6 +34,9 @@ const RPE_ID: Uuid = uuid!("00000000-0000-4000-8000-000000000005");
 const V_GRADE_ID: Uuid = uuid!("00000000-0000-4000-8000-000000000006");
 const GRIP_TYPE_ID: Uuid = uuid!("00000000-0000-4000-8000-000000000007");
 const HOLD_SIZE_ID: Uuid = uuid!("00000000-0000-4000-8000-000000000008");
+const DISTANCE_ID: Uuid = uuid!("00000000-0000-4000-8000-000000000009");
+const NOTES_ID: Uuid = uuid!("00000000-0000-4000-8000-00000000000a");
+const LOCATION_ID: Uuid = uuid!("00000000-0000-4000-8000-00000000000b");
 
 /// Stable ids for one std-lib activity: its own id plus the ids of its template
 /// entries. Grouping keeps each activity's ids together and lets call sites read
@@ -272,8 +275,46 @@ impl StandardLibrary {
             .into(),
         };
 
+        let distance = Attribute {
+            id: DISTANCE_ID,
+            owner_id: DEFAULT_USER_ID,
+            name: "Distance".to_string(),
+            description: Some(
+                "How far — the distance of a run, swim, ride, or climb approach.".to_string(),
+            ),
+            config: LengthConfig {
+                default_unit: LengthUnit::Mile,
+            }
+            .into(),
+        };
+
+        let notes = Attribute {
+            id: NOTES_ID,
+            owner_id: DEFAULT_USER_ID,
+            name: "Notes".to_string(),
+            description: Some("Free-form notes about an entry.".to_string()),
+            config: TextConfig {
+                default: None,
+                autocomplete: false,
+            }
+            .into(),
+        };
+
+        let location = Attribute {
+            id: LOCATION_ID,
+            owner_id: DEFAULT_USER_ID,
+            name: "Location".to_string(),
+            description: Some("Where it happened — a gym, crag, or trailhead.".to_string()),
+            config: TextConfig {
+                default: None,
+                autocomplete: true,
+            }
+            .into(),
+        };
+
         vec![
-            reps, load, outcome, yds_grade, rpe, v_grade, grip_type, hold_size,
+            reps, load, outcome, yds_grade, rpe, v_grade, grip_type, hold_size, distance, notes,
+            location,
         ]
     }
 
