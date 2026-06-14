@@ -208,6 +208,70 @@ struct TemporalAttribute: View {
     }
 }
 
+// MARK: - DurationAttribute
+
+/// A flat, always-visible "Duration" row that edits only the duration component
+/// of an entry's temporal. Used where the timeline is owned elsewhere or doesn't
+/// apply: set members (the sequence owns start/end) and templates (no timeline).
+///
+/// It always writes a duration-only temporal — `.duration(d)` or `.none` — so it
+/// can never over-determine (the 2-of-3 rule holds structurally) and needs none
+/// of the conflict-alert machinery `TemporalAttribute` uses. For the rare entry
+/// that already carries start+end, the row shows the *derived* duration and an
+/// edit replaces start/end with the duration-only value — a deliberate clobber
+/// (see docs/sets-design.md). Set members and templates are never root log
+/// entries, so the root-anchor invariant never applies here and clearing is
+/// always allowed.
+struct DurationAttribute: View {
+    let entry: Entry
+
+    @EnvironmentObject private var forestVM: ForestViewModel
+    @State private var editDurationMs: UInt32?
+
+    var body: some View {
+        AttributeRow(label: "Duration") {
+            DurationPickerPill(durationMs: $editDurationMs, canClear: editDurationMs != nil)
+        }
+        .onAppear { editDurationMs = displayDurationMs(of: entry.temporal) }
+        .onChange(of: entry.temporal) { _, newValue in
+            editDurationMs = displayDurationMs(of: newValue)
+        }
+        .onChange(of: editDurationMs) { _, newValue in
+            // Skip the sync-induced change (which mirrors the stored/derived
+            // value) so merely viewing a start+end entry never clobbers it;
+            // only a genuine user edit differs from what's already shown.
+            guard newValue != displayDurationMs(of: entry.temporal) else { return }
+            let newTemporal: Temporal = newValue.map { .duration(duration: $0) } ?? .none
+            forestVM.updateEntryTemporal(entry: entry, temporal: newTemporal)
+        }
+    }
+}
+
+/// The duration to display in a duration-only row: the stored duration, or the
+/// span inferred from start+end. nil when no duration is determinable
+/// (none / start-only / end-only, or a non-positive start..end span).
+private func displayDurationMs(of temporal: Temporal) -> UInt32? {
+    let rawMs: Int64
+    switch temporal {
+    case .none, .start, .end:
+        return nil
+    case .duration(let ms):
+        rawMs = Int64(ms)
+    case .startAndDuration(_, let d):
+        rawMs = Int64(d)
+    case .durationAndEnd(let d, _):
+        rawMs = Int64(d)
+    case .startAndEnd(let s, let e):
+        rawMs = Int64(e) - Int64(s)
+    }
+    // Floor to whole seconds — the duration picker's granularity — so opening and
+    // closing the pill round-trips to the same value and never persists a no-op
+    // edit (which, for a start+end entry, would clobber it). Floor and clamp in
+    // Int64 so a very long start..end span can't overflow the UInt32 multiply.
+    let flooredMs = (rawMs / 1000) * 1000
+    return flooredMs > 0 ? UInt32(clamping: flooredMs) : nil
+}
+
 // MARK: - Expanded rows
 
 private struct TemporalExpandedRows: View {
@@ -220,20 +284,19 @@ private struct TemporalExpandedRows: View {
     var canClearStart = false
     var canClearEnd = false
     var canClearDuration = false
-    @Environment(\.entryContext) private var entryContext
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.lg) {
-            // Templates live outside the timeline: duration only, no start/end.
-            if !entryContext.isTemplate {
-                AttributeRow(label: "Start", indent: GvSpacing.lg) {
-                    DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart, canClear: canClearStart)
-                    DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart, canClear: canClearStart)
-                }
-                AttributeRow(label: "End", indent: GvSpacing.lg) {
-                    DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd, canClear: canClearEnd)
-                    DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd, canClear: canClearEnd)
-                }
+            // TemporalAttribute is only rendered for log entries (templates and
+            // set members use the flat DurationAttribute instead), so Start/End
+            // always apply here.
+            AttributeRow(label: "Start", indent: GvSpacing.lg) {
+                DatePickerPill(date: $editStart, components: .date, onBeforeEdit: onBeforeEditStart, canClear: canClearStart)
+                DatePickerPill(date: $editStart, components: .hourAndMinute, onBeforeEdit: onBeforeEditStart, canClear: canClearStart)
+            }
+            AttributeRow(label: "End", indent: GvSpacing.lg) {
+                DatePickerPill(date: $editEnd, components: .date, onBeforeEdit: onBeforeEditEnd, canClear: canClearEnd)
+                DatePickerPill(date: $editEnd, components: .hourAndMinute, onBeforeEdit: onBeforeEditEnd, canClear: canClearEnd)
             }
             AttributeRow(label: "Duration", indent: GvSpacing.lg) {
                 DurationPickerPill(durationMs: $editDurationMs, onBeforeEdit: onBeforeEditDuration, canClear: canClearDuration)
@@ -343,13 +406,16 @@ private struct DurationPickerPill: View {
     @State private var editMinutes = 0
     @State private var editSeconds = 0
 
-    /// Clear nils the binding directly and dismisses — deliberately NOT via
-    /// `onDone`/`commitToBinding`, which would re-read the still-loaded wheels and
-    /// write the old duration back over the cleared value. The parent's debounce
-    /// persists the `nil`. nil when clearing isn't allowed (hides Clear).
+    /// Clear nils the binding and dismisses. It also zeroes the wheels so the
+    /// commit-on-dismiss below re-derives `nil` rather than re-reading the still-
+    /// loaded wheels and writing the old duration back over the cleared value.
+    /// nil when clearing isn't allowed (hides Clear).
     private var clearAction: (() -> Void)? {
         guard canClear else { return nil }
         return {
+            editHours = 0
+            editMinutes = 0
+            editSeconds = 0
             durationMs = nil
             isPresenting = false
         }
@@ -389,6 +455,12 @@ private struct DurationPickerPill: View {
                 actions: barActions
             )
             #endif
+        }
+        // Commit the wheels whenever the popover closes — via Done, clicking
+        // outside (macOS), or swipe (iOS) — so an adjustment is never lost on
+        // dismissal. Clear zeroes the wheels first, so this re-derives nil there.
+        .onChange(of: isPresenting) { _, isOpen in
+            if !isOpen { commitToBinding() }
         }
     }
 

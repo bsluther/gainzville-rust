@@ -149,3 +149,14 @@ Considered: a stateful editor type in core, reachable from any client, that hold
 - Domain rules that *would* benefit from cross-platform sharing — clamping, integer rounding, unit conversion — can be exposed as pure helpers when needed, without dragging stateful editor objects across the FFI boundary.
 
 The trigger to revisit: when a third client appears (web, Android, etc.) or when unit-conversion logic exceeds what's reasonable to duplicate per-platform.
+
+### Time / Duration as temporal views (future)
+
+Temporal (start/end/duration) is **not** an attribute — it's the built-in `Entry.temporal`, edited by the collapsible Time editor (`TemporalAttribute`) on log entries and, since the sets work, by a flat duration-only row (`DurationAttribute`) on set members and templates (see `sets-design.md` → "Per-set duration"). A plausible future generalization: let the user configure, **per entry**, whether Time and/or Duration appear — presented in the same attribute-row style as Numeric/Select/Mass, with the same add/remove affordance in `EditAttributesView`.
+
+The constraint that makes this *not* just "another attribute": Time and Duration are not independent stored values — they are **views onto the same underlying `temporal`**. A "Duration" control and a "Time" control on one entry read and write the same `Temporal` enum, and the 2-of-3 rule (no `start`+`end`+`duration` together) is enforced structurally across both. So this is an attribute-shaped *presentation* over shared state, not a new value row — implementing it as separate stored attributes would be the wrong model. Two storage options for the presentation choice itself:
+
+- **Derive from context** (today's approach): templates and set members get duration-only; log roots/children get the full Time editor. No stored state — the rule is a pure function of the entry's role (`is_template`, set-member-ness, root-ness). Limited but free.
+- **Per-entry flags** (`present_time` / `present_duration` on `Entry`, toggled from the Edit Attributes sheet): general and user-controllable, but adds pure-presentation fields to the domain model and threads through gv-sql / FFI / migrations — a real cross-layer cost (the same reason `display_as_sets` is the only presentation-ish flag today). Would still have to honor the root "must have start or end" rule (a root can't hide Time).
+
+Deferred until a concrete need appears for presentation customization beyond set members and templates — the current consumers are fully served by context-derivation. Recorded so the "it's just another attribute" framing doesn't get built as separate stored values.

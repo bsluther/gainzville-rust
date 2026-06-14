@@ -103,20 +103,58 @@ existing name.
 
 The sets sequence has a **normal temporal obeying all existing rules** — the root invariant and
 day-grouping (`canonical_instant`) are untouched. The sets UI shows exactly one Time row — the
-sequence's — under the Sets control, and hides member temporal entirely. Members may still carry
-durations in the model (template instantiation produces exactly that shape); they're just not
-editable from the sets UI in v1 — break out to reach them.
+sequence's — under the Sets control (start/end: when the set group happened). Each member then shows
+a **per-set Duration row** that edits only its own duration component (the hang/plank/sprint time).
+Members carry duration only; the sequence owns start/end. (In v1, member temporal was hidden
+entirely — reachable only by breaking out; the per-set Duration row shipped 2026-06-13, see "Per-set
+duration" below.)
 
-Rejected alternatives: per-member time rows (repetitive UX); inferring sequence time from members
-(touches the invariant, Forest, and the day-filter query path); mutator-maintained pairing of
-sequence time to the first member (drift-prone manual sync).
+Rejected alternatives: full per-member **Time** rows with start/end (repetitive UX — two competing
+"Time" headers; the shipped per-set row shows only **Duration**, a distinct label below a separator,
+so it reads as hierarchy rather than repetition); inferring sequence time from members (touches the
+invariant, Forest, and the day-filter query path); mutator-maintained pairing of sequence time to
+the first member (drift-prone manual sync).
+
+### Per-set duration (member duration row)
+
+Shipped 2026-06-13. A flat, always-visible **Duration** row on each set member (and on library
+template entries) edits only the member's duration, in the attribute-row style. It is a Swift-only
+view (`DurationAttribute` in `Features/Log/Attributes/TemporalAttribute.swift`) with **no model
+change** — every entry already carries a `temporal`, and `ConvertToSets` already gives members a
+duration-only temporal, so this closed a *presentation* gap, not a storage gap (D1).
+
+- **Duration-only writes (clobber-all).** The row always writes a duration-only temporal
+  (`Temporal::Duration` or `None`) through the existing `MoveEntry` / `updateEntryTemporal` path.
+  The 2-of-3 rule is satisfied structurally (no over-determined variant exists), so the row needs
+  none of the full editor's conflict-alert machinery. For the (currently unreachable) member that
+  already carries start+end, the row shows the **derived** duration and editing it **replaces**
+  start/end — a deliberate clobber, accepted because the case is rare and the alternative (porting
+  the conflict UI into a row that hides start/end) is costly and confusing.
+- **Set members are never roots** (they have a position under the wrapper), so the root "must have
+  start or end" rule never binds them — duration-only members are always legal.
+- **Templates** render the same flat Duration row in place of the old collapsible "Time" accordion
+  (which, for templates, only ever revealed a single Duration row anyway). A template sets sequence
+  shows no sequence-level temporal row — its durations live per-member.
+- **Deferred — configurable presentation:** letting the user choose *per entry* whether Time and/or
+  Duration appear (e.g. `present_time`/`present_duration` flags from the Edit Attributes sheet) was
+  considered and deferred: it pushes pure-presentation state into the domain model at a large
+  cross-layer cost, and the stated use cases (fingerboarding, planks, sprints) are all set members
+  already served without it. The general framing — Time and Duration as attribute-style controls
+  that are **views onto the same `temporal`** rather than separate stored attributes — is recorded
+  in `attributes-design.md` ("Time / Duration as temporal views").
 
 ## UI (Swift app)
 
-- **Sets row** renders only when `display_as_sets == true`, at the top of the attribute section,
-  above Time: numbered pills (sibling order), `+`, `−`.
-- The card **titles as the selected member** (the wrapper is anonymous); attributes, children, and
-  the completion footer below the Time row are the selected member's, re-keyed per member so
+- Layout, top to bottom: the sequence's **Time** row, the **Sets** row, a separator, then the
+  selected member's **Duration** row, attributes, children, and footer. The separator divides the
+  sequence-owned rows (Time, Sets) from the per-member rows.
+- **Sets row** renders only when `display_as_sets == true`: numbered pills (sibling order), `+`,
+  `−`. It sits below the sequence's Time row (which describes the whole group) and above the
+  separator.
+- **Per-set Duration row**: a flat Duration control on the selected member, the first per-member row
+  below the separator. Edits the member's duration only (see "Per-set duration" above).
+- The card **titles as the selected member** (the wrapper is anonymous); the Duration row,
+  attributes, children, and completion footer are the selected member's, re-keyed per member so
   editor state doesn't leak across set switches.
 - **`+` duplicates the LAST member and appends**; the new set becomes selected. Independent of
   picker selection (the next set most resembles the previous one).
@@ -135,7 +173,8 @@ Sets work in template trees with no special-casing: both root-temporal enforceme
 `display_as_sets` (the instantiated root takes the caller's temporal; members keep template
 durations — exactly the sets temporal shape). `CreateActivity` validates the sets shape inside
 submitted templates. The one exception: an activity's template **root** cannot itself be a sets
-sequence yet (see Deferred).
+sequence yet (see Deferred). In the UI, template entries render the flat per-set Duration row in
+place of the old collapsible Time accordion (see "Per-set duration").
 
 ## Sync
 
@@ -149,8 +188,12 @@ collision-free. Duplicates mint fresh UUIDs, so concurrent duplicates cannot col
 - **Template-root sets** ("Bench Press's template = 3×5"): requires the wrapper to inherit the
   activity id, which makes activity queries double-hit (wrapper + members) on instantiated logs
   and breaks wrapper-anonymity symmetry. Revisit when template editing UX matures.
-- **Per-set duration field**: an attribute-like Duration control on each set that edits only the
-  member temporal's duration.
+- ~~**Per-set duration field**~~ — **shipped 2026-06-13** (see "Per-set duration" above).
+- **Configurable Time/Duration presentation**: per-entry control over which temporal fields show,
+  as attribute-style views onto the one `temporal` (not separate stored values). See "Per-set
+  duration" above and `attributes-design.md` → "Time / Duration as temporal views". Deferred —
+  pushes pure-presentation state into the domain model; current consumers (set members, templates)
+  are served by context-derivation.
 - **Conversion affordance in the add-attributes UI**: the Sets control presents like an
   attribute, so "add Sets" may belong next to "add attribute" rather than in the entry menu.
 
@@ -166,3 +209,4 @@ collision-free. Duplicates mint fresh UUIDs, so concurrent duplicates cannot col
 | D6 | Break out always legal | Escape hatch required by D5 and D1 |
 | D7 | Template-root conversion rejected in v1 | Anonymous wrapper vs. template-root activity rule; defers query double-hit semantics |
 | D8 | Entry-menu Duplicate wired in v1 | The action exists for "+" anyway; menu placeholder was already present |
+| D9 | Per-set Duration row (member, duration-only, clobber-all); templates use it in place of the Time accordion | Closes the v1 presentation gap (D1) with zero model change; duration-only can't over-determine, so no conflict UI needed; configurable per-entry Time/Duration presentation deferred to attribute-style temporal views |

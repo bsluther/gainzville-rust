@@ -225,7 +225,13 @@ private struct EntryBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.entrySpacing) {
-            TemporalAttribute(entry: entry)
+            // Templates have no timeline — a duration is all they carry — so they
+            // show a flat Duration row in place of the collapsible Time editor.
+            if entryContext.isTemplate {
+                DurationAttribute(entry: entry)
+            } else {
+                TemporalAttribute(entry: entry)
+            }
             AttributesSection(entry: entry, attributes: attributes)
             if entry.isSequence {
                 ChildrenSection(parent: entry)
@@ -326,9 +332,13 @@ private struct SetsBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: GvSpacing.entrySpacing) {
-            // Time first: it describes the whole sequence of members, so it
-            // sits hierarchically above the per-set picker.
-            TemporalAttribute(entry: sequence)
+            // Time first: it describes the whole sequence of members, so it sits
+            // hierarchically above the per-set picker. Only logs have a timeline;
+            // a template sequence carries no time of its own (its durations live
+            // per-member, below), so it shows no sequence-level temporal row.
+            if !entryContext.isTemplate {
+                TemporalAttribute(entry: sequence)
+            }
             SetsControl(members: members, selectedMemberId: $selectedMemberId)
             // Separates the sequence's sets control row from the per-set rows below.
             Rectangle()
@@ -339,6 +349,10 @@ private struct SetsBody: View {
                 // Re-key on the member so editor state (focus, in-progress
                 // edits) never carries across set switches.
                 Group {
+                    // Per-set duration: the sequence owns start/end (its Time row
+                    // above); each member owns only its duration — the hang, plank,
+                    // or sprint time. Duration-only, so it can't over-determine.
+                    DurationAttribute(entry: member)
                     AttributesSection(entry: member, attributes: memberAttributes)
                     if member.isSequence {
                         ChildrenSection(parent: member)
