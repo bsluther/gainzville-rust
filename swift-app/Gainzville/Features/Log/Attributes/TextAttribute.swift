@@ -155,10 +155,11 @@ struct TextAttribute: View {
         .clipShape(RoundedRectangle(cornerRadius: GvSpacing.sm))
     }
 
-    // Fill the field from a suggestion and commit immediately.
+    // Fill the field from a suggestion and dismiss. The blur handler owns the
+    // commit — flushing here too would double-dispatch, since the first write
+    // hasn't refreshed `pair.actual` by the time the blur handler re-checks.
     private func pick(_ suggestion: String) {
         text = suggestion
-        flushNow()
         focused = false
     }
 
