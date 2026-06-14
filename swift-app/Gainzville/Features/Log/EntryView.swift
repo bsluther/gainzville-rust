@@ -638,6 +638,7 @@ private struct AttributesSection: View {
                     case .select(let p):  SelectAttribute(entry: entry, pair: p)
                     case .mass(let p):    MassAttribute(entry: entry, pair: p)
                     case .length(let p):  LengthAttribute(entry: entry, pair: p)
+                    case .text(let p):    TextAttribute(entry: entry, pair: p)
                     }
                 }
             }

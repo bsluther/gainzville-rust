@@ -129,6 +129,9 @@ impl QueryStore {
             AnyQuery::FindAttributePairsForEntry(q) => Ok(
                 AnyQueryResponse::FindAttributePairsForEntry(self.run_query(q).await?),
             ),
+            AnyQuery::DistinctTextValuesForAttribute(q) => Ok(
+                AnyQueryResponse::DistinctTextValuesForAttribute(self.run_query(q).await?),
+            ),
         }
     }
 

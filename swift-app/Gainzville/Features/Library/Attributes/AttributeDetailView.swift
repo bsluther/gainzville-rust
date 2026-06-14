@@ -98,6 +98,12 @@ struct AttributeDetailView: View {
             MassConfigEditor(config: cfg) { vm.apply(.mass(.setDefaultUnit($0))) }
         case .length(let cfg):
             LengthConfigEditor(config: cfg) { vm.apply(.length(.setDefaultUnit($0))) }
+        case .text(let cfg):
+            TextConfigEditor(
+                config: cfg,
+                onSetDefault: { vm.apply(.text(.setDefault($0))) },
+                onSetAutocomplete: { vm.apply(.text(.setAutocomplete($0))) }
+            )
         }
     }
 }
@@ -417,6 +423,63 @@ private struct LengthConfigEditor: View {
     }
 }
 
+// MARK: - Text
+
+private struct TextConfigEditor: View {
+    let config: TextConfig
+    let onSetDefault: (String?) -> Void
+    let onSetAutocomplete: (Bool) -> Void
+
+    var body: some View {
+        VStack(spacing: GvSpacing.xl) {
+            ConfigRow(label: "Default") {
+                TextDefaultField(config: config, onCommit: onSetDefault)
+            }
+            ConfigRow(label: "Autocomplete") {
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { config.autocomplete },
+                        set: { onSetAutocomplete($0) }
+                    )
+                )
+                .labelsHidden()
+            }
+        }
+    }
+}
+
+/// Editable text default — empty clears it (None); stored verbatim otherwise.
+private struct TextDefaultField: View {
+    let config: TextConfig
+    let onCommit: (String?) -> Void
+
+    @State private var text: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("None", text: $text)
+            .textFieldStyle(.plain)
+            .multilineTextAlignment(.center)
+            .focused($focused)
+            .frame(minWidth: GvSpacing.minAttributeInputWidth)
+            .gvAttributePill(borderColor: editableBorder)
+            .fixedSize(horizontal: true, vertical: false)
+            .onAppear { text = config.default ?? "" }
+            .onChange(of: config.default) { _, _ in if !focused { text = config.default ?? "" } }
+            .onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
+            .onSubmit { commit() }
+    }
+
+    private func commit() {
+        if text.isEmpty {
+            if config.default != nil { onCommit(nil) }
+            return
+        }
+        if text != config.default { onCommit(text) }
+    }
+}
+
 private extension AttributeConfig {
     var typeName: String {
         switch self {
@@ -424,6 +487,7 @@ private extension AttributeConfig {
         case .select:   return "Select"
         case .mass:     return "Mass"
         case .length:   return "Length"
+        case .text:     return "Text"
         }
     }
 }

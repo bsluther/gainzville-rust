@@ -63,6 +63,13 @@ impl Attribute {
         }
     }
 
+    pub fn expect_text(&self) -> Result<&TextConfig> {
+        match &self.config {
+            AttributeConfig::Text(c) => Ok(c),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
+        }
+    }
+
     /// The scalar config default mapped to an `AttributeValue`, if this type has
     /// one. Numeric and Select carry a scalar default; Mass and Length have
     /// only `default_unit` and return `None` here (use `seed_value` to build a
@@ -78,6 +85,7 @@ impl Attribute {
                 .map(|s| AttributeValue::Select(SelectValue::Exact(s))),
             AttributeConfig::Mass(_) => None,
             AttributeConfig::Length(_) => None,
+            AttributeConfig::Text(c) => c.default.clone().map(AttributeValue::Text),
         }
     }
 
@@ -93,6 +101,7 @@ impl Attribute {
             (AttributeConfig::Select(c), AttributeValue::Select(v)) => c.validate_value(v),
             (AttributeConfig::Mass(c), AttributeValue::Mass(v)) => c.validate_value(v),
             (AttributeConfig::Length(c), AttributeValue::Length(v)) => c.validate_value(v),
+            (AttributeConfig::Text(c), AttributeValue::Text(v)) => c.validate_value(v),
             _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
@@ -136,6 +145,7 @@ pub enum AttributeConfig {
     Select(SelectConfig),
     Mass(MassConfig),
     Length(LengthConfig),
+    Text(TextConfig),
 }
 
 impl From<NumericConfig> for AttributeConfig {
@@ -158,6 +168,11 @@ impl From<LengthConfig> for AttributeConfig {
         AttributeConfig::Length(value)
     }
 }
+impl From<TextConfig> for AttributeConfig {
+    fn from(value: TextConfig) -> Self {
+        AttributeConfig::Text(value)
+    }
+}
 
 impl AttributeConfig {
     /// Validate the config itself (applied at `CreateAttribute`): bounds and
@@ -172,6 +187,7 @@ impl AttributeConfig {
             // single `default_unit` is valid.
             AttributeConfig::Mass(_) => Ok(()),
             AttributeConfig::Length(_) => Ok(()),
+            AttributeConfig::Text(c) => c.validate(),
         }
     }
 
@@ -181,6 +197,7 @@ impl AttributeConfig {
             AttributeConfig::Select(_) => "Select",
             AttributeConfig::Mass(_) => "Mass",
             AttributeConfig::Length(_) => "Length",
+            AttributeConfig::Text(_) => "Text",
         }
     }
 }
@@ -389,6 +406,45 @@ impl SelectConfig {
     }
 }
 
+/// Internal hard cap on text length (Unicode scalar count). Not user-facing:
+/// unlike a numeric range, a text attribute has no authored max length. This
+/// only guards against pathological input (a paste bomb, a runaway importer) —
+/// generous enough never to clip a real note.
+pub const MAX_TEXT_LEN: usize = 10_000;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TextConfig {
+    pub default: Option<String>,
+    /// When true, editors offer autocomplete from prior values of this
+    /// attribute (the `DistinctTextValuesForAttribute` query). Presentation
+    /// only — it never constrains what can be stored.
+    pub autocomplete: bool,
+}
+
+impl TextConfig {
+    /// Validate the config itself: the default, when present, must be a valid
+    /// value (within the length cap).
+    pub fn validate(&self) -> Result<()> {
+        if let Some(d) = &self.default {
+            self.validate_value(d)?;
+        }
+        Ok(())
+    }
+
+    /// Validate a text value: at most `MAX_TEXT_LEN` characters. Free text is
+    /// otherwise unconstrained — stored verbatim, no normalization.
+    pub fn validate_value(&self, value: &str) -> Result<()> {
+        let len = value.chars().count();
+        if len > MAX_TEXT_LEN {
+            return Err(ValidationError::InvalidValue(format!(
+                "text value is {len} characters, over the {MAX_TEXT_LEN} limit"
+            ))
+            .into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MassConfig {
     /// Unit used for the attach-time seed value and for presenting an empty
@@ -577,6 +633,9 @@ pub enum AttributeValue {
     Select(SelectValue),
     Mass(MassValue),
     Length(LengthValue),
+    // Free text has no exact/range axis, so it carries a bare `String` rather
+    // than a wrapping `*Value` enum like the other types.
+    Text(String),
 }
 
 impl AttributeValue {
@@ -604,6 +663,13 @@ impl AttributeValue {
     pub fn expect_length(self) -> Result<LengthValue> {
         match self {
             AttributeValue::Length(v) => Ok(v),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
+        }
+    }
+
+    pub fn expect_text(self) -> Result<String> {
+        match self {
+            AttributeValue::Text(s) => Ok(s),
             _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
@@ -1041,6 +1107,39 @@ mod tests {
                 min: 1000.0,
                 max: 2000.0,
             }
+        );
+    }
+
+    #[test]
+    fn text_validation() {
+        let cfg = TextConfig {
+            default: None,
+            autocomplete: false,
+        };
+        assert!(cfg.validate_value("Stone Age").is_ok());
+        assert!(cfg.validate_value("").is_ok());
+        // The cap counts Unicode scalars, not bytes: a multi-byte string at the
+        // cap passes.
+        assert!(cfg.validate_value(&"é".repeat(MAX_TEXT_LEN)).is_ok());
+        assert!(rejected_validation(
+            &cfg.validate_value(&"a".repeat(MAX_TEXT_LEN + 1))
+        ));
+        // The config default is validated like a value.
+        assert!(
+            TextConfig {
+                default: Some("Home gym".to_string()),
+                autocomplete: true,
+            }
+            .validate()
+            .is_ok()
+        );
+        assert!(
+            TextConfig {
+                default: Some("x".repeat(MAX_TEXT_LEN + 1)),
+                autocomplete: false,
+            }
+            .validate()
+            .is_err()
         );
     }
 }

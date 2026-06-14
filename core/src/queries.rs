@@ -6,7 +6,7 @@ use crate::{
     models::{
         activity::Activity,
         actor::Actor,
-        attribute::{Attribute, Value},
+        attribute::{Attribute, AttributeValue, Value},
         attribute_pair::AttributePair,
         entry::Entry,
         entry_join::EntryJoin,
@@ -66,6 +66,7 @@ pub enum AnyQuery {
     FindValuesForEntry(FindValuesForEntry),
     FindValuesForEntries(FindValuesForEntries),
     FindAttributePairsForEntry(FindAttributePairsForEntry),
+    DistinctTextValuesForAttribute(DistinctTextValuesForAttribute),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -95,6 +96,7 @@ pub enum AnyQueryResponse {
     FindValuesForEntry(Vec<Value>),
     FindValuesForEntries(Vec<Value>),
     FindAttributePairsForEntry(Vec<AttributePair>),
+    DistinctTextValuesForAttribute(Vec<String>),
 }
 
 impl From<IsEmailRegistered> for AnyQuery {
@@ -217,6 +219,12 @@ impl From<FindAttributePairsForEntry> for AnyQuery {
     }
 }
 
+impl From<DistinctTextValuesForAttribute> for AnyQuery {
+    fn from(value: DistinctTextValuesForAttribute) -> Self {
+        AnyQuery::DistinctTextValuesForAttribute(value)
+    }
+}
+
 // --- Auth ---
 
 define_query! {
@@ -318,6 +326,31 @@ define_query! {
     pub struct FindAttributePairsForEntry { pub entry_id: Uuid } => Vec<AttributePair>
 }
 
+define_query! {
+    /// Distinct text values previously entered for an attribute (plan ∪
+    /// actual), sorted — the source for a text attribute's input autocomplete.
+    /// Scoped by `attribute_id` alone: the value-owner invariant guarantees
+    /// every value for an attribute belongs to that attribute's owner, so no
+    /// owner filter is needed.
+    pub struct DistinctTextValuesForAttribute { pub attribute_id: Uuid } => Vec<String>
+}
+
+/// Distinct text values across a set of values' `plan` and `actual` fields,
+/// sorted. Backs `DistinctTextValuesForAttribute` — "any text you've entered
+/// for this attribute". Shared by the SQLite and Postgres executors so the
+/// plan ∪ actual extraction lives in one place; non-text values are ignored.
+pub fn distinct_text_values(values: &[Value]) -> Vec<String> {
+    let mut set = std::collections::BTreeSet::new();
+    for value in values {
+        for field in [&value.plan, &value.actual].into_iter().flatten() {
+            if let AttributeValue::Text(s) = field {
+                set.insert(s.clone());
+            }
+        }
+    }
+    set.into_iter().collect()
+}
+
 // --- Simulation ---
 
 // SnapshotAll is used to read *every* row from the database, regardless of auth, to bootstrap a
@@ -334,4 +367,51 @@ pub struct Snapshot {
     pub attributes: Vec<Attribute>,
     pub entries: Vec<Entry>,
     pub values: Vec<Value>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::attribute::NumericValue;
+
+    fn value(plan: Option<AttributeValue>, actual: Option<AttributeValue>) -> Value {
+        Value {
+            entry_id: Uuid::nil(),
+            attribute_id: Uuid::nil(),
+            index_float: None,
+            index_string: None,
+            plan,
+            actual,
+        }
+    }
+
+    fn text(s: &str) -> Option<AttributeValue> {
+        Some(AttributeValue::Text(s.to_string()))
+    }
+
+    #[test]
+    fn distinct_text_values_unions_plan_and_actual_sorted_deduped() {
+        let values = vec![
+            value(text("Stone Age"), text("Movement")),
+            value(None, text("Stone Age")), // duplicate across rows
+            value(text("Bouldering Project"), None),
+        ];
+        assert_eq!(
+            distinct_text_values(&values),
+            vec![
+                "Bouldering Project".to_string(),
+                "Movement".to_string(),
+                "Stone Age".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn distinct_text_values_ignores_non_text() {
+        let values = vec![value(
+            Some(AttributeValue::Numeric(NumericValue::Exact(5.0))),
+            text("Note"),
+        )];
+        assert_eq!(distinct_text_values(&values), vec!["Note".to_string()]);
+    }
 }

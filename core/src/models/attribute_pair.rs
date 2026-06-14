@@ -4,7 +4,7 @@ use crate::{
     error::DomainError,
     models::attribute::{
         Attribute, AttributeConfig, LengthConfig, LengthUnit, LengthValue, MassConfig, MassUnit,
-        MassValue, NumericConfig, NumericValue, SelectConfig, SelectValue, Value,
+        MassValue, NumericConfig, NumericValue, SelectConfig, SelectValue, TextConfig, Value,
     },
 };
 
@@ -14,6 +14,7 @@ pub enum AttributePair {
     Select(SelectAttributePair),
     Mass(MassAttributePair),
     Length(LengthAttributePair),
+    Text(TextAttributePair),
 }
 
 impl AttributePair {
@@ -23,6 +24,7 @@ impl AttributePair {
             AttributePair::Select(p) => p.attr_id,
             AttributePair::Mass(p) => p.attr_id,
             AttributePair::Length(p) => p.attr_id,
+            AttributePair::Text(p) => p.attr_id,
         }
     }
 
@@ -32,6 +34,7 @@ impl AttributePair {
             AttributePair::Select(p) => p.name.clone(),
             AttributePair::Mass(p) => p.name.clone(),
             AttributePair::Length(p) => p.name.clone(),
+            AttributePair::Text(p) => p.name.clone(),
         }
     }
 }
@@ -92,6 +95,20 @@ impl TryFrom<(Attribute, Value)> for AttributePair {
                     name: attr.name,
                     config: cfg,
                     index_float: val.index_float,
+                    plan,
+                    actual,
+                }))
+            }
+            (AttributeConfig::Text(cfg), plan, actual) => {
+                let plan = plan.map(|v| v.expect_text()).transpose()?;
+                let actual = actual.map(|v| v.expect_text()).transpose()?;
+                Ok(AttributePair::Text(TextAttributePair {
+                    attr_id: attr.id,
+                    entry_id: val.entry_id,
+                    owner_id: attr.owner_id,
+                    name: attr.name,
+                    config: cfg,
+                    index_string: val.index_string,
                     plan,
                     actual,
                 }))
@@ -170,4 +187,18 @@ impl LengthAttributePair {
             .map(|v| v.unit().clone())
             .unwrap_or_else(|| self.config.default_unit.clone())
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextAttributePair {
+    pub attr_id: Uuid,
+    pub entry_id: Uuid,
+    pub owner_id: Uuid,
+    pub name: String,
+    pub config: TextConfig,
+    pub index_string: Option<String>,
+    // A text value is a bare `String` (no exact/range axis), so plan/actual are
+    // `Option<String>` directly.
+    pub plan: Option<String>,
+    pub actual: Option<String>,
 }

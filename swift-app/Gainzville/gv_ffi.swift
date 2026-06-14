@@ -2188,6 +2188,56 @@ public func FfiConverterTypeDeleteEntryRecursive_lower(_ value: DeleteEntryRecur
 }
 
 
+public struct DistinctTextValuesForAttribute: Equatable, Hashable {
+    public var attributeId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(attributeId: Uuid) {
+        self.attributeId = attributeId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension DistinctTextValuesForAttribute: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDistinctTextValuesForAttribute: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DistinctTextValuesForAttribute {
+        return
+            try DistinctTextValuesForAttribute(
+                attributeId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DistinctTextValuesForAttribute, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.attributeId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDistinctTextValuesForAttribute_lift(_ buf: RustBuffer) throws -> DistinctTextValuesForAttribute {
+    return try FfiConverterTypeDistinctTextValuesForAttribute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDistinctTextValuesForAttribute_lower(_ value: DistinctTextValuesForAttribute) -> RustBuffer {
+    return FfiConverterTypeDistinctTextValuesForAttribute.lower(value)
+}
+
+
 public struct DuplicateEntry: Equatable, Hashable {
     public var actorId: Uuid
     public var entryId: Uuid
@@ -3954,6 +4004,138 @@ public func FfiConverterTypeSelectConfig_lower(_ value: SelectConfig) -> RustBuf
 }
 
 
+public struct TextAttributePair: Equatable, Hashable {
+    public var attrId: Uuid
+    public var entryId: Uuid
+    public var ownerId: Uuid
+    public var name: String
+    public var config: TextConfig
+    public var indexString: String?
+    public var plan: String?
+    public var actual: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(attrId: Uuid, entryId: Uuid, ownerId: Uuid, name: String, config: TextConfig, indexString: String?, plan: String?, actual: String?) {
+        self.attrId = attrId
+        self.entryId = entryId
+        self.ownerId = ownerId
+        self.name = name
+        self.config = config
+        self.indexString = indexString
+        self.plan = plan
+        self.actual = actual
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TextAttributePair: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTextAttributePair: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextAttributePair {
+        return
+            try TextAttributePair(
+                attrId: FfiConverterTypeUuid.read(from: &buf), 
+                entryId: FfiConverterTypeUuid.read(from: &buf), 
+                ownerId: FfiConverterTypeUuid.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                config: FfiConverterTypeTextConfig.read(from: &buf), 
+                indexString: FfiConverterOptionString.read(from: &buf), 
+                plan: FfiConverterOptionString.read(from: &buf), 
+                actual: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TextAttributePair, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.attrId, into: &buf)
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+        FfiConverterTypeUuid.write(value.ownerId, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterTypeTextConfig.write(value.config, into: &buf)
+        FfiConverterOptionString.write(value.indexString, into: &buf)
+        FfiConverterOptionString.write(value.plan, into: &buf)
+        FfiConverterOptionString.write(value.actual, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextAttributePair_lift(_ buf: RustBuffer) throws -> TextAttributePair {
+    return try FfiConverterTypeTextAttributePair.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextAttributePair_lower(_ value: TextAttributePair) -> RustBuffer {
+    return FfiConverterTypeTextAttributePair.lower(value)
+}
+
+
+public struct TextConfig: Equatable, Hashable {
+    public var `default`: String?
+    public var autocomplete: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(`default`: String?, autocomplete: Bool) {
+        self.`default` = `default`
+        self.autocomplete = autocomplete
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TextConfig: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTextConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextConfig {
+        return
+            try TextConfig(
+                default: FfiConverterOptionString.read(from: &buf), 
+                autocomplete: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TextConfig, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.`default`, into: &buf)
+        FfiConverterBool.write(value.autocomplete, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextConfig_lift(_ buf: RustBuffer) throws -> TextConfig {
+    return try FfiConverterTypeTextConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextConfig_lower(_ value: TextConfig) -> RustBuffer {
+    return FfiConverterTypeTextConfig.lower(value)
+}
+
+
 public struct UpdateAttribute: Equatable, Hashable {
     public var actorId: Uuid
     public var attributeId: Uuid
@@ -4579,6 +4761,8 @@ public enum AnyQuery: Equatable, Hashable {
     )
     case findAttributePairsForEntry(FindAttributePairsForEntry
     )
+    case distinctTextValuesForAttribute(DistinctTextValuesForAttribute
+    )
 
 
 
@@ -4658,6 +4842,9 @@ public struct FfiConverterTypeAnyQuery: FfiConverterRustBuffer {
         )
         
         case 20: return .findAttributePairsForEntry(try FfiConverterTypeFindAttributePairsForEntry.read(from: &buf)
+        )
+        
+        case 21: return .distinctTextValuesForAttribute(try FfiConverterTypeDistinctTextValuesForAttribute.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -4767,6 +4954,11 @@ public struct FfiConverterTypeAnyQuery: FfiConverterRustBuffer {
             writeInt(&buf, Int32(20))
             FfiConverterTypeFindAttributePairsForEntry.write(v1, into: &buf)
             
+        
+        case let .distinctTextValuesForAttribute(v1):
+            writeInt(&buf, Int32(21))
+            FfiConverterTypeDistinctTextValuesForAttribute.write(v1, into: &buf)
+            
         }
     }
 }
@@ -4831,6 +5023,8 @@ public enum AnyQueryResponse: Equatable, Hashable {
     case findValuesForEntries([Value]
     )
     case findAttributePairsForEntry([AttributePair]
+    )
+    case distinctTextValuesForAttribute([String]
     )
 
 
@@ -4911,6 +5105,9 @@ public struct FfiConverterTypeAnyQueryResponse: FfiConverterRustBuffer {
         )
         
         case 20: return .findAttributePairsForEntry(try FfiConverterSequenceTypeAttributePair.read(from: &buf)
+        )
+        
+        case 21: return .distinctTextValuesForAttribute(try FfiConverterSequenceString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5020,6 +5217,11 @@ public struct FfiConverterTypeAnyQueryResponse: FfiConverterRustBuffer {
             writeInt(&buf, Int32(20))
             FfiConverterSequenceTypeAttributePair.write(v1, into: &buf)
             
+        
+        case let .distinctTextValuesForAttribute(v1):
+            writeInt(&buf, Int32(21))
+            FfiConverterSequenceString.write(v1, into: &buf)
+            
         }
     }
 }
@@ -5056,6 +5258,8 @@ public enum AttributeChange: Equatable, Hashable {
     case mass(MassChange
     )
     case length(LengthChange
+    )
+    case text(TextChange
     )
 
 
@@ -5096,6 +5300,9 @@ public struct FfiConverterTypeAttributeChange: FfiConverterRustBuffer {
         case 6: return .length(try FfiConverterTypeLengthChange.read(from: &buf)
         )
         
+        case 7: return .text(try FfiConverterTypeTextChange.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5133,6 +5340,11 @@ public struct FfiConverterTypeAttributeChange: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
             FfiConverterTypeLengthChange.write(v1, into: &buf)
             
+        
+        case let .text(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeTextChange.write(v1, into: &buf)
+            
         }
     }
 }
@@ -5165,6 +5377,8 @@ public enum AttributeConfig: Equatable, Hashable {
     case mass(MassConfig
     )
     case length(LengthConfig
+    )
+    case text(TextConfig
     )
 
 
@@ -5199,6 +5413,9 @@ public struct FfiConverterTypeAttributeConfig: FfiConverterRustBuffer {
         case 4: return .length(try FfiConverterTypeLengthConfig.read(from: &buf)
         )
         
+        case 5: return .text(try FfiConverterTypeTextConfig.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5225,6 +5442,11 @@ public struct FfiConverterTypeAttributeConfig: FfiConverterRustBuffer {
         case let .length(v1):
             writeInt(&buf, Int32(4))
             FfiConverterTypeLengthConfig.write(v1, into: &buf)
+            
+        
+        case let .text(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeTextConfig.write(v1, into: &buf)
             
         }
     }
@@ -5259,6 +5481,8 @@ public enum AttributePair: Equatable, Hashable {
     )
     case length(LengthAttributePair
     )
+    case text(TextAttributePair
+    )
 
 
 
@@ -5292,6 +5516,9 @@ public struct FfiConverterTypeAttributePair: FfiConverterRustBuffer {
         case 4: return .length(try FfiConverterTypeLengthAttributePair.read(from: &buf)
         )
         
+        case 5: return .text(try FfiConverterTypeTextAttributePair.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5318,6 +5545,11 @@ public struct FfiConverterTypeAttributePair: FfiConverterRustBuffer {
         case let .length(v1):
             writeInt(&buf, Int32(4))
             FfiConverterTypeLengthAttributePair.write(v1, into: &buf)
+            
+        
+        case let .text(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeTextAttributePair.write(v1, into: &buf)
             
         }
     }
@@ -5352,6 +5584,8 @@ public enum AttributeValue: Equatable, Hashable {
     )
     case length(LengthValue
     )
+    case text(String
+    )
 
 
 
@@ -5385,6 +5619,9 @@ public struct FfiConverterTypeAttributeValue: FfiConverterRustBuffer {
         case 4: return .length(try FfiConverterTypeLengthValue.read(from: &buf)
         )
         
+        case 5: return .text(try FfiConverterString.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5411,6 +5648,11 @@ public struct FfiConverterTypeAttributeValue: FfiConverterRustBuffer {
         case let .length(v1):
             writeInt(&buf, Int32(4))
             FfiConverterTypeLengthValue.write(v1, into: &buf)
+            
+        
+        case let .text(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
             
         }
     }
@@ -6432,6 +6674,79 @@ public func FfiConverterTypeTemporal_lift(_ buf: RustBuffer) throws -> Temporal 
 #endif
 public func FfiConverterTypeTemporal_lower(_ value: Temporal) -> RustBuffer {
     return FfiConverterTypeTemporal.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum TextChange: Equatable, Hashable {
+    
+    case setDefault(String?
+    )
+    case setAutocomplete(Bool
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TextChange: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTextChange: FfiConverterRustBuffer {
+    typealias SwiftType = TextChange
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextChange {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .setDefault(try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 2: return .setAutocomplete(try FfiConverterBool.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TextChange, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .setDefault(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterOptionString.write(v1, into: &buf)
+            
+        
+        case let .setAutocomplete(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterBool.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextChange_lift(_ buf: RustBuffer) throws -> TextChange {
+    return try FfiConverterTypeTextChange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextChange_lower(_ value: TextChange) -> RustBuffer {
+    return FfiConverterTypeTextChange.lower(value)
 }
 
 

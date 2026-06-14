@@ -293,6 +293,7 @@ pub enum AttributeChange {
     Select(SelectChange),
     Mass(MassChange),
     Length(LengthChange),
+    Text(TextChange),
 }
 
 #[derive(Debug, Clone)]
@@ -323,6 +324,16 @@ pub enum LengthChange {
     /// Replace the default unit. Not additive-constrained — stored values
     /// carry their own unit, so changing the default invalidates nothing.
     SetDefaultUnit(LengthUnit),
+}
+
+#[derive(Debug, Clone)]
+pub enum TextChange {
+    /// Set (or clear, with `None`) the default value. A non-`None` default must
+    /// be a valid value (within the length cap).
+    SetDefault(Option<String>),
+    /// Toggle history-based autocomplete. Presentation only — never constrains
+    /// stored values.
+    SetAutocomplete(bool),
 }
 
 /// Update an entry's structural/metadata fields. Deliberately excludes

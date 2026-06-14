@@ -120,6 +120,7 @@ extension AttributePair: Identifiable {
         case .select(let p):  return p.attrId
         case .mass(let p):    return p.attrId
         case .length(let p):  return p.attrId
+        case .text(let p):    return p.attrId
         }
     }
 
@@ -129,6 +130,7 @@ extension AttributePair: Identifiable {
         case .select(let p):  return p.name
         case .mass(let p):    return p.name
         case .length(let p):  return p.name
+        case .text(let p):    return p.name
         }
     }
 }

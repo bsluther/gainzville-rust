@@ -1,11 +1,11 @@
 use crate::{
     error::Result,
     queries::{
-        AllActivities, AllActorIds, AllAttributes, AllEntries, EntriesRootedInTimeInterval,
-        FindActivityById, FindActivityTemplateRoot, FindAncestors, FindAttributeById,
-        FindAttributePairsForEntry, FindAttributesByOwner, FindDescendants, FindEntryById,
-        FindEntryJoinById, FindUserById, FindUserByUsername, FindValueByKey, FindValuesForEntries,
-        FindValuesForEntry, IsEmailRegistered, Query,
+        AllActivities, AllActorIds, AllAttributes, AllEntries, DistinctTextValuesForAttribute,
+        EntriesRootedInTimeInterval, FindActivityById, FindActivityTemplateRoot, FindAncestors,
+        FindAttributeById, FindAttributePairsForEntry, FindAttributesByOwner, FindDescendants,
+        FindEntryById, FindEntryJoinById, FindUserById, FindUserByUsername, FindValueByKey,
+        FindValuesForEntries, FindValuesForEntry, IsEmailRegistered, Query,
     },
 };
 
@@ -41,6 +41,7 @@ pub trait AnyQueryExecutor:
     + QueryExecutor<FindValuesForEntry>
     + QueryExecutor<FindValuesForEntries>
     + QueryExecutor<FindAttributePairsForEntry>
+    + QueryExecutor<DistinctTextValuesForAttribute>
 {
 }
 
@@ -65,5 +66,6 @@ impl<T> AnyQueryExecutor for T where
         + QueryExecutor<FindValuesForEntry>
         + QueryExecutor<FindValuesForEntries>
         + QueryExecutor<FindAttributePairsForEntry>
+        + QueryExecutor<DistinctTextValuesForAttribute>
 {
 }

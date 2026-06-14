@@ -9,7 +9,7 @@ use gv_core::{
         Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
         CreateEntry, CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
         DuplicateEntry, EntryChange, LengthChange, MassChange, MoveEntry, NumericChange,
-        SelectChange, UpdateAttribute, UpdateEntry, UpdateEntryCompletion,
+        SelectChange, TextChange, UpdateAttribute, UpdateEntry, UpdateEntryCompletion,
     },
     models::{
         activity::Activity,
@@ -369,6 +369,14 @@ impl Arbitrary for UpdateAttribute {
                     ];
                     let unit = pick(&all[..], rng).unwrap().clone();
                     AttributeChange::Length(LengthChange::SetDefaultUnit(unit))
+                }
+                AttributeConfig::Text(_) => {
+                    if rng.random_bool(0.5) {
+                        let default = maybe(rng, 0.7, |rng| gen_random_text(rng, 1..6));
+                        AttributeChange::Text(TextChange::SetDefault(default))
+                    } else {
+                        AttributeChange::Text(TextChange::SetAutocomplete(rng.random_bool(0.5)))
+                    }
                 }
             },
         };

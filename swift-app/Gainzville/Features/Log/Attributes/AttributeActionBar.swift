@@ -124,6 +124,12 @@ extension Array where Element == AttributeBarAction {
         ]
     }
 
+    // Text clears via backspace (no keyboard-less picker), so like numeric it
+    // takes no `clear` — just Remove.
+    static func text(remove: @escaping () -> Void) -> Self {
+        [.remove(remove)]
+    }
+
     // `range` is supplied only when the attribute is `ordered` — unordered
     // selects have no range values (core rejects them).
     static func select(

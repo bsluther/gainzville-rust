@@ -5,19 +5,19 @@ use gv_core::{
         Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
         CreateEntry, CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
         DeleteEntryRecursive, DuplicateEntry, EntryChange, LengthChange, MassChange, MoveEntry,
-        NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntry,
-        UpdateEntryCompletion, ValueField,
+        NumericChange, SelectChange, TextChange, UpdateAttribute, UpdateAttributeValue,
+        UpdateEntry, UpdateEntryCompletion, ValueField,
     },
     models::{
         activity::{Activity, ActivityName},
         attribute::{
             Attribute, AttributeConfig, AttributeValue, LengthConfig, LengthMeasurement,
             LengthUnit, LengthValue, MassConfig, MassMeasurement, MassUnit, MassValue,
-            NumericConfig, NumericValue, SelectConfig, SelectValue, Value,
+            NumericConfig, NumericValue, SelectConfig, SelectValue, TextConfig, Value,
         },
         attribute_pair::{
             AttributePair, LengthAttributePair, MassAttributePair, NumericAttributePair,
-            SelectAttributePair,
+            SelectAttributePair, TextAttributePair,
         },
         entry::{Entry, Position, Temporal},
         entry_join::EntryJoin,
@@ -25,10 +25,11 @@ use gv_core::{
     },
     queries::{
         AllActivities, AllActorIds, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse,
-        EntriesRootedInTimeInterval, FindActivityById, FindActivityTemplateRoot, FindAncestors,
-        FindAttributeById, FindAttributePairsForEntry, FindAttributesByOwner, FindDescendants,
-        FindEntryById, FindEntryJoinById, FindUserById, FindUserByUsername, FindValueByKey,
-        FindValuesForEntries, FindValuesForEntry, IsEmailRegistered,
+        DistinctTextValuesForAttribute, EntriesRootedInTimeInterval, FindActivityById,
+        FindActivityTemplateRoot, FindAncestors, FindAttributeById, FindAttributePairsForEntry,
+        FindAttributesByOwner, FindDescendants, FindEntryById, FindEntryJoinById, FindUserById,
+        FindUserByUsername, FindValueByKey, FindValuesForEntries, FindValuesForEntry,
+        IsEmailRegistered,
     },
     validation::{Email, Username},
 };
@@ -213,12 +214,19 @@ pub struct LengthConfig {
     pub default_unit: LengthUnit,
 }
 
+#[uniffi::remote(Record)]
+pub struct TextConfig {
+    pub default: Option<String>,
+    pub autocomplete: bool,
+}
+
 #[uniffi::remote(Enum)]
 pub enum AttributeConfig {
     Numeric(NumericConfig),
     Select(SelectConfig),
     Mass(MassConfig),
     Length(LengthConfig),
+    Text(TextConfig),
 }
 
 #[uniffi::remote(Record)]
@@ -295,6 +303,7 @@ pub enum AttributeValue {
     Select(SelectValue),
     Mass(MassValue),
     Length(LengthValue),
+    Text(String),
 }
 
 #[uniffi::remote(Record)]
@@ -357,12 +366,25 @@ pub struct LengthAttributePair {
     pub actual: Option<LengthValue>,
 }
 
+#[uniffi::remote(Record)]
+pub struct TextAttributePair {
+    pub attr_id: Uuid,
+    pub entry_id: Uuid,
+    pub owner_id: Uuid,
+    pub name: String,
+    pub config: TextConfig,
+    pub index_string: Option<String>,
+    pub plan: Option<String>,
+    pub actual: Option<String>,
+}
+
 #[uniffi::remote(Enum)]
 pub enum AttributePair {
     Numeric(NumericAttributePair),
     Select(SelectAttributePair),
     Mass(MassAttributePair),
     Length(LengthAttributePair),
+    Text(TextAttributePair),
 }
 
 // --- EntryJoin ---
@@ -471,6 +493,11 @@ pub struct FindAttributePairsForEntry {
     pub entry_id: Uuid,
 }
 
+#[uniffi::remote(Record)]
+pub struct DistinctTextValuesForAttribute {
+    pub attribute_id: Uuid,
+}
+
 #[uniffi::remote(Enum)]
 pub enum AnyQuery {
     // Auth
@@ -498,6 +525,7 @@ pub enum AnyQuery {
     FindValuesForEntry(FindValuesForEntry),
     FindValuesForEntries(FindValuesForEntries),
     FindAttributePairsForEntry(FindAttributePairsForEntry),
+    DistinctTextValuesForAttribute(DistinctTextValuesForAttribute),
 }
 
 #[uniffi::remote(Enum)]
@@ -527,6 +555,7 @@ pub enum AnyQueryResponse {
     FindValuesForEntry(Vec<Value>),
     FindValuesForEntries(Vec<Value>),
     FindAttributePairsForEntry(Vec<AttributePair>),
+    DistinctTextValuesForAttribute(Vec<String>),
 }
 
 // --- Actions ---
@@ -641,6 +670,12 @@ pub enum LengthChange {
 }
 
 #[uniffi::remote(Enum)]
+pub enum TextChange {
+    SetDefault(Option<String>),
+    SetAutocomplete(bool),
+}
+
+#[uniffi::remote(Enum)]
 pub enum AttributeChange {
     SetName(String),
     SetDescription(Option<String>),
@@ -648,6 +683,7 @@ pub enum AttributeChange {
     Select(SelectChange),
     Mass(MassChange),
     Length(LengthChange),
+    Text(TextChange),
 }
 
 #[uniffi::remote(Record)]

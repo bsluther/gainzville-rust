@@ -43,6 +43,7 @@ private extension AttributeConfig {
         case .select:   return "Select"
         case .mass:     return "Mass"
         case .length:   return "Length"
+        case .text:     return "Text"
         }
     }
 }

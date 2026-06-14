@@ -452,6 +452,25 @@ impl QueryExecutor<FindAttributePairsForEntry> for PostgresQueryExecutor<'_> {
     }
 }
 
+impl QueryExecutor<DistinctTextValuesForAttribute> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: DistinctTextValuesForAttribute,
+    ) -> Result<<DistinctTextValuesForAttribute as Query>::Response> {
+        let values = sqlx::query_as::<_, crate::rows::ValueRow>(
+            "SELECT entry_id, attribute_id, plan, actual, index_float, index_string FROM attribute_values WHERE attribute_id = $1",
+        )
+        .bind(crate::columns::UuidColumn(query.attribute_id))
+        .fetch_all(&mut *self.conn)
+        .await
+        .db_err()?
+        .into_iter()
+        .map(|row| row.to_value())
+        .collect::<Result<Vec<_>>>()?;
+        Ok(distinct_text_values(&values))
+    }
+}
+
 struct AncestorRow {
     id: Uuid,
     parent_id: Option<Uuid>,

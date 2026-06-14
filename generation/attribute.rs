@@ -2,7 +2,7 @@ use gv_core::models::{
     attribute::{
         Attribute, AttributeConfig, AttributeValue, LengthConfig, LengthMeasurement, LengthUnit,
         LengthValue, MassConfig, MassMeasurement, MassUnit, MassValue, NumericConfig, NumericValue,
-        SelectConfig, SelectValue, Value,
+        SelectConfig, SelectValue, TextConfig, Value,
     },
     entry::Entry,
 };
@@ -33,11 +33,12 @@ impl Arbitrary for Attribute {
 
 impl Arbitrary for AttributeConfig {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
-        match rng.random_range(0..=3) {
+        match rng.random_range(0..=4) {
             0 => AttributeConfig::Numeric(NumericConfig::arbitrary(rng, context)),
             1 => AttributeConfig::Select(SelectConfig::arbitrary(rng, context)),
             2 => AttributeConfig::Mass(MassConfig::arbitrary(rng, context)),
-            _ => AttributeConfig::Length(LengthConfig::arbitrary(rng, context)),
+            3 => AttributeConfig::Length(LengthConfig::arbitrary(rng, context)),
+            _ => AttributeConfig::Text(TextConfig::arbitrary(rng, context)),
         }
     }
 }
@@ -126,6 +127,15 @@ impl Arbitrary for LengthConfig {
     }
 }
 
+impl Arbitrary for TextConfig {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+        TextConfig {
+            default: maybe(rng, 0.5, |rng| gen_random_text(rng, 1..6)),
+            autocomplete: rng.random_bool(0.5),
+        }
+    }
+}
+
 impl Arbitrary for Value {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
         let model = context.model();
@@ -202,6 +212,9 @@ impl ArbitraryFrom<&AttributeConfig> for AttributeValue {
             AttributeConfig::Length(c) => {
                 AttributeValue::Length(LengthValue::arbitrary_from(rng, context, c))
             }
+            // Text has no `*Value` type or config constraint on the value, so
+            // generate a bare string directly (well under the length cap).
+            AttributeConfig::Text(_) => AttributeValue::Text(gen_random_text(rng, 1..8)),
         }
     }
 }

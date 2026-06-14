@@ -14,7 +14,7 @@ use gv_core::{
         attribute::{
             Attribute, AttributeConfig, AttributeValue, LengthConfig, LengthMeasurement,
             LengthUnit, LengthValue, MassConfig, MassMeasurement, MassUnit, MassValue,
-            NumericConfig, NumericValue, Value,
+            NumericConfig, NumericValue, TextConfig, Value,
         },
         entry::{Entry, Position, Temporal},
     },
@@ -219,6 +219,23 @@ fn attribute_round_trips_length() {
 }
 
 #[test]
+fn attribute_round_trips_text() {
+    let attr = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: "Notes".to_string(),
+        description: None,
+        config: AttributeConfig::Text(TextConfig {
+            default: None,
+            autocomplete: true,
+        }),
+    };
+    let row = AttributeRow::from_attribute(&attr).unwrap();
+    let got = row.to_attribute().unwrap();
+    assert_eq!(got, attr);
+}
+
+#[test]
 fn value_round_trips_with_plan_and_actual() {
     let value = Value {
         entry_id: Uuid::new_v4(),
@@ -269,6 +286,21 @@ fn value_round_trips_length() {
             min: 100.0,
             max: 200.0,
         })),
+    };
+    let row = ValueRow::from_value(&value).unwrap();
+    let got = row.to_value().unwrap();
+    assert_eq!(got, value);
+}
+
+#[test]
+fn value_round_trips_text() {
+    let value = Value {
+        entry_id: Uuid::new_v4(),
+        attribute_id: Uuid::new_v4(),
+        index_float: None,
+        index_string: None,
+        plan: None,
+        actual: Some(AttributeValue::Text("Felt strong today".to_string())),
     };
     let row = ValueRow::from_value(&value).unwrap();
     let got = row.to_value().unwrap();

@@ -7,8 +7,8 @@ use crate::{
         Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
         CreateEntry, CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
         DeleteEntryRecursive, DuplicateEntry, EntryChange, LengthChange, MassChange, MoveEntry,
-        NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntry,
-        UpdateEntryCompletion, ValueField,
+        NumericChange, SelectChange, TextChange, UpdateAttribute, UpdateAttributeValue,
+        UpdateEntry, UpdateEntryCompletion, ValueField,
     },
     delta::{AnyDelta, Delta},
     error::{DomainError, RejectReason, Result},
@@ -1352,6 +1352,23 @@ pub async fn update_attribute(
             match change {
                 LengthChange::SetDefaultUnit(unit) => {
                     cfg.default_unit = unit.clone();
+                }
+            }
+        }
+        AttributeChange::Text(change) => {
+            let AttributeConfig::Text(cfg) = &mut new.config else {
+                return Err(DomainError::Rejected(RejectReason::AttributeMismatch));
+            };
+            match change {
+                TextChange::SetDefault(default) => {
+                    // Same rule as a value write: the length cap.
+                    if let Some(s) = default {
+                        cfg.validate_value(s)?;
+                    }
+                    cfg.default = default.clone();
+                }
+                TextChange::SetAutocomplete(on) => {
+                    cfg.autocomplete = *on;
                 }
             }
         }
