@@ -67,6 +67,7 @@ struct ActivityDetailView: View {
                 }
             }
             .padding(GvSpacing.xl)
+            .gvReadableWidth(alignment: .topLeading)
         }
         .background(Color.gvBackground)
         .navigationTitle(activity.name)

@@ -7,6 +7,11 @@ enum GvSpacing {
     static let xl: CGFloat = 24
     static let xxl: CGFloat = 48
 
+    // MARK: - Layout tokens
+    // Caps the content column on wide (macOS) windows so entries and templates
+    // read as a column instead of stretching across the full window width.
+    static let contentWidthMax: CGFloat = 720
+
     // MARK: - Entry tokens
     static let entrySpacing: CGFloat              = lg  // inner padding & VStack gap
     static let entryScalarBorderWidth: CGFloat    =  1

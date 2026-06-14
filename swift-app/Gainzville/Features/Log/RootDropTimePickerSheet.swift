@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 /// A pending drop onto the day's root, awaiting the user's choice of start time.
 struct PendingRootDrop: Identifiable {
@@ -78,7 +81,11 @@ struct RootDropTimePickerSheet: View {
             Text(titleText)
                 .font(.gvBody)
                 .foregroundStyle(Color.gvTextPrimary)
-            CalendarPickerMacOS(selection: $selected, components: .hourAndMinute)
+            // fixedSize so the field hugs its intrinsic width and centers in the
+            // sheet, rather than stretching wide and stranding the steppers far
+            // from the digits.
+            TimeStepperFieldMacOS(selection: $selected)
+                .fixedSize()
                 .padding(GvSpacing.md)
             HStack {
                 Button("Cancel", action: onCancel)
@@ -90,6 +97,40 @@ struct RootDropTimePickerSheet: View {
         }
         .padding(GvSpacing.lg)
         .frame(minWidth: 320)
+        .tint(.gvBlue500)
         #endif
     }
 }
+
+#if os(macOS)
+/// macOS time entry as an editable text field with up/down steppers
+/// (NSDatePicker's `.textFieldAndStepper`) — the standard macOS idiom for
+/// choosing a time, and less fiddly than dragging the analog clock hand.
+/// Hour+minute only (no seconds), matching the iOS `.hourAndMinute` wheel.
+private struct TimeStepperFieldMacOS: NSViewRepresentable {
+    @Binding var selection: Date
+
+    func makeNSView(context: Context) -> NSDatePicker {
+        let picker = NSDatePicker()
+        picker.datePickerStyle = .textFieldAndStepper
+        picker.datePickerElements = .hourMinute
+        picker.setContentHuggingPriority(.required, for: .horizontal)
+        picker.dateValue = selection
+        picker.target = context.coordinator
+        picker.action = #selector(Coordinator.dateChanged(_:))
+        return picker
+    }
+
+    func updateNSView(_ picker: NSDatePicker, context: Context) {
+        if picker.dateValue != selection { picker.dateValue = selection }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject {
+        var parent: TimeStepperFieldMacOS
+        init(_ parent: TimeStepperFieldMacOS) { self.parent = parent }
+        @objc func dateChanged(_ sender: NSDatePicker) { parent.selection = sender.dateValue }
+    }
+}
+#endif

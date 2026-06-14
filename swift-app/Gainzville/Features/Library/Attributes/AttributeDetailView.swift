@@ -78,6 +78,7 @@ struct AttributeDetailView: View {
                 }
             }
             .padding(GvSpacing.xl)
+            .gvReadableWidth(alignment: .topLeading)
         }
         .background(Color.gvBackground)
         .navigationTitle(live.name)

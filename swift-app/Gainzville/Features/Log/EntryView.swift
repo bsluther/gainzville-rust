@@ -447,16 +447,20 @@ private struct EntryFooter: View {
             HStack {
                 Spacer()
                 Button { isCreatePresented = true } label: {
-                    Label("Entry", systemImage: "plus")
-                        .font(.attrLabel)
+                    Image(systemName: "plus")
+                        .font(.attrField)
                         .fontWeight(.semibold)
-                        .foregroundStyle(Color.gvTextSecondary)
-                        .padding(.horizontal, GvSpacing.md)
-                        .padding(.vertical, GvSpacing.md)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 2)
-                                .stroke(Color.gvNeutral600, lineWidth: 1.5)
+                        .foregroundStyle(Color.gvNeutral350)
+                        .padding(GvSpacing.md)
+                        .background(
+                            RoundedRectangle(cornerRadius: GvSpacing.entryScalarCornerRadius)
+                                .fill(Color.entryScalarBackground)
                         )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: GvSpacing.entryScalarCornerRadius)
+                                .stroke(Color.entryScalarBorder, lineWidth: GvSpacing.entryScalarBorderWidth)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: GvSpacing.entryScalarCornerRadius))
                 }
                 .buttonStyle(.plain)
             }
@@ -547,7 +551,6 @@ private struct EntryMenuContent: View {
                     GvMenuDivider()
 
                     // Group 2 — attributes
-                    GvMenuRow("Add attribute", icon: "tag")
                     NavigationLink {
                         EditAttributesView(entry: attributeTarget, entryName: entryName, hasActivity: attributeTarget.activityId != nil, isPresented: $isPresented)
                     } label: {

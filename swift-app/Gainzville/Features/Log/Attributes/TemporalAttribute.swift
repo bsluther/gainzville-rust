@@ -629,6 +629,10 @@ private struct DatePickerMacOS: View {
             AttributeSheetBar(title: components == .date ? "Date" : "Time", actions: actions, onDismiss: { dismiss() })
             CalendarPickerMacOS(selection: $date, components: components)
                 .padding(GvSpacing.md)
+                // Extra top padding so the calendar isn't crammed against the
+                // sheet bar's divider — gives it the same breathing room the
+                // actions have above the divider.
+                .padding(.top, GvSpacing.md)
         }
     }
 }

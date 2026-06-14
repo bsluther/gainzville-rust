@@ -37,12 +37,7 @@ struct LogView: View {
                     }
                     .padding(.horizontal, GvSpacing.lg)
                     .padding(.vertical, GvSpacing.xl)
-                    #if os(macOS)
-                    .frame(maxWidth: 720)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    #else
-                    .frame(maxWidth: .infinity)
-                    #endif
+                    .gvReadableWidth()
                 }
                 // Blue background scoped to the scroll area (below the nav bar).
                 // Color.gvBackground on the outer view — a bare Color — extends
