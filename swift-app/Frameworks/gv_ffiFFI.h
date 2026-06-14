@@ -389,6 +389,11 @@ uint64_t uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_forest(uint64_t ptr, R
 uint64_t uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_query(uint64_t ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FUNC_LENGTH_VALUE_CONVERTED_TO
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FUNC_LENGTH_VALUE_CONVERTED_TO
+RustBuffer uniffi_gv_ffi_fn_func_length_value_converted_to(RustBuffer value, RustBuffer unit, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FUNC_MASS_VALUE_CONVERTED_TO
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FUNC_MASS_VALUE_CONVERTED_TO
 RustBuffer uniffi_gv_ffi_fn_func_mass_value_converted_to(RustBuffer value, RustBuffer unit, RustCallStatus *_Nonnull out_status
@@ -652,6 +657,12 @@ void ffi_gv_ffi_rust_future_free_void(uint64_t handle
 #ifndef UNIFFI_FFIDEF_FFI_GV_FFI_RUST_FUTURE_COMPLETE_VOID
 #define UNIFFI_FFIDEF_FFI_GV_FFI_RUST_FUTURE_COMPLETE_VOID
 void ffi_gv_ffi_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_FUNC_LENGTH_VALUE_CONVERTED_TO
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_FUNC_LENGTH_VALUE_CONVERTED_TO
+uint16_t uniffi_gv_ffi_checksum_func_length_value_converted_to(void
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_FUNC_MASS_VALUE_CONVERTED_TO

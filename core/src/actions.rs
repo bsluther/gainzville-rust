@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::models::{
     activity::Activity,
-    attribute::{Attribute, AttributeValue, MassUnit, Value},
+    attribute::{Attribute, AttributeValue, LengthUnit, MassUnit, Value},
     entry::{Entry, Position, Temporal},
     user::User,
 };
@@ -292,6 +292,7 @@ pub enum AttributeChange {
     Numeric(NumericChange),
     Select(SelectChange),
     Mass(MassChange),
+    Length(LengthChange),
 }
 
 #[derive(Debug, Clone)]
@@ -315,6 +316,13 @@ pub enum MassChange {
     /// Replace the default unit. Not additive-constrained — stored values
     /// carry their own unit, so changing the default invalidates nothing.
     SetDefaultUnit(MassUnit),
+}
+
+#[derive(Debug, Clone)]
+pub enum LengthChange {
+    /// Replace the default unit. Not additive-constrained — stored values
+    /// carry their own unit, so changing the default invalidates nothing.
+    SetDefaultUnit(LengthUnit),
 }
 
 /// Update an entry's structural/metadata fields. Deliberately excludes

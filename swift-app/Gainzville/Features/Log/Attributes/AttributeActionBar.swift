@@ -96,7 +96,7 @@ extension AttributeBarAction: Equatable {
     }
 }
 
-// The per-kind matrix. Each signature is the policy: numeric/mass clear via
+// The per-kind matrix. Each signature is the policy: numeric/measure clear via
 // backspace so they take no `clear`; picker kinds (select/temporal) have no
 // keyboard, so they get an explicit Clear — supplied only when there's
 // something to clear; temporal is intrinsic to the entry so it takes no
@@ -109,7 +109,10 @@ extension Array where Element == AttributeBarAction {
         [.range(active: range.active, toggle: range.toggle), .remove(remove)]
     }
 
-    static func mass(
+    // Shared by all measure types (mass, length): a Units menu, a Range toggle,
+    // and Remove. The unit options are unit-type-agnostic (`UnitOption`), so one
+    // factory serves every measure.
+    static func measure(
         units: [UnitOption],
         range: (active: Bool, toggle: () -> Void),
         remove: @escaping () -> Void

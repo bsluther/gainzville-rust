@@ -6,9 +6,9 @@ use crate::{
     actions::{
         Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
         CreateEntry, CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
-        DeleteEntryRecursive, DuplicateEntry, EntryChange, MassChange, MoveEntry, NumericChange,
-        SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntry, UpdateEntryCompletion,
-        ValueField,
+        DeleteEntryRecursive, DuplicateEntry, EntryChange, LengthChange, MassChange, MoveEntry,
+        NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntry,
+        UpdateEntryCompletion, ValueField,
     },
     delta::{AnyDelta, Delta},
     error::{DomainError, RejectReason, Result},
@@ -1345,6 +1345,16 @@ pub async fn update_attribute(
                 }
             }
         }
+        AttributeChange::Length(change) => {
+            let AttributeConfig::Length(cfg) = &mut new.config else {
+                return Err(DomainError::Rejected(RejectReason::AttributeMismatch));
+            };
+            match change {
+                LengthChange::SetDefaultUnit(unit) => {
+                    cfg.default_unit = unit.clone();
+                }
+            }
+        }
     }
 
     // No-op if the change left the attribute unchanged.
@@ -1468,8 +1478,7 @@ pub async fn update_entry(
                 // when no name is already set.
                 let mut update = entry.update().display_as_sets(false);
                 if entry.name.is_none() {
-                    if let Some(member_name) =
-                        first_member_display_name(executor, entry.id).await?
+                    if let Some(member_name) = first_member_display_name(executor, entry.id).await?
                     {
                         update = update.name(Some(format!("{member_name} Sets")));
                     }

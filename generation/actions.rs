@@ -8,12 +8,12 @@ use gv_core::{
     actions::{
         Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
         CreateEntry, CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
-        DuplicateEntry, EntryChange, MassChange, MoveEntry, NumericChange, SelectChange,
-        UpdateAttribute, UpdateEntry, UpdateEntryCompletion,
+        DuplicateEntry, EntryChange, LengthChange, MassChange, MoveEntry, NumericChange,
+        SelectChange, UpdateAttribute, UpdateEntry, UpdateEntryCompletion,
     },
     models::{
         activity::Activity,
-        attribute::{Attribute, AttributeConfig, MassUnit, Value},
+        attribute::{Attribute, AttributeConfig, LengthUnit, MassUnit, Value},
         entry::{Entry, Position, Temporal},
         user::User,
     },
@@ -355,6 +355,20 @@ impl Arbitrary for UpdateAttribute {
                     let all = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
                     let unit = pick(&all[..], rng).unwrap().clone();
                     AttributeChange::Mass(MassChange::SetDefaultUnit(unit))
+                }
+                AttributeConfig::Length(_) => {
+                    let all = [
+                        LengthUnit::Millimeter,
+                        LengthUnit::Centimeter,
+                        LengthUnit::Meter,
+                        LengthUnit::Kilometer,
+                        LengthUnit::Inch,
+                        LengthUnit::Foot,
+                        LengthUnit::Yard,
+                        LengthUnit::Mile,
+                    ];
+                    let unit = pick(&all[..], rng).unwrap().clone();
+                    AttributeChange::Length(LengthChange::SetDefaultUnit(unit))
                 }
             },
         };

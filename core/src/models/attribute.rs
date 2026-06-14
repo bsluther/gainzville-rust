@@ -56,10 +56,17 @@ impl Attribute {
         }
     }
 
+    pub fn expect_length(&self) -> Result<&LengthConfig> {
+        match &self.config {
+            AttributeConfig::Length(c) => Ok(c),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
+        }
+    }
+
     /// The scalar config default mapped to an `AttributeValue`, if this type has
-    /// one. Numeric and Select carry a scalar default; Mass has only
-    /// `default_unit` and returns `None` here (use `seed_value` to build a Mass
-    /// seed from its unit).
+    /// one. Numeric and Select carry a scalar default; Mass and Length have
+    /// only `default_unit` and return `None` here (use `seed_value` to build a
+    /// measurement seed from the unit).
     pub fn default_value(&self) -> Option<AttributeValue> {
         match &self.config {
             AttributeConfig::Numeric(c) => c
@@ -70,6 +77,7 @@ impl Attribute {
                 .clone()
                 .map(|s| AttributeValue::Select(SelectValue::Exact(s))),
             AttributeConfig::Mass(_) => None,
+            AttributeConfig::Length(_) => None,
         }
     }
 
@@ -84,6 +92,7 @@ impl Attribute {
             (AttributeConfig::Numeric(c), AttributeValue::Numeric(v)) => c.validate_value(v),
             (AttributeConfig::Select(c), AttributeValue::Select(v)) => c.validate_value(v),
             (AttributeConfig::Mass(c), AttributeValue::Mass(v)) => c.validate_value(v),
+            (AttributeConfig::Length(c), AttributeValue::Length(v)) => c.validate_value(v),
             _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
@@ -100,6 +109,12 @@ impl Attribute {
                     value: 0.0,
                 })))
             }
+            AttributeConfig::Length(c) => Some(AttributeValue::Length(LengthValue::Exact(
+                LengthMeasurement {
+                    unit: c.default_unit.clone(),
+                    value: 0.0,
+                },
+            ))),
             _ => self.default_value(),
         };
         Value {
@@ -120,6 +135,7 @@ pub enum AttributeConfig {
     Numeric(NumericConfig),
     Select(SelectConfig),
     Mass(MassConfig),
+    Length(LengthConfig),
 }
 
 impl From<NumericConfig> for AttributeConfig {
@@ -137,6 +153,11 @@ impl From<MassConfig> for AttributeConfig {
         AttributeConfig::Mass(value)
     }
 }
+impl From<LengthConfig> for AttributeConfig {
+    fn from(value: LengthConfig) -> Self {
+        AttributeConfig::Length(value)
+    }
+}
 
 impl AttributeConfig {
     /// Validate the config itself (applied at `CreateAttribute`): bounds and
@@ -147,9 +168,10 @@ impl AttributeConfig {
         match self {
             AttributeConfig::Numeric(c) => c.validate(),
             AttributeConfig::Select(c) => c.validate(),
-            // Mass has no cross-field coherence to check: any single
-            // `default_unit` is valid.
+            // Mass and Length have no cross-field coherence to check: any
+            // single `default_unit` is valid.
             AttributeConfig::Mass(_) => Ok(()),
+            AttributeConfig::Length(_) => Ok(()),
         }
     }
 
@@ -158,6 +180,7 @@ impl AttributeConfig {
             AttributeConfig::Numeric(_) => "Numeric",
             AttributeConfig::Select(_) => "Select",
             AttributeConfig::Mass(_) => "Mass",
+            AttributeConfig::Length(_) => "Length",
         }
     }
 }
@@ -439,6 +462,89 @@ impl MassUnit {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LengthConfig {
+    /// Unit used for the attach-time seed value and for presenting an empty
+    /// (cleared) value. A stored value carries its own unit and may differ.
+    pub default_unit: LengthUnit,
+}
+
+impl LengthConfig {
+    /// Validate a length value against this config: magnitudes must be finite
+    /// with at most 2 decimal places, and range endpoints ordered (min <= max)
+    /// — both endpoints share one unit, so no conversion is involved. The unit
+    /// itself is unconstrained; `default_unit` only picks the presentation
+    /// default. Mirrors `MassConfig::validate_value`.
+    pub fn validate_value(&self, value: &LengthValue) -> Result<()> {
+        let check = |label: &str, v: f64| -> Result<()> {
+            if !v.is_finite() {
+                return Err(ValidationError::InvalidValue(format!(
+                    "{label} magnitude ({v}) must be finite"
+                ))
+                .into());
+            }
+            if !at_most_two_decimals(v) {
+                return Err(ValidationError::InvalidValue(format!(
+                    "{label} magnitude ({v}) must have at most 2 decimal places"
+                ))
+                .into());
+            }
+            Ok(())
+        };
+        match value {
+            LengthValue::Exact(m) => check("length value", m.value),
+            LengthValue::Range { unit: _, min, max } => {
+                check("length range min", *min)?;
+                check("length range max", *max)?;
+                if min > max {
+                    return Err(ValidationError::InvalidValue(format!(
+                        "range min ({min}) is above range max ({max})"
+                    ))
+                    .into());
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum LengthUnit {
+    Millimeter,
+    Centimeter,
+    Meter,
+    Kilometer,
+    Inch,
+    Foot,
+    Yard,
+    Mile,
+}
+
+impl LengthUnit {
+    /// Conversion factor to the SI base unit: meters per 1 of this unit. The
+    /// imperial factors are exact by definition (1 inch = 0.0254 m exactly, so
+    /// foot/yard/mile follow as 0.3048 / 0.9144 / 1609.344).
+    pub fn meters_per_unit(&self) -> f64 {
+        match self {
+            LengthUnit::Millimeter => 0.001,
+            LengthUnit::Centimeter => 0.01,
+            LengthUnit::Meter => 1.0,
+            LengthUnit::Kilometer => 1000.0,
+            LengthUnit::Inch => 0.0254,
+            LengthUnit::Foot => 0.3048,
+            LengthUnit::Yard => 0.9144,
+            LengthUnit::Mile => 1609.344,
+        }
+    }
+
+    /// Convert a magnitude from `self` to `to` at full precision, routing
+    /// through the base unit (`self` → m → `to`) so each new unit adds one
+    /// factor rather than a row of pairwise conversions.
+    pub fn convert(&self, value: f64, to: &LengthUnit) -> f64 {
+        value * self.meters_per_unit() / to.meters_per_unit()
+    }
+}
+
 ///// Values /////
 
 #[derive(Debug, Clone, PartialEq)]
@@ -470,6 +576,7 @@ pub enum AttributeValue {
     Numeric(NumericValue),
     Select(SelectValue),
     Mass(MassValue),
+    Length(LengthValue),
 }
 
 impl AttributeValue {
@@ -490,6 +597,13 @@ impl AttributeValue {
     pub fn expect_mass(self) -> Result<MassValue> {
         match self {
             AttributeValue::Mass(v) => Ok(v),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
+        }
+    }
+
+    pub fn expect_length(self) -> Result<LengthValue> {
+        match self {
+            AttributeValue::Length(v) => Ok(v),
             _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
@@ -514,7 +628,11 @@ pub enum SelectValue {
 pub enum MassValue {
     Exact(MassMeasurement),
     /// Both endpoints share one unit, so ordering needs no conversion.
-    Range { unit: MassUnit, min: f64, max: f64 },
+    Range {
+        unit: MassUnit,
+        min: f64,
+        max: f64,
+    },
 }
 
 impl MassValue {
@@ -539,7 +657,11 @@ impl MassValue {
                 unit,
             }),
             // Positive factors and monotone rounding preserve min <= max.
-            MassValue::Range { unit: from, min, max } => MassValue::Range {
+            MassValue::Range {
+                unit: from,
+                min,
+                max,
+            } => MassValue::Range {
                 min: round_to_two_decimals(from.convert(*min, &unit)),
                 max: round_to_two_decimals(from.convert(*max, &unit)),
                 unit,
@@ -551,6 +673,62 @@ impl MassValue {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MassMeasurement {
     pub unit: MassUnit,
+    pub value: f64,
+}
+
+/// One measurement in one unit, mirroring `MassValue`. Composite formats
+/// (e.g. "5 ft 4 in") are a presentation concern — see
+/// docs/attributes-design.md "Single measurement per value".
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum LengthValue {
+    Exact(LengthMeasurement),
+    /// Both endpoints share one unit, so ordering needs no conversion.
+    Range {
+        unit: LengthUnit,
+        min: f64,
+        max: f64,
+    },
+}
+
+impl LengthValue {
+    pub fn unit(&self) -> &LengthUnit {
+        match self {
+            LengthValue::Exact(m) => &m.unit,
+            LengthValue::Range { unit, .. } => unit,
+        }
+    }
+
+    /// A copy of this value re-expressed in `unit`. Magnitudes are rounded to
+    /// the 2-decimal cap so the result is writable as-is — `validate_value`
+    /// would reject a full-precision conversion. Same-unit conversion returns
+    /// the value unchanged, so repeated re-selection never drifts. Mirrors
+    /// `MassValue::converted_to`.
+    pub fn converted_to(&self, unit: LengthUnit) -> LengthValue {
+        if *self.unit() == unit {
+            return self.clone();
+        }
+        match self {
+            LengthValue::Exact(m) => LengthValue::Exact(LengthMeasurement {
+                value: round_to_two_decimals(m.unit.convert(m.value, &unit)),
+                unit,
+            }),
+            // Positive factors and monotone rounding preserve min <= max.
+            LengthValue::Range {
+                unit: from,
+                min,
+                max,
+            } => LengthValue::Range {
+                min: round_to_two_decimals(from.convert(*min, &unit)),
+                max: round_to_two_decimals(from.convert(*max, &unit)),
+                unit,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LengthMeasurement {
+    pub unit: LengthUnit,
     pub value: f64,
 }
 
@@ -600,12 +778,19 @@ mod tests {
             default: None,
         };
         assert!(cfg.validate_value(&NumericValue::Exact(5.0)).is_ok());
-        assert!(cfg
-            .validate_value(&NumericValue::Range { min: 1.0, max: 9.0 })
-            .is_ok());
-        assert!(rejected_validation(&cfg.validate_value(&NumericValue::Exact(2.5)))); // non-integer
-        assert!(rejected_validation(&cfg.validate_value(&NumericValue::Exact(-1.0)))); // below min
-        assert!(rejected_validation(&cfg.validate_value(&NumericValue::Exact(11.0)))); // above max
+        assert!(
+            cfg.validate_value(&NumericValue::Range { min: 1.0, max: 9.0 })
+                .is_ok()
+        );
+        assert!(rejected_validation(
+            &cfg.validate_value(&NumericValue::Exact(2.5))
+        )); // non-integer
+        assert!(rejected_validation(
+            &cfg.validate_value(&NumericValue::Exact(-1.0))
+        )); // below min
+        assert!(rejected_validation(
+            &cfg.validate_value(&NumericValue::Exact(11.0))
+        )); // above max
         assert!(rejected_validation(
             &cfg.validate_value(&NumericValue::Exact(f64::NAN))
         ));
@@ -632,14 +817,18 @@ mod tests {
         assert!(rejected_validation(
             &cfg.validate_value(&NumericValue::Exact(4.523))
         ));
-        assert!(rejected_validation(&cfg.validate_value(&NumericValue::Range {
-            min: 1.001,
-            max: 9.0
-        })));
-        assert!(rejected_validation(&cfg.validate_value(&NumericValue::Range {
-            min: 1.0,
-            max: 8.999
-        })));
+        assert!(rejected_validation(&cfg.validate_value(
+            &NumericValue::Range {
+                min: 1.001,
+                max: 9.0
+            }
+        )));
+        assert!(rejected_validation(&cfg.validate_value(
+            &NumericValue::Range {
+                min: 1.0,
+                max: 8.999
+            }
+        )));
     }
 
     #[test]
@@ -653,9 +842,11 @@ mod tests {
             min: "low".to_string(),
             max: "high".to_string(),
         };
-        assert!(opts(false)
-            .validate_value(&SelectValue::Exact("mid".to_string()))
-            .is_ok());
+        assert!(
+            opts(false)
+                .validate_value(&SelectValue::Exact("mid".to_string()))
+                .is_ok()
+        );
         assert!(opts(true).validate_value(&in_range).is_ok());
         assert!(rejected_validation(
             &opts(false).validate_value(&SelectValue::Exact("nope".to_string()))
@@ -693,7 +884,6 @@ mod tests {
         assert!(select(&["a", "b"], Some("c")).validate().is_err());
         assert!(select(&[], None).validate().is_ok());
         assert!(select(&["a", "b"], Some("b")).validate().is_ok());
-
     }
 
     #[test]
@@ -703,36 +893,43 @@ mod tests {
         };
         let m = |unit, value| MassMeasurement { unit, value };
         // The value's unit is free to differ from the config default.
-        assert!(cfg
-            .validate_value(&MassValue::Exact(m(MassUnit::Kilogram, 20.0)))
-            .is_ok());
-        assert!(cfg
-            .validate_value(&MassValue::Range {
+        assert!(
+            cfg.validate_value(&MassValue::Exact(m(MassUnit::Kilogram, 20.0)))
+                .is_ok()
+        );
+        assert!(
+            cfg.validate_value(&MassValue::Range {
                 unit: MassUnit::Pound,
                 min: 45.0,
                 max: 55.0,
             })
-            .is_ok());
+            .is_ok()
+        );
         assert!(rejected_validation(&cfg.validate_value(&MassValue::Exact(
             m(MassUnit::Pound, f64::INFINITY)
         ))));
-        assert!(rejected_validation(&cfg.validate_value(&MassValue::Range {
-            unit: MassUnit::Pound,
-            min: 55.0,
-            max: 45.0, // inverted
-        })));
+        assert!(rejected_validation(&cfg.validate_value(
+            &MassValue::Range {
+                unit: MassUnit::Pound,
+                min: 55.0,
+                max: 45.0, // inverted
+            }
+        )));
         // Magnitudes share the 2-decimal precision cap.
-        assert!(cfg
-            .validate_value(&MassValue::Exact(m(MassUnit::Kilogram, 8.29)))
-            .is_ok());
+        assert!(
+            cfg.validate_value(&MassValue::Exact(m(MassUnit::Kilogram, 8.29)))
+                .is_ok()
+        );
         assert!(rejected_validation(&cfg.validate_value(&MassValue::Exact(
             m(MassUnit::Kilogram, 8.872)
         ))));
-        assert!(rejected_validation(&cfg.validate_value(&MassValue::Range {
-            unit: MassUnit::Pound,
-            min: 45.005,
-            max: 55.0,
-        })));
+        assert!(rejected_validation(&cfg.validate_value(
+            &MassValue::Range {
+                unit: MassUnit::Pound,
+                min: 45.005,
+                max: 55.0,
+            }
+        )));
     }
 
     #[test]
@@ -765,6 +962,84 @@ mod tests {
                 unit: MassUnit::Kilogram,
                 min: 20.41,
                 max: 24.95,
+            }
+        );
+    }
+
+    #[test]
+    fn length_validation() {
+        let cfg = LengthConfig {
+            default_unit: LengthUnit::Meter,
+        };
+        let m = |unit, value| LengthMeasurement { unit, value };
+        // The value's unit is free to differ from the config default.
+        assert!(
+            cfg.validate_value(&LengthValue::Exact(m(LengthUnit::Kilometer, 5.0)))
+                .is_ok()
+        );
+        assert!(
+            cfg.validate_value(&LengthValue::Range {
+                unit: LengthUnit::Mile,
+                min: 3.0,
+                max: 5.0,
+            })
+            .is_ok()
+        );
+        assert!(rejected_validation(&cfg.validate_value(
+            &LengthValue::Exact(m(LengthUnit::Meter, f64::INFINITY))
+        )));
+        assert!(rejected_validation(&cfg.validate_value(
+            &LengthValue::Range {
+                unit: LengthUnit::Meter,
+                min: 5.0,
+                max: 3.0, // inverted
+            }
+        )));
+        // Magnitudes share the 2-decimal precision cap.
+        assert!(
+            cfg.validate_value(&LengthValue::Exact(m(LengthUnit::Millimeter, 8.29)))
+                .is_ok()
+        );
+        assert!(rejected_validation(&cfg.validate_value(
+            &LengthValue::Exact(m(LengthUnit::Millimeter, 8.872))
+        )));
+    }
+
+    #[test]
+    fn length_conversion() {
+        let m = |unit, value| LengthValue::Exact(LengthMeasurement { unit, value });
+        // Exact factor between metric units.
+        assert_eq!(
+            m(LengthUnit::Kilometer, 1.5).converted_to(LengthUnit::Meter),
+            m(LengthUnit::Meter, 1500.0)
+        );
+        // 1 mile = 1609.344 m, rounded to the 2-decimal cap.
+        assert_eq!(
+            m(LengthUnit::Mile, 1.0).converted_to(LengthUnit::Meter),
+            m(LengthUnit::Meter, 1609.34)
+        );
+        // 12 inches = 1 foot exactly.
+        assert_eq!(
+            m(LengthUnit::Inch, 12.0).converted_to(LengthUnit::Foot),
+            m(LengthUnit::Foot, 1.0)
+        );
+        // Same-unit conversion is identity, not a rounded round trip.
+        assert_eq!(
+            m(LengthUnit::Inch, 12.0).converted_to(LengthUnit::Inch),
+            m(LengthUnit::Inch, 12.0)
+        );
+        // Ranges convert both endpoints in one move.
+        assert_eq!(
+            LengthValue::Range {
+                unit: LengthUnit::Kilometer,
+                min: 1.0,
+                max: 2.0,
+            }
+            .converted_to(LengthUnit::Meter),
+            LengthValue::Range {
+                unit: LengthUnit::Meter,
+                min: 1000.0,
+                max: 2000.0,
             }
         );
     }

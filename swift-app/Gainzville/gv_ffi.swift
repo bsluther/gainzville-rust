@@ -3198,6 +3198,188 @@ public func FfiConverterTypeIsEmailRegistered_lower(_ value: IsEmailRegistered) 
 }
 
 
+public struct LengthAttributePair: Equatable, Hashable {
+    public var attrId: Uuid
+    public var entryId: Uuid
+    public var ownerId: Uuid
+    public var name: String
+    public var config: LengthConfig
+    public var indexFloat: Double?
+    public var plan: LengthValue?
+    public var actual: LengthValue?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(attrId: Uuid, entryId: Uuid, ownerId: Uuid, name: String, config: LengthConfig, indexFloat: Double?, plan: LengthValue?, actual: LengthValue?) {
+        self.attrId = attrId
+        self.entryId = entryId
+        self.ownerId = ownerId
+        self.name = name
+        self.config = config
+        self.indexFloat = indexFloat
+        self.plan = plan
+        self.actual = actual
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LengthAttributePair: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLengthAttributePair: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LengthAttributePair {
+        return
+            try LengthAttributePair(
+                attrId: FfiConverterTypeUuid.read(from: &buf), 
+                entryId: FfiConverterTypeUuid.read(from: &buf), 
+                ownerId: FfiConverterTypeUuid.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                config: FfiConverterTypeLengthConfig.read(from: &buf), 
+                indexFloat: FfiConverterOptionDouble.read(from: &buf), 
+                plan: FfiConverterOptionTypeLengthValue.read(from: &buf), 
+                actual: FfiConverterOptionTypeLengthValue.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LengthAttributePair, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.attrId, into: &buf)
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+        FfiConverterTypeUuid.write(value.ownerId, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterTypeLengthConfig.write(value.config, into: &buf)
+        FfiConverterOptionDouble.write(value.indexFloat, into: &buf)
+        FfiConverterOptionTypeLengthValue.write(value.plan, into: &buf)
+        FfiConverterOptionTypeLengthValue.write(value.actual, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthAttributePair_lift(_ buf: RustBuffer) throws -> LengthAttributePair {
+    return try FfiConverterTypeLengthAttributePair.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthAttributePair_lower(_ value: LengthAttributePair) -> RustBuffer {
+    return FfiConverterTypeLengthAttributePair.lower(value)
+}
+
+
+public struct LengthConfig: Equatable, Hashable {
+    public var defaultUnit: LengthUnit
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(defaultUnit: LengthUnit) {
+        self.defaultUnit = defaultUnit
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LengthConfig: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLengthConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LengthConfig {
+        return
+            try LengthConfig(
+                defaultUnit: FfiConverterTypeLengthUnit.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LengthConfig, into buf: inout [UInt8]) {
+        FfiConverterTypeLengthUnit.write(value.defaultUnit, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthConfig_lift(_ buf: RustBuffer) throws -> LengthConfig {
+    return try FfiConverterTypeLengthConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthConfig_lower(_ value: LengthConfig) -> RustBuffer {
+    return FfiConverterTypeLengthConfig.lower(value)
+}
+
+
+public struct LengthMeasurement: Equatable, Hashable {
+    public var unit: LengthUnit
+    public var value: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(unit: LengthUnit, value: Double) {
+        self.unit = unit
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LengthMeasurement: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLengthMeasurement: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LengthMeasurement {
+        return
+            try LengthMeasurement(
+                unit: FfiConverterTypeLengthUnit.read(from: &buf), 
+                value: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LengthMeasurement, into buf: inout [UInt8]) {
+        FfiConverterTypeLengthUnit.write(value.unit, into: &buf)
+        FfiConverterDouble.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthMeasurement_lift(_ buf: RustBuffer) throws -> LengthMeasurement {
+    return try FfiConverterTypeLengthMeasurement.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthMeasurement_lower(_ value: LengthMeasurement) -> RustBuffer {
+    return FfiConverterTypeLengthMeasurement.lower(value)
+}
+
+
 public struct MassAttributePair: Equatable, Hashable {
     public var attrId: Uuid
     public var entryId: Uuid
@@ -4873,6 +5055,8 @@ public enum AttributeChange: Equatable, Hashable {
     )
     case mass(MassChange
     )
+    case length(LengthChange
+    )
 
 
 
@@ -4909,6 +5093,9 @@ public struct FfiConverterTypeAttributeChange: FfiConverterRustBuffer {
         case 5: return .mass(try FfiConverterTypeMassChange.read(from: &buf)
         )
         
+        case 6: return .length(try FfiConverterTypeLengthChange.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -4941,6 +5128,11 @@ public struct FfiConverterTypeAttributeChange: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
             FfiConverterTypeMassChange.write(v1, into: &buf)
             
+        
+        case let .length(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeLengthChange.write(v1, into: &buf)
+            
         }
     }
 }
@@ -4972,6 +5164,8 @@ public enum AttributeConfig: Equatable, Hashable {
     )
     case mass(MassConfig
     )
+    case length(LengthConfig
+    )
 
 
 
@@ -5002,6 +5196,9 @@ public struct FfiConverterTypeAttributeConfig: FfiConverterRustBuffer {
         case 3: return .mass(try FfiConverterTypeMassConfig.read(from: &buf)
         )
         
+        case 4: return .length(try FfiConverterTypeLengthConfig.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5023,6 +5220,11 @@ public struct FfiConverterTypeAttributeConfig: FfiConverterRustBuffer {
         case let .mass(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeMassConfig.write(v1, into: &buf)
+            
+        
+        case let .length(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeLengthConfig.write(v1, into: &buf)
             
         }
     }
@@ -5055,6 +5257,8 @@ public enum AttributePair: Equatable, Hashable {
     )
     case mass(MassAttributePair
     )
+    case length(LengthAttributePair
+    )
 
 
 
@@ -5085,6 +5289,9 @@ public struct FfiConverterTypeAttributePair: FfiConverterRustBuffer {
         case 3: return .mass(try FfiConverterTypeMassAttributePair.read(from: &buf)
         )
         
+        case 4: return .length(try FfiConverterTypeLengthAttributePair.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5106,6 +5313,11 @@ public struct FfiConverterTypeAttributePair: FfiConverterRustBuffer {
         case let .mass(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeMassAttributePair.write(v1, into: &buf)
+            
+        
+        case let .length(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeLengthAttributePair.write(v1, into: &buf)
             
         }
     }
@@ -5138,6 +5350,8 @@ public enum AttributeValue: Equatable, Hashable {
     )
     case mass(MassValue
     )
+    case length(LengthValue
+    )
 
 
 
@@ -5168,6 +5382,9 @@ public struct FfiConverterTypeAttributeValue: FfiConverterRustBuffer {
         case 3: return .mass(try FfiConverterTypeMassValue.read(from: &buf)
         )
         
+        case 4: return .length(try FfiConverterTypeLengthValue.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5189,6 +5406,11 @@ public struct FfiConverterTypeAttributeValue: FfiConverterRustBuffer {
         case let .mass(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeMassValue.write(v1, into: &buf)
+            
+        
+        case let .length(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeLengthValue.write(v1, into: &buf)
             
         }
     }
@@ -5356,6 +5578,253 @@ public func FfiConverterTypeFfiError_lift(_ buf: RustBuffer) throws -> FfiError 
 public func FfiConverterTypeFfiError_lower(_ value: FfiError) -> RustBuffer {
     return FfiConverterTypeFfiError.lower(value)
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum LengthChange: Equatable, Hashable {
+    
+    case setDefaultUnit(LengthUnit
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LengthChange: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLengthChange: FfiConverterRustBuffer {
+    typealias SwiftType = LengthChange
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LengthChange {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .setDefaultUnit(try FfiConverterTypeLengthUnit.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LengthChange, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .setDefaultUnit(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeLengthUnit.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthChange_lift(_ buf: RustBuffer) throws -> LengthChange {
+    return try FfiConverterTypeLengthChange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthChange_lower(_ value: LengthChange) -> RustBuffer {
+    return FfiConverterTypeLengthChange.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum LengthUnit: Equatable, Hashable {
+    
+    case millimeter
+    case centimeter
+    case meter
+    case kilometer
+    case inch
+    case foot
+    case yard
+    case mile
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LengthUnit: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLengthUnit: FfiConverterRustBuffer {
+    typealias SwiftType = LengthUnit
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LengthUnit {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .millimeter
+        
+        case 2: return .centimeter
+        
+        case 3: return .meter
+        
+        case 4: return .kilometer
+        
+        case 5: return .inch
+        
+        case 6: return .foot
+        
+        case 7: return .yard
+        
+        case 8: return .mile
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LengthUnit, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .millimeter:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .centimeter:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .meter:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .kilometer:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .inch:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .foot:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .yard:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .mile:
+            writeInt(&buf, Int32(8))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthUnit_lift(_ buf: RustBuffer) throws -> LengthUnit {
+    return try FfiConverterTypeLengthUnit.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthUnit_lower(_ value: LengthUnit) -> RustBuffer {
+    return FfiConverterTypeLengthUnit.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum LengthValue: Equatable, Hashable {
+    
+    case exact(LengthMeasurement
+    )
+    case range(unit: LengthUnit, min: Double, max: Double
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LengthValue: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLengthValue: FfiConverterRustBuffer {
+    typealias SwiftType = LengthValue
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LengthValue {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .exact(try FfiConverterTypeLengthMeasurement.read(from: &buf)
+        )
+        
+        case 2: return .range(unit: try FfiConverterTypeLengthUnit.read(from: &buf), min: try FfiConverterDouble.read(from: &buf), max: try FfiConverterDouble.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LengthValue, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .exact(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeLengthMeasurement.write(v1, into: &buf)
+            
+        
+        case let .range(unit,min,max):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeLengthUnit.write(unit, into: &buf)
+            FfiConverterDouble.write(min, into: &buf)
+            FfiConverterDouble.write(max, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthValue_lift(_ buf: RustBuffer) throws -> LengthValue {
+    return try FfiConverterTypeLengthValue.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLengthValue_lower(_ value: LengthValue) -> RustBuffer {
+    return FfiConverterTypeLengthValue.lower(value)
+}
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -6300,6 +6769,30 @@ fileprivate struct FfiConverterOptionTypeAttributeValue: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeLengthValue: FfiConverterRustBuffer {
+    typealias SwiftType = LengthValue?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeLengthValue.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeLengthValue.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeMassValue: FfiConverterRustBuffer {
     typealias SwiftType = MassValue?
 
@@ -6832,6 +7325,19 @@ public func FfiConverterTypeUuid_lower(_ value: Uuid) -> RustBuffer {
 }
 
 /**
+ * Unit conversion for length values; mirrors `mass_value_converted_to` (logic
+ * lives in core, `LengthValue::converted_to`). The Swift side wraps it as
+ * `LengthValue.converted(to:)`.
+ */
+public func lengthValueConvertedTo(value: LengthValue, unit: LengthUnit) -> LengthValue  {
+    return try!  FfiConverterTypeLengthValue_lift(try! rustCall() {
+    uniffi_gv_ffi_fn_func_length_value_converted_to(
+        FfiConverterTypeLengthValue_lower(value),
+        FfiConverterTypeLengthUnit_lower(unit),$0
+    )
+})
+}
+/**
  * Unit conversion for mass values; the logic lives in core
  * (`MassValue::converted_to`). uniffi can't attach methods to remote data
  * enums, so pure helpers cross the boundary as free functions and the Swift
@@ -6860,6 +7366,9 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_gv_ffi_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_gv_ffi_checksum_func_length_value_converted_to() != 14612) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_func_mass_value_converted_to() != 39437) {
         return InitializationResult.apiChecksumMismatch

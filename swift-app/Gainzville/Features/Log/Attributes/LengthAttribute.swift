@@ -1,21 +1,19 @@
 import SwiftUI
 
-// Editor for mass (and, in the future, other measure-typed) attributes. A value
-// is a single measurement in a single unit; the pill renders in `displayUnit`
-// (the stored value's unit, else the attribute's default). Empty fields render
-// as empty placeholders, not "0", per the user-facing spec.
+// Editor for length/distance attributes. A clone of `MassAttribute`: a value is
+// a single measurement in a single unit, the pill renders in `displayUnit` (the
+// stored value's unit, else the attribute's default), and empty fields render
+// as empty placeholders, not "0".
 //
 // Unit switching: the bar's Units menu re-expresses the current value via
-// core's conversion (see docs/attributes-design.md "Unit selection /
-// conversion for measures").
-//
-// Range editing: the pill switches between one exact input and a min–max pair
-// via the action bar's Range toggle. Both endpoints share the value's unit.
-// Mode is derived from the stored value with a local override covering the gap
-// between toggling and the first commit.
-struct MassAttribute: View {
+// core's conversion (`LengthValue::converted_to` over FFI). Range editing: the
+// pill switches between one exact input and a min–max pair via the action bar's
+// Range toggle; both endpoints share the value's unit. See `MassAttribute` for
+// the full rationale on the shadow-state / debounce / override machinery —
+// this file is intentionally identical except for the measure type.
+struct LengthAttribute: View {
     let entry: Entry
-    let pair: MassAttributePair
+    let pair: LengthAttributePair
     @EnvironmentObject private var forestVM: ForestViewModel
 
     @State private var minValue: String = ""
@@ -27,7 +25,7 @@ struct MassAttribute: View {
     // lives on the value, so an empty field has nowhere durable to put the
     // choice). The next committed value adopts it; abandoning the edit session
     // drops it back to the stored/default unit. nil = follow stored.
-    @State private var unitOverride: MassUnit?
+    @State private var unitOverride: LengthUnit?
     @State private var debounceTask: Task<Void, Never>?
     @FocusState private var focusedField: RangeEndpoint?
     // Set by Remove so the focus-loss handler skips flushNow() — flushing
@@ -45,10 +43,10 @@ struct MassAttribute: View {
 
     private var isRangeMode: Bool { modeOverride ?? storedIsRange }
 
-    /// Mirrors `MassAttributePair::display_unit()` from core — the actual
+    /// Mirrors `LengthAttributePair::display_unit()` from core — the actual
     /// value's unit, else the plan's, else the config default — with the
     /// session's picked-but-uncommitted unit layered on top.
-    private var displayUnit: MassUnit {
+    private var displayUnit: LengthUnit {
         unitOverride ?? pair.actual?.unit ?? pair.plan?.unit ?? pair.config.defaultUnit
     }
 
@@ -56,7 +54,7 @@ struct MassAttribute: View {
     // by both surfaces (iOS keyboard bar via AttributeBarPublisher, macOS popover).
     private var barActions: [AttributeBarAction] {
         .measure(
-            units: MassUnit.pickerCases.map { unit in
+            units: LengthUnit.pickerCases.map { unit in
                 UnitOption(
                     label: unit.menuLabel,
                     isSelected: unit == displayUnit,
@@ -74,7 +72,7 @@ struct MassAttribute: View {
 
     var body: some View {
         AttributeRow(label: pair.name) {
-            massField
+            lengthField
         }
         .onAppear {
             syncEditState()
@@ -116,7 +114,7 @@ struct MassAttribute: View {
     }
 
     @ViewBuilder
-    private var massField: some View {
+    private var lengthField: some View {
         HStack(spacing: GvSpacing.sm) {
             RangePill(isRange: isRangeMode) {
                 endpointField(.min)
@@ -202,13 +200,13 @@ struct MassAttribute: View {
             // stored range min. Nothing to write when the range was never
             // committed.
             if case .range(let unit, let lo, _) = pair.actual {
-                let collapsed = MassMeasurement(unit: unit, value: parse(minValue) ?? lo)
+                let collapsed = LengthMeasurement(unit: unit, value: parse(minValue) ?? lo)
                 minValue = format(collapsed.value)
                 forestVM.updateAttributeValue(
                     entryId: entry.id,
                     attributeId: pair.attrId,
                     field: .actual,
-                    value: .mass(.exact(collapsed))
+                    value: .length(.exact(collapsed))
                 )
             }
             maxValue = ""
@@ -230,13 +228,13 @@ struct MassAttribute: View {
     /// Switch the editor (and any current value) to `unit`. The value being
     /// re-united is whatever the user sees: a parseable pending edit when one
     /// exists, else the stored actual. Conversion happens in core
-    /// (`MassValue::converted_to` via FFI), rounded to the 2-decimal cap.
+    /// (`LengthValue::converted_to` via FFI), rounded to the 2-decimal cap.
     /// Plan values are left alone for now.
-    private func selectUnit(_ unit: MassUnit) {
+    private func selectUnit(_ unit: LengthUnit) {
         guard unit != displayUnit else { return }
         debounceTask?.cancel()
         debounceTask = nil
-        let current: MassValue?
+        let current: LengthValue?
         switch pendingCommit(isBlur: true) {
         case .set(let value): current = value
         // An emptied field has nothing to convert; the clear itself still
@@ -263,7 +261,7 @@ struct MassAttribute: View {
             entryId: entry.id,
             attributeId: pair.attrId,
             field: .actual,
-            value: .mass(converted)
+            value: .length(converted)
         )
     }
 
@@ -315,7 +313,7 @@ struct MassAttribute: View {
                 entryId: entry.id,
                 attributeId: pair.attrId,
                 field: .actual,
-                value: .mass(value)
+                value: .length(value)
             )
             return true
         }
@@ -323,7 +321,7 @@ struct MassAttribute: View {
 
     /// An emptied exact field clears the stored value (it does not write 0);
     /// non-parseable input commits nothing while the user is mid-typing.
-    private func pendingCommit(isBlur: Bool) -> PendingWrite<MassValue>? {
+    private func pendingCommit(isBlur: Bool) -> PendingWrite<LengthValue>? {
         if isRangeMode {
             guard let range = buildRange(isBlur: isBlur) else { return nil }
             return .set(range)
@@ -332,7 +330,7 @@ struct MassAttribute: View {
             return pair.actual == nil ? nil : .clear
         }
         guard let parsed = parse(minValue) else { return nil }
-        let new = MassMeasurement(unit: displayUnit, value: parsed)
+        let new = LengthMeasurement(unit: displayUnit, value: parsed)
         guard !sameAsCurrentExact(new) else { return nil }
         return .set(.exact(new))
     }
@@ -341,7 +339,7 @@ struct MassAttribute: View {
     /// commit (either field empty or non-parseable mid-typing). An inverted
     /// pair (min > max) holds the commit during the debounce window and swaps
     /// at blur.
-    private func buildRange(isBlur: Bool) -> MassValue? {
+    private func buildRange(isBlur: Bool) -> LengthValue? {
         guard var lo = parse(minValue), var hi = parse(maxValue) else { return nil }
         if lo > hi {
             guard isBlur else { return nil }
@@ -362,12 +360,12 @@ struct MassAttribute: View {
         return (parsed * 100).rounded() / 100
     }
 
-    private func sameAsCurrentExact(_ new: MassMeasurement) -> Bool {
+    private func sameAsCurrentExact(_ new: LengthMeasurement) -> Bool {
         guard case .exact(let cur) = pair.actual else { return false }
         return cur == new
     }
 
-    private func sameAsCurrentRange(unit: MassUnit, min: Double, max: Double) -> Bool {
+    private func sameAsCurrentRange(unit: LengthUnit, min: Double, max: Double) -> Bool {
         guard case .range(let curUnit, let curMin, let curMax) = pair.actual else { return false }
         return curUnit == unit && curMin == min && curMax == max
     }
@@ -387,8 +385,8 @@ struct MassAttribute: View {
     }
 }
 
-private extension MassValue {
-    var unit: MassUnit {
+private extension LengthValue {
+    var unit: LengthUnit {
         switch self {
         case .exact(let m): return m.unit
         case .range(let unit, _, _): return unit
@@ -397,21 +395,30 @@ private extension MassValue {
 
     /// Method-style sugar over the FFI free function (uniffi can't attach
     /// methods to data enums); the conversion itself runs in core.
-    func converted(to unit: MassUnit) -> MassValue {
-        massValueConvertedTo(value: self, unit: unit)
+    func converted(to unit: LengthUnit) -> LengthValue {
+        lengthValueConvertedTo(value: self, unit: unit)
     }
 }
 
-private extension MassUnit {
+private extension LengthUnit {
     // The generated enum isn't CaseIterable (conformance can't be synthesized
-    // outside the declaring file), so the menu order is spelled out here.
-    static let pickerCases: [MassUnit] = [.gram, .kilogram, .pound]
+    // outside the declaring file), so the menu order is spelled out here:
+    // metric ascending, then imperial ascending.
+    static let pickerCases: [LengthUnit] = [
+        .millimeter, .centimeter, .meter, .kilometer,
+        .inch, .foot, .yard, .mile,
+    ]
 
     var menuLabel: String {
         switch self {
-        case .gram:     return "Grams (g)"
-        case .kilogram: return "Kilograms (kg)"
-        case .pound:    return "Pounds (lb)"
+        case .millimeter: return "Millimeters (mm)"
+        case .centimeter: return "Centimeters (cm)"
+        case .meter:      return "Meters (m)"
+        case .kilometer:  return "Kilometers (km)"
+        case .inch:       return "Inches (in)"
+        case .foot:       return "Feet (ft)"
+        case .yard:       return "Yards (yd)"
+        case .mile:       return "Miles (mi)"
         }
     }
 
@@ -419,9 +426,14 @@ private extension MassUnit {
         switch self {
         // Pad single-char units to two chars so, under a monospaced font, every
         // unit label occupies the same width.
-        case .gram:     return "g "
-        case .kilogram: return "kg"
-        case .pound:    return "lb"
+        case .millimeter: return "mm"
+        case .centimeter: return "cm"
+        case .meter:      return "m "
+        case .kilometer:  return "km"
+        case .inch:       return "in"
+        case .foot:       return "ft"
+        case .yard:       return "yd"
+        case .mile:       return "mi"
         }
     }
 }

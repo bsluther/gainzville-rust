@@ -96,6 +96,8 @@ struct AttributeDetailView: View {
             SelectConfigEditor(config: cfg) { vm.apply(.select(.setDefault($0))) }
         case .mass(let cfg):
             MassConfigEditor(config: cfg) { vm.apply(.mass(.setDefaultUnit($0))) }
+        case .length(let cfg):
+            LengthConfigEditor(config: cfg) { vm.apply(.length(.setDefaultUnit($0))) }
         }
     }
 }
@@ -360,12 +362,68 @@ private struct MassConfigEditor: View {
     }
 }
 
+// MARK: - Length
+
+/// Clone of `MassConfigEditor` for length attributes — a default-unit picker
+/// over the eight length units (metric then imperial).
+private struct LengthConfigEditor: View {
+    let config: LengthConfig
+    let onSetUnit: (LengthUnit) -> Void
+
+    @State private var isPicking = false
+
+    private let allUnits: [LengthUnit] = [
+        .millimeter, .centimeter, .meter, .kilometer,
+        .inch, .foot, .yard, .mile,
+    ]
+
+    var body: some View {
+        ConfigRow(label: "Default unit") {
+            Button { isPicking = true } label: {
+                Text(label(for: config.defaultUnit))
+                    .frame(minWidth: GvSpacing.minAttributeInputWidth)
+                    .gvAttributePill(borderColor: editableBorder)
+            }
+            .buttonStyle(.plain)
+            .platformPopover(isPresented: $isPicking) {
+                // No "None" row: a length config always has a default unit.
+                DefaultOptionList(
+                    options: allUnits.map(label(for:)),
+                    selection: label(for: config.defaultUnit),
+                    includeNone: false,
+                    onPick: { picked in
+                        if let unit = allUnits.first(where: { label(for: $0) == picked }),
+                           unit != config.defaultUnit {
+                            onSetUnit(unit)
+                        }
+                        isPicking = false
+                    }
+                )
+            }
+        }
+    }
+
+    private func label(for unit: LengthUnit) -> String {
+        switch unit {
+        case .millimeter: return "Millimeters"
+        case .centimeter: return "Centimeters"
+        case .meter:      return "Meters"
+        case .kilometer:  return "Kilometers"
+        case .inch:       return "Inches"
+        case .foot:       return "Feet"
+        case .yard:       return "Yards"
+        case .mile:       return "Miles"
+        }
+    }
+}
+
 private extension AttributeConfig {
     var typeName: String {
         switch self {
         case .numeric:  return "Numeric"
         case .select:   return "Select"
         case .mass:     return "Mass"
+        case .length:   return "Length"
         }
     }
 }

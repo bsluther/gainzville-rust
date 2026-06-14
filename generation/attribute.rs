@@ -1,7 +1,8 @@
 use gv_core::models::{
     attribute::{
-        Attribute, AttributeConfig, AttributeValue, MassConfig, MassMeasurement, MassUnit,
-        MassValue, NumericConfig, NumericValue, SelectConfig, SelectValue, Value,
+        Attribute, AttributeConfig, AttributeValue, LengthConfig, LengthMeasurement, LengthUnit,
+        LengthValue, MassConfig, MassMeasurement, MassUnit, MassValue, NumericConfig, NumericValue,
+        SelectConfig, SelectValue, Value,
     },
     entry::Entry,
 };
@@ -32,10 +33,11 @@ impl Arbitrary for Attribute {
 
 impl Arbitrary for AttributeConfig {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
-        match rng.random_range(0..=2) {
+        match rng.random_range(0..=3) {
             0 => AttributeConfig::Numeric(NumericConfig::arbitrary(rng, context)),
             1 => AttributeConfig::Select(SelectConfig::arbitrary(rng, context)),
-            _ => AttributeConfig::Mass(MassConfig::arbitrary(rng, context)),
+            2 => AttributeConfig::Mass(MassConfig::arbitrary(rng, context)),
+            _ => AttributeConfig::Length(LengthConfig::arbitrary(rng, context)),
         }
     }
 }
@@ -49,7 +51,11 @@ impl Arbitrary for NumericConfig {
             // Snapping to the 2-decimal grid keeps v within [lo, hi]: lo/hi are
             // themselves grid points (or generated bounds-free), and rounding
             // is monotonic.
-            if integer { v.round() } else { (v * 100.0).round() / 100.0 }
+            if integer {
+                v.round()
+            } else {
+                (v * 100.0).round() / 100.0
+            }
         };
 
         let min: Option<f64> = maybe(rng, 0.5, |rng| rand_val(rng, 0.0, 1000.0));
@@ -96,6 +102,26 @@ impl Arbitrary for MassConfig {
         let all_units = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
         MassConfig {
             default_unit: pick(&all_units[..], rng).unwrap().clone(),
+        }
+    }
+}
+
+/// All length units, in the menu order used by the Swift picker.
+const ALL_LENGTH_UNITS: [LengthUnit; 8] = [
+    LengthUnit::Millimeter,
+    LengthUnit::Centimeter,
+    LengthUnit::Meter,
+    LengthUnit::Kilometer,
+    LengthUnit::Inch,
+    LengthUnit::Foot,
+    LengthUnit::Yard,
+    LengthUnit::Mile,
+];
+
+impl Arbitrary for LengthConfig {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+        LengthConfig {
+            default_unit: pick(&ALL_LENGTH_UNITS[..], rng).unwrap().clone(),
         }
     }
 }
@@ -172,6 +198,9 @@ impl ArbitraryFrom<&AttributeConfig> for AttributeValue {
             }
             AttributeConfig::Mass(c) => {
                 AttributeValue::Mass(MassValue::arbitrary_from(rng, context, c))
+            }
+            AttributeConfig::Length(c) => {
+                AttributeValue::Length(LengthValue::arbitrary_from(rng, context, c))
             }
         }
     }
@@ -257,6 +286,37 @@ impl ArbitraryFrom<&MassConfig> for MassValue {
                 let b = rand_magnitude(rng);
                 let (min, max) = if a <= b { (a, b) } else { (b, a) };
                 MassValue::Range {
+                    unit: rand_unit(rng),
+                    min,
+                    max,
+                }
+            }
+        }
+    }
+}
+
+impl ArbitraryFrom<&LengthConfig> for LengthValue {
+    fn arbitrary_from<R: RngExt, C: GenerationContext>(
+        rng: &mut R,
+        _context: &C,
+        _config: &LengthConfig,
+    ) -> Self {
+        let rand_unit = |rng: &mut R| pick(&ALL_LENGTH_UNITS[..], rng).unwrap().clone();
+        let rand_magnitude = |rng: &mut R| -> f64 {
+            let v: f64 = rng.random_range(0.0..500.0);
+            (v * 100.0).round() / 100.0
+        };
+
+        match rng.random_range(0..=1) {
+            0 => LengthValue::Exact(LengthMeasurement {
+                unit: rand_unit(rng),
+                value: rand_magnitude(rng),
+            }),
+            _ => {
+                let a = rand_magnitude(rng);
+                let b = rand_magnitude(rng);
+                let (min, max) = if a <= b { (a, b) } else { (b, a) };
+                LengthValue::Range {
                     unit: rand_unit(rng),
                     min,
                     max,

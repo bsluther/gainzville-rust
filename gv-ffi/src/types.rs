@@ -4,18 +4,20 @@ use gv_core::{
     actions::{
         Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
         CreateEntry, CreateEntryFromActivity, CreateUser, CreateValue, DeleteAttributeValue,
-        DeleteEntryRecursive, DuplicateEntry, EntryChange, MassChange, MoveEntry, NumericChange,
-        SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntry, UpdateEntryCompletion,
-        ValueField,
+        DeleteEntryRecursive, DuplicateEntry, EntryChange, LengthChange, MassChange, MoveEntry,
+        NumericChange, SelectChange, UpdateAttribute, UpdateAttributeValue, UpdateEntry,
+        UpdateEntryCompletion, ValueField,
     },
     models::{
         activity::{Activity, ActivityName},
         attribute::{
-            Attribute, AttributeConfig, AttributeValue, MassConfig, MassMeasurement, MassUnit,
-            MassValue, NumericConfig, NumericValue, SelectConfig, SelectValue, Value,
+            Attribute, AttributeConfig, AttributeValue, LengthConfig, LengthMeasurement,
+            LengthUnit, LengthValue, MassConfig, MassMeasurement, MassUnit, MassValue,
+            NumericConfig, NumericValue, SelectConfig, SelectValue, Value,
         },
         attribute_pair::{
-            AttributePair, MassAttributePair, NumericAttributePair, SelectAttributePair,
+            AttributePair, LengthAttributePair, MassAttributePair, NumericAttributePair,
+            SelectAttributePair,
         },
         entry::{Entry, Position, Temporal},
         entry_join::EntryJoin,
@@ -195,10 +197,28 @@ pub struct MassConfig {
 }
 
 #[uniffi::remote(Enum)]
+pub enum LengthUnit {
+    Millimeter,
+    Centimeter,
+    Meter,
+    Kilometer,
+    Inch,
+    Foot,
+    Yard,
+    Mile,
+}
+
+#[uniffi::remote(Record)]
+pub struct LengthConfig {
+    pub default_unit: LengthUnit,
+}
+
+#[uniffi::remote(Enum)]
 pub enum AttributeConfig {
     Numeric(NumericConfig),
     Select(SelectConfig),
     Mass(MassConfig),
+    Length(LengthConfig),
 }
 
 #[uniffi::remote(Record)]
@@ -245,11 +265,36 @@ pub fn mass_value_converted_to(value: MassValue, unit: MassUnit) -> MassValue {
     value.converted_to(unit)
 }
 
+#[uniffi::remote(Record)]
+pub struct LengthMeasurement {
+    pub unit: LengthUnit,
+    pub value: f64,
+}
+
+#[uniffi::remote(Enum)]
+pub enum LengthValue {
+    Exact(LengthMeasurement),
+    Range {
+        unit: LengthUnit,
+        min: f64,
+        max: f64,
+    },
+}
+
+/// Unit conversion for length values; mirrors `mass_value_converted_to` (logic
+/// lives in core, `LengthValue::converted_to`). The Swift side wraps it as
+/// `LengthValue.converted(to:)`.
+#[uniffi::export]
+pub fn length_value_converted_to(value: LengthValue, unit: LengthUnit) -> LengthValue {
+    value.converted_to(unit)
+}
+
 #[uniffi::remote(Enum)]
 pub enum AttributeValue {
     Numeric(NumericValue),
     Select(SelectValue),
     Mass(MassValue),
+    Length(LengthValue),
 }
 
 #[uniffi::remote(Record)]
@@ -300,11 +345,24 @@ pub struct MassAttributePair {
     pub actual: Option<MassValue>,
 }
 
+#[uniffi::remote(Record)]
+pub struct LengthAttributePair {
+    pub attr_id: Uuid,
+    pub entry_id: Uuid,
+    pub owner_id: Uuid,
+    pub name: String,
+    pub config: LengthConfig,
+    pub index_float: Option<f64>,
+    pub plan: Option<LengthValue>,
+    pub actual: Option<LengthValue>,
+}
+
 #[uniffi::remote(Enum)]
 pub enum AttributePair {
     Numeric(NumericAttributePair),
     Select(SelectAttributePair),
     Mass(MassAttributePair),
+    Length(LengthAttributePair),
 }
 
 // --- EntryJoin ---
@@ -578,12 +636,18 @@ pub enum MassChange {
 }
 
 #[uniffi::remote(Enum)]
+pub enum LengthChange {
+    SetDefaultUnit(LengthUnit),
+}
+
+#[uniffi::remote(Enum)]
 pub enum AttributeChange {
     SetName(String),
     SetDescription(Option<String>),
     Numeric(NumericChange),
     Select(SelectChange),
     Mass(MassChange),
+    Length(LengthChange),
 }
 
 #[uniffi::remote(Record)]

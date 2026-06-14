@@ -12,8 +12,9 @@ use gv_core::{
     models::{
         activity::{Activity, ActivityName},
         attribute::{
-            Attribute, AttributeConfig, AttributeValue, MassConfig, MassMeasurement, MassUnit,
-            MassValue, NumericConfig, NumericValue, Value,
+            Attribute, AttributeConfig, AttributeValue, LengthConfig, LengthMeasurement,
+            LengthUnit, LengthValue, MassConfig, MassMeasurement, MassUnit, MassValue,
+            NumericConfig, NumericValue, Value,
         },
         entry::{Entry, Position, Temporal},
     },
@@ -202,6 +203,22 @@ fn attribute_round_trips_mass() {
 }
 
 #[test]
+fn attribute_round_trips_length() {
+    let attr = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: "Distance".to_string(),
+        description: None,
+        config: AttributeConfig::Length(LengthConfig {
+            default_unit: LengthUnit::Kilometer,
+        }),
+    };
+    let row = AttributeRow::from_attribute(&attr).unwrap();
+    let got = row.to_attribute().unwrap();
+    assert_eq!(got, attr);
+}
+
+#[test]
 fn value_round_trips_with_plan_and_actual() {
     let value = Value {
         entry_id: Uuid::new_v4(),
@@ -228,6 +245,30 @@ fn value_round_trips_mass() {
             unit: MassUnit::Kilogram,
             value: 50.0,
         }))),
+    };
+    let row = ValueRow::from_value(&value).unwrap();
+    let got = row.to_value().unwrap();
+    assert_eq!(got, value);
+}
+
+#[test]
+fn value_round_trips_length() {
+    let value = Value {
+        entry_id: Uuid::new_v4(),
+        attribute_id: Uuid::new_v4(),
+        index_float: None,
+        index_string: None,
+        plan: Some(AttributeValue::Length(LengthValue::Exact(
+            LengthMeasurement {
+                unit: LengthUnit::Mile,
+                value: 3.1,
+            },
+        ))),
+        actual: Some(AttributeValue::Length(LengthValue::Range {
+            unit: LengthUnit::Meter,
+            min: 100.0,
+            max: 200.0,
+        })),
     };
     let row = ValueRow::from_value(&value).unwrap();
     let got = row.to_value().unwrap();

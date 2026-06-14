@@ -42,6 +42,7 @@ private extension AttributeConfig {
         case .numeric:  return "Numeric"
         case .select:   return "Select"
         case .mass:     return "Mass"
+        case .length:   return "Length"
         }
     }
 }

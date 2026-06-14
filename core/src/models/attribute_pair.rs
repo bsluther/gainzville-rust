@@ -3,8 +3,8 @@ use uuid::Uuid;
 use crate::{
     error::DomainError,
     models::attribute::{
-        Attribute, AttributeConfig, MassConfig, MassUnit, MassValue, NumericConfig, NumericValue,
-        SelectConfig, SelectValue, Value,
+        Attribute, AttributeConfig, LengthConfig, LengthUnit, LengthValue, MassConfig, MassUnit,
+        MassValue, NumericConfig, NumericValue, SelectConfig, SelectValue, Value,
     },
 };
 
@@ -13,6 +13,7 @@ pub enum AttributePair {
     Numeric(NumericAttributePair),
     Select(SelectAttributePair),
     Mass(MassAttributePair),
+    Length(LengthAttributePair),
 }
 
 impl AttributePair {
@@ -21,6 +22,7 @@ impl AttributePair {
             AttributePair::Numeric(p) => p.attr_id,
             AttributePair::Select(p) => p.attr_id,
             AttributePair::Mass(p) => p.attr_id,
+            AttributePair::Length(p) => p.attr_id,
         }
     }
 
@@ -29,6 +31,7 @@ impl AttributePair {
             AttributePair::Numeric(p) => p.name.clone(),
             AttributePair::Select(p) => p.name.clone(),
             AttributePair::Mass(p) => p.name.clone(),
+            AttributePair::Length(p) => p.name.clone(),
         }
     }
 }
@@ -69,6 +72,20 @@ impl TryFrom<(Attribute, Value)> for AttributePair {
                 let plan = plan.map(|v| v.expect_mass()).transpose()?;
                 let actual = actual.map(|v| v.expect_mass()).transpose()?;
                 Ok(AttributePair::Mass(MassAttributePair {
+                    attr_id: attr.id,
+                    entry_id: val.entry_id,
+                    owner_id: attr.owner_id,
+                    name: attr.name,
+                    config: cfg,
+                    index_float: val.index_float,
+                    plan,
+                    actual,
+                }))
+            }
+            (AttributeConfig::Length(cfg), plan, actual) => {
+                let plan = plan.map(|v| v.expect_length()).transpose()?;
+                let actual = actual.map(|v| v.expect_length()).transpose()?;
+                Ok(AttributePair::Length(LengthAttributePair {
                     attr_id: attr.id,
                     entry_id: val.entry_id,
                     owner_id: attr.owner_id,
@@ -123,6 +140,30 @@ impl MassAttributePair {
     /// The unit this pair presents in: the actual value's unit, else the
     /// plan's, else the config's `default_unit`.
     pub fn display_unit(&self) -> MassUnit {
+        self.actual
+            .as_ref()
+            .or(self.plan.as_ref())
+            .map(|v| v.unit().clone())
+            .unwrap_or_else(|| self.config.default_unit.clone())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LengthAttributePair {
+    pub attr_id: Uuid,
+    pub entry_id: Uuid,
+    pub owner_id: Uuid,
+    pub name: String,
+    pub config: LengthConfig,
+    pub index_float: Option<f64>,
+    pub plan: Option<LengthValue>,
+    pub actual: Option<LengthValue>,
+}
+
+impl LengthAttributePair {
+    /// The unit this pair presents in: the actual value's unit, else the
+    /// plan's, else the config's `default_unit`. Mirrors `MassAttributePair`.
+    pub fn display_unit(&self) -> LengthUnit {
         self.actual
             .as_ref()
             .or(self.plan.as_ref())
