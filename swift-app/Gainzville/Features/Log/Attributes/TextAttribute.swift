@@ -51,12 +51,12 @@ struct TextAttribute: View {
 
     var body: some View {
         AttributeRow(label: pair.name) {
-            VStack(alignment: .leading, spacing: GvSpacing.sm) {
-                textField
-                if focused && !filteredSuggestions.isEmpty {
-                    suggestionList
-                }
-            }
+            textField
+                // Gap between the label and the full-width text pill. The
+                // compact numeric/mass pills get this spacing for free from
+                // being right-aligned; the greedy text pill otherwise butts
+                // against the label.
+                .padding(.leading, GvSpacing.xl)
         }
         .onAppear {
             syncEditState()
@@ -95,14 +95,21 @@ struct TextAttribute: View {
 
     @ViewBuilder
     private var textField: some View {
-        TextField(pair.name, text: $text, axis: .vertical)
+        TextField("", text: $text, axis: .vertical)
             .textFieldStyle(.plain)
-            .font(.attrField)
-            .foregroundStyle(Color.entryTextPrimary)
             // Unfocused: a short truncated preview. Focused: grow with content,
             // then scroll past the cap.
             .lineLimit(focused ? 1...12 : 1...3)
             .focused($focused)
+            // Same pill border as the other attribute fields. The pill's
+            // minHeight vertically centers a single line on the label (without
+            // it, a one-line field floats to the top of the row). No
+            // `.fixedSize` — unlike the compact numeric/mass pills, this one
+            // fills the row width and grows downward for long notes. Vertical
+            // padding is bumped up (one notch below the horizontal inset) so a
+            // multi-line note breathes (the compact pills keep the default —
+            // their height is driven by minHeight anyway).
+            .gvAttributePill(verticalPadding: GvSpacing.md)
         // macOS: anchor the action-bar popover (Remove) to the field, mirroring
         // the other editors. Closing it ends editing.
         #if os(macOS)
@@ -153,6 +160,8 @@ struct TextAttribute: View {
         }
         .background(Color.gvSurface)
         .clipShape(RoundedRectangle(cornerRadius: GvSpacing.sm))
+        // Lift it off the content it now floats over.
+        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
     }
 
     // Fill the field from a suggestion and dismiss. The blur handler owns the

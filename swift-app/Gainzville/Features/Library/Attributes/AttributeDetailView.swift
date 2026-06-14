@@ -435,15 +435,18 @@ private struct TextConfigEditor: View {
             ConfigRow(label: "Default") {
                 TextDefaultField(config: config, onCommit: onSetDefault)
             }
+            // Checkbox glyph like the read-only "Ordered"/"Integer" flags, but
+            // tappable and in the brighter primary tone since autocomplete is
+            // editable (the read-only flags use the receded secondary tone).
             ConfigRow(label: "Autocomplete") {
-                Toggle(
-                    "",
-                    isOn: Binding(
-                        get: { config.autocomplete },
-                        set: { onSetAutocomplete($0) }
-                    )
-                )
-                .labelsHidden()
+                Button {
+                    onSetAutocomplete(!config.autocomplete)
+                } label: {
+                    Image(systemName: config.autocomplete ? "checkmark.square" : "square")
+                        .resizable().scaledToFit().frame(width: 20, height: 20)
+                        .foregroundStyle(Color.gvTextPrimary)
+                }
+                .buttonStyle(.plain)
             }
         }
     }

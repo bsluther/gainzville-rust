@@ -46,12 +46,15 @@ struct AttributeRow<Content: View>: View {
 // Shared pill style for attribute value display across temporal and attribute
 // editors. Apply with `.gvAttributePill()`.
 extension View {
-    func gvAttributePill(borderColor: Color = .entryTextSecondary) -> some View {
+    func gvAttributePill(
+        borderColor: Color = .entryTextSecondary,
+        verticalPadding: CGFloat = GvSpacing.sm
+    ) -> some View {
         self
             .font(.attrField)
             .foregroundStyle(Color.entryTextPrimary)
             .padding(.horizontal, GvSpacing.lg)
-            .padding(.vertical, GvSpacing.sm)
+            .padding(.vertical, verticalPadding)
             .frame(minHeight: GvSpacing.minAttributeHeight)
             .background(.clear)
             .clipShape(RoundedRectangle(cornerRadius: 8))
