@@ -23,7 +23,6 @@ struct TextAttribute: View {
     @EnvironmentObject private var autocomplete: AutocompleteCoordinator
 
     @State private var text: String = ""
-    @State private var debounceTask: Task<Void, Never>?
     @FocusState private var focused: Bool
     // Set by Remove so the blur handler skips the commit (it would write against
     // the just-deleted row).
@@ -44,14 +43,17 @@ struct TextAttribute: View {
     private var filteredSuggestions: [String] {
         guard pair.config.autocomplete else { return [] }
         let query = text.trimmingCharacters(in: .whitespaces)
-        let pool = suggestions.all.filter { $0 != text }
+        // Exclude the in-progress text and this field's own committed value —
+        // suggesting the value you're already editing is just noise.
+        let pool = suggestions.all.filter { $0 != text && $0 != pair.actual }
         let matches =
             query.isEmpty ? pool : pool.filter { $0.localizedCaseInsensitiveContains(query) }
-        return Array(matches.prefix(6))
+        // Capped, but generous enough that the box scrolls (see its max height).
+        return Array(matches.prefix(20))
     }
 
     var body: some View {
-        AttributeRow(label: pair.name) {
+        AttributeRow(label: pair.name, usesViewThatFits: false) {
             textField
                 // Publish bounds + matches so LogView can float the suggestion
                 // list outside this (clipped) card. Attached to the pill before
@@ -78,7 +80,6 @@ struct TextAttribute: View {
             guard !focused else { return }
             syncEditState()
         }
-        .onChange(of: text) { _, _ in scheduleDebounce() }
         .attributeBarActions(
             token: focusToken,
             isFocused: focused,
@@ -94,8 +95,6 @@ struct TextAttribute: View {
                 suggestions.stop()
                 if pendingRemoval {
                     pendingRemoval = false
-                    debounceTask?.cancel()
-                    debounceTask = nil
                 } else if !flushNow() {
                     syncEditState()
                 }
@@ -174,21 +173,11 @@ struct TextAttribute: View {
 
     // MARK: - Commit shadow → cache
 
-    private func scheduleDebounce() {
-        debounceTask?.cancel()
-        debounceTask = nil
-        guard pendingCommit() != nil else { return }
-        debounceTask = Task {
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run { flushNow() }
-        }
-    }
-
+    // Text commits on blur (and on pick), not via a debounce: an autosave while
+    // typing would write the in-progress value, which then refreshes the
+    // history subscription and echoes back into this field's own suggestions.
     @discardableResult
     private func flushNow() -> Bool {
-        debounceTask?.cancel()
-        debounceTask = nil
         switch pendingCommit() {
         case nil:
             return false

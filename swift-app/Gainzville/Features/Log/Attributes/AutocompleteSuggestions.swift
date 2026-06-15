@@ -44,7 +44,43 @@ struct AutocompleteSuggestionList: View {
     let suggestions: [String]
     let onPick: (String) -> Void
 
+    // Show up to this many rows at natural height; beyond it, cap and scroll.
+    private let visibleRows = 5
+
+    // Height of `visibleRows` rows: `.attrField` is `.body` (~22pt line), rows
+    // separated by GvSpacing.md, inside GvSpacing.md box padding.
+    private var maxHeight: CGFloat {
+        let rowHeight: CGFloat = 22
+        let rows = CGFloat(visibleRows)
+        return rows * rowHeight + (rows - 1) * GvSpacing.md + GvSpacing.md * 2
+    }
+
     var body: some View {
+        Group {
+            if suggestions.count <= visibleRows {
+                rows
+            } else {
+                // Cap the height and scroll. A conditional rather than measuring
+                // the content to size a ScrollView — that deadlocks at 0 height.
+                ScrollView { rows }
+                    .frame(height: maxHeight)
+                    .scrollBounceBehavior(.basedOnSize)
+            }
+        }
+        // One step lighter than the scalar entry background (gvNeutral900) so the
+        // floating box reads as raised above the entries it covers.
+        .background(Color.gvNeutral850)
+        // Corner radius + border match the input pill (gvAttributePill uses 8).
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.entryTextSecondary, lineWidth: 1)
+        )
+        // Lift it off the content it floats over.
+        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+    }
+
+    private var rows: some View {
         VStack(alignment: .leading, spacing: GvSpacing.md) {
             ForEach(suggestions, id: \.self) { suggestion in
                 Button {
@@ -60,16 +96,5 @@ struct AutocompleteSuggestionList: View {
             }
         }
         .padding(GvSpacing.md)
-        // One step lighter than the scalar entry background (gvNeutral900) so the
-        // floating box reads as raised above the entries it covers.
-        .background(Color.gvNeutral850)
-        // Corner radius + border match the input pill (gvAttributePill uses 8).
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.entryTextSecondary, lineWidth: 1)
-        )
-        // Lift it off the content it floats over.
-        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
     }
 }

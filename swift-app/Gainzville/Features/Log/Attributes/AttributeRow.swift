@@ -5,11 +5,24 @@ import SwiftUI
 struct AttributeRow<Content: View>: View {
     let label: String
     let indent: CGFloat
+    // Most editors fall back to vertical stacking when compact pills don't fit
+    // the width. The text editor opts out: its field is always full-width (so it
+    // always fits the horizontal candidate), and the re-measure ViewThatFits
+    // runs when the vertical-growing TextField wraps 1→2 lines rebuilds the
+    // candidate subtrees, re-making the field and dropping first responder
+    // mid-type.
+    let usesViewThatFits: Bool
     private let content: Content
 
-    init(label: String, indent: CGFloat = 0, @ViewBuilder content: () -> Content) {
+    init(
+        label: String,
+        indent: CGFloat = 0,
+        usesViewThatFits: Bool = true,
+        @ViewBuilder content: () -> Content
+    ) {
         self.label = label
         self.indent = indent
+        self.usesViewThatFits = usesViewThatFits
         self.content = content()
     }
 
@@ -33,11 +46,18 @@ struct AttributeRow<Content: View>: View {
             // also what stops fixed-size pills from inflating the entry. The
             // maxWidth:.infinity frame claims the leftover horizontal space and
             // right-pushes the content, mirroring the prior Spacer-pushed look.
-            ViewThatFits(in: .horizontal) {
+            if usesViewThatFits {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: GvSpacing.lg) { content }
+                    VStack(alignment: .trailing, spacing: GvSpacing.lg) { content }
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            } else {
+                // No re-measuring wrapper: the content (a full-width text field)
+                // always fits, and ViewThatFits' re-eval on growth re-makes it.
                 HStack(spacing: GvSpacing.lg) { content }
-                VStack(alignment: .trailing, spacing: GvSpacing.lg) { content }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(minHeight: GvSpacing.minAttributeHeight)
     }
