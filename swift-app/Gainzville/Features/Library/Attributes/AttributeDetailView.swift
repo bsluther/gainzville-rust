@@ -94,6 +94,8 @@ struct AttributeDetailView: View {
             NumericConfigEditor(config: cfg) { vm.apply(.numeric(.setDefault($0))) }
         case .select(let cfg):
             SelectConfigEditor(config: cfg) { vm.apply(.select(.setDefault($0))) }
+        case .multiselect(let cfg):
+            MultiselectConfigEditor(config: cfg)
         case .mass(let cfg):
             MassConfigEditor(config: cfg) { vm.apply(.mass(.setDefaultUnit($0))) }
         case .length(let cfg):
@@ -269,6 +271,35 @@ private struct SelectConfigEditor: View {
                     .foregroundStyle(Color.entryTextSecondary)
             }
         }
+    }
+}
+
+// Read-only in this phase: multiselect config editing (default, options) is
+// deferred, so there is no change action to wire up. Mirrors the select
+// editor's layout without the interactive default picker.
+private struct MultiselectConfigEditor: View {
+    let config: MultiselectConfig
+
+    var body: some View {
+        VStack(spacing: GvSpacing.xl) {
+            ConfigRow(label: "Default") {
+                Text(defaultLabel)
+                    .font(.gvBody)
+                    .foregroundStyle(Color.gvTextPrimary)
+                    .multilineTextAlignment(.trailing)
+            }
+            ConfigRow(label: "Options") {
+                Text(config.options.isEmpty ? "None" : config.options.joined(separator: ", "))
+                    .font(.gvBody)
+                    .foregroundStyle(Color.gvTextPrimary)
+                    .multilineTextAlignment(.trailing)
+            }
+        }
+    }
+
+    private var defaultLabel: String {
+        guard let selected = config.default, !selected.isEmpty else { return "None" }
+        return selected.joined(separator: ", ")
     }
 }
 
@@ -486,11 +517,12 @@ private struct TextDefaultField: View {
 private extension AttributeConfig {
     var typeName: String {
         switch self {
-        case .numeric:  return "Numeric"
-        case .select:   return "Select"
-        case .mass:     return "Mass"
-        case .length:   return "Length"
-        case .text:     return "Text"
+        case .numeric:     return "Numeric"
+        case .select:      return "Select"
+        case .multiselect: return "Multiselect"
+        case .mass:        return "Mass"
+        case .length:      return "Length"
+        case .text:        return "Text"
         }
     }
 }

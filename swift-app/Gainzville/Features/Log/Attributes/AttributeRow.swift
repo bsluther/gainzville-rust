@@ -147,21 +147,23 @@ let gvEmptyPillText = "\u{00a0}\u{00a0}\u{00a0}\u{00a0}\u{00a0}"
 extension AttributePair: Identifiable {
     public var id: String {
         switch self {
-        case .numeric(let p): return p.attrId
-        case .select(let p):  return p.attrId
-        case .mass(let p):    return p.attrId
-        case .length(let p):  return p.attrId
-        case .text(let p):    return p.attrId
+        case .numeric(let p):     return p.attrId
+        case .select(let p):      return p.attrId
+        case .multiselect(let p): return p.attrId
+        case .mass(let p):        return p.attrId
+        case .length(let p):      return p.attrId
+        case .text(let p):        return p.attrId
         }
     }
 
     public var name: String {
         switch self {
-        case .numeric(let p): return p.name
-        case .select(let p):  return p.name
-        case .mass(let p):    return p.name
-        case .length(let p):  return p.name
-        case .text(let p):    return p.name
+        case .numeric(let p):     return p.name
+        case .select(let p):      return p.name
+        case .multiselect(let p): return p.name
+        case .mass(let p):        return p.name
+        case .length(let p):      return p.name
+        case .text(let p):        return p.name
         }
     }
 }

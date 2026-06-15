@@ -70,10 +70,18 @@ impl Attribute {
         }
     }
 
-    /// The scalar config default mapped to an `AttributeValue`, if this type has
-    /// one. Numeric and Select carry a scalar default; Mass and Length have
-    /// only `default_unit` and return `None` here (use `seed_value` to build a
-    /// measurement seed from the unit).
+    pub fn expect_multiselect(&self) -> Result<&MultiselectConfig> {
+        match &self.config {
+            AttributeConfig::Multiselect(c) => Ok(c),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
+        }
+    }
+
+    /// The config default mapped to an `AttributeValue`, if this type has one.
+    /// Numeric, Select, Text, and Multiselect carry a default; Mass and Length
+    /// have only `default_unit` and return `None` here (use `seed_value` to
+    /// build a measurement seed from the unit). An empty multiselect default is
+    /// treated as no default — multiselect never seeds a present-but-empty set.
     pub fn default_value(&self) -> Option<AttributeValue> {
         match &self.config {
             AttributeConfig::Numeric(c) => c
@@ -86,6 +94,13 @@ impl Attribute {
             AttributeConfig::Mass(_) => None,
             AttributeConfig::Length(_) => None,
             AttributeConfig::Text(c) => c.default.clone().map(AttributeValue::Text),
+            // An empty default is treated as no default: multiselect stores an
+            // empty selection as `None` (the cleared state), never `Some([])`.
+            AttributeConfig::Multiselect(c) => c
+                .default
+                .clone()
+                .filter(|d| !d.is_empty())
+                .map(AttributeValue::Multiselect),
         }
     }
 
@@ -102,6 +117,9 @@ impl Attribute {
             (AttributeConfig::Mass(c), AttributeValue::Mass(v)) => c.validate_value(v),
             (AttributeConfig::Length(c), AttributeValue::Length(v)) => c.validate_value(v),
             (AttributeConfig::Text(c), AttributeValue::Text(v)) => c.validate_value(v),
+            (AttributeConfig::Multiselect(c), AttributeValue::Multiselect(v)) => {
+                c.validate_value(v)
+            }
             _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
@@ -143,6 +161,7 @@ impl Attribute {
 pub enum AttributeConfig {
     Numeric(NumericConfig),
     Select(SelectConfig),
+    Multiselect(MultiselectConfig),
     Mass(MassConfig),
     Length(LengthConfig),
     Text(TextConfig),
@@ -156,6 +175,11 @@ impl From<NumericConfig> for AttributeConfig {
 impl From<SelectConfig> for AttributeConfig {
     fn from(value: SelectConfig) -> Self {
         AttributeConfig::Select(value)
+    }
+}
+impl From<MultiselectConfig> for AttributeConfig {
+    fn from(value: MultiselectConfig) -> Self {
+        AttributeConfig::Multiselect(value)
     }
 }
 impl From<MassConfig> for AttributeConfig {
@@ -183,6 +207,7 @@ impl AttributeConfig {
         match self {
             AttributeConfig::Numeric(c) => c.validate(),
             AttributeConfig::Select(c) => c.validate(),
+            AttributeConfig::Multiselect(c) => c.validate(),
             // Mass and Length have no cross-field coherence to check: any
             // single `default_unit` is valid.
             AttributeConfig::Mass(_) => Ok(()),
@@ -195,6 +220,7 @@ impl AttributeConfig {
         match self {
             AttributeConfig::Numeric(_) => "Numeric",
             AttributeConfig::Select(_) => "Select",
+            AttributeConfig::Multiselect(_) => "Multiselect",
             AttributeConfig::Mass(_) => "Mass",
             AttributeConfig::Length(_) => "Length",
             AttributeConfig::Text(_) => "Text",
@@ -403,6 +429,74 @@ impl SelectConfig {
                 Ok(())
             }
         }
+    }
+}
+
+/// Hard cap on the length of a multiselect option string (Unicode scalar
+/// count). A GV-level constraint, not user-authored: the user picks the option
+/// text but never a length bound (unlike a numeric attribute's min/max). Options
+/// are short labels, so the cap is conservative.
+pub const MAX_MULTISELECT_OPTION_LEN: usize = 40;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MultiselectConfig {
+    /// The options a value may select from, in display order. Additive-only
+    /// (options are never removed), so any value selecting a member stays valid.
+    /// Unlike a select, the order is purely a display affordance — there is no
+    /// `ordered` flag because a multiselect has no range/comparison semantics.
+    pub options: Vec<String>,
+    /// The set selected by default when the attribute is attached, if any — a
+    /// subset of `options`. A bare `Vec<String>` like a value (no exact/range
+    /// axis): a multiselect value *is* the chosen set.
+    pub default: Option<Vec<String>>,
+}
+
+impl MultiselectConfig {
+    /// Validate the config itself: options must be unique (duplicates make the
+    /// option order ambiguous) and within the length cap; the default, when
+    /// present, must be a valid value. An empty options list is allowed —
+    /// options are added incrementally when authoring.
+    pub fn validate(&self) -> Result<()> {
+        for (i, option) in self.options.iter().enumerate() {
+            if option.chars().count() > MAX_MULTISELECT_OPTION_LEN {
+                return Err(ValidationError::InvalidMultiselectConfig(format!(
+                    "option '{option}' is over the {MAX_MULTISELECT_OPTION_LEN}-character limit"
+                ))
+                .into());
+            }
+            if self.options[..i].contains(option) {
+                return Err(ValidationError::InvalidMultiselectConfig(format!(
+                    "duplicate option '{option}'"
+                ))
+                .into());
+            }
+        }
+        if let Some(d) = &self.default {
+            self.validate_value(d)?;
+        }
+        Ok(())
+    }
+
+    /// Validate a multiselect value against this config: every selected option
+    /// must be a member of `options`, with no option selected twice. The value
+    /// is a set — its order carries no meaning (display order comes from
+    /// `options`), so order is not checked, only membership and uniqueness.
+    pub fn validate_value(&self, value: &[String]) -> Result<()> {
+        for (i, selected) in value.iter().enumerate() {
+            if !self.options.contains(selected) {
+                return Err(ValidationError::InvalidValue(format!(
+                    "'{selected}' is not one of the multiselect options"
+                ))
+                .into());
+            }
+            if value[..i].contains(selected) {
+                return Err(ValidationError::InvalidValue(format!(
+                    "'{selected}' is selected more than once"
+                ))
+                .into());
+            }
+        }
+        Ok(())
     }
 }
 
@@ -631,6 +725,10 @@ impl Value {
 pub enum AttributeValue {
     Numeric(NumericValue),
     Select(SelectValue),
+    // The set of chosen options. Like `Text`, it has no exact/range axis, so it
+    // carries a bare collection rather than a wrapping `*Value` enum. Order is a
+    // display affordance taken from the config's option order, not data.
+    Multiselect(Vec<String>),
     Mass(MassValue),
     Length(LengthValue),
     // Free text has no exact/range axis, so it carries a bare `String` rather
@@ -670,6 +768,13 @@ impl AttributeValue {
     pub fn expect_text(self) -> Result<String> {
         match self {
             AttributeValue::Text(s) => Ok(s),
+            _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
+        }
+    }
+
+    pub fn expect_multiselect(self) -> Result<Vec<String>> {
+        match self {
+            AttributeValue::Multiselect(v) => Ok(v),
             _ => Err(DomainError::Rejected(RejectReason::AttributeMismatch)),
         }
     }
@@ -928,6 +1033,51 @@ mod tests {
     }
 
     #[test]
+    fn multiselect_validation() {
+        let cfg = MultiselectConfig {
+            options: vec![
+                "Lead".to_string(),
+                "Top-rope".to_string(),
+                "Trad".to_string(),
+            ],
+            default: None,
+        };
+        // Any subset of the options — including empty — is a valid value; the
+        // value's order is free (it's a set).
+        assert!(cfg.validate_value(&[]).is_ok());
+        assert!(cfg.validate_value(&["Lead".to_string()]).is_ok());
+        assert!(
+            cfg.validate_value(&["Trad".to_string(), "Lead".to_string()])
+                .is_ok()
+        );
+        // A non-member is rejected.
+        assert!(rejected_validation(
+            &cfg.validate_value(&["Boulder".to_string()])
+        ));
+        // The same option selected twice is rejected (the value is a set).
+        assert!(rejected_validation(
+            &cfg.validate_value(&["Lead".to_string(), "Lead".to_string()])
+        ));
+    }
+
+    #[test]
+    fn multiselect_empty_default_is_no_default() {
+        let a = |default| {
+            attr(MultiselectConfig {
+                options: vec!["a".to_string(), "b".to_string()],
+                default,
+            })
+        };
+        // An empty default seeds nothing — multiselect never stores Some([]).
+        assert_eq!(a(Some(vec![])).default_value(), None);
+        assert_eq!(a(None).default_value(), None);
+        assert_eq!(
+            a(Some(vec!["a".to_string()])).default_value(),
+            Some(AttributeValue::Multiselect(vec!["a".to_string()]))
+        );
+    }
+
+    #[test]
     fn config_validation() {
         // Numeric: unordered bounds, out-of-bounds default, non-integer bound.
         assert!(NumericConfig::new(Some(10.0), Some(0.0), false, None).is_err());
@@ -950,6 +1100,27 @@ mod tests {
         assert!(select(&["a", "b"], Some("c")).validate().is_err());
         assert!(select(&[], None).validate().is_ok());
         assert!(select(&["a", "b"], Some("b")).validate().is_ok());
+
+        // Multiselect: duplicate options, non-member default; empty options and
+        // an empty default both allowed; default order is free.
+        let multiselect = |options: &[&str], default: Option<&[&str]>| MultiselectConfig {
+            options: options.iter().map(|s| s.to_string()).collect(),
+            default: default.map(|d| d.iter().map(|s| s.to_string()).collect()),
+        };
+        assert!(multiselect(&["a", "b", "a"], None).validate().is_err());
+        assert!(multiselect(&["a", "b"], Some(&["c"])).validate().is_err());
+        assert!(multiselect(&[], None).validate().is_ok());
+        assert!(multiselect(&["a", "b"], Some(&["b", "a"])).validate().is_ok());
+        assert!(multiselect(&["a", "b"], Some(&[])).validate().is_ok());
+        // An option over the length cap is rejected.
+        assert!(
+            MultiselectConfig {
+                options: vec!["x".repeat(MAX_MULTISELECT_OPTION_LEN + 1)],
+                default: None,
+            }
+            .validate()
+            .is_err()
+        );
     }
 
     #[test]

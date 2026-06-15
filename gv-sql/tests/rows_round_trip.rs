@@ -14,7 +14,7 @@ use gv_core::{
         attribute::{
             Attribute, AttributeConfig, AttributeValue, LengthConfig, LengthMeasurement,
             LengthUnit, LengthValue, MassConfig, MassMeasurement, MassUnit, MassValue,
-            NumericConfig, NumericValue, TextConfig, Value,
+            MultiselectConfig, NumericConfig, NumericValue, TextConfig, Value,
         },
         entry::{Entry, Position, Temporal},
     },
@@ -233,6 +233,46 @@ fn attribute_round_trips_text() {
     let row = AttributeRow::from_attribute(&attr).unwrap();
     let got = row.to_attribute().unwrap();
     assert_eq!(got, attr);
+}
+
+#[test]
+fn attribute_round_trips_multiselect() {
+    let attr = Attribute {
+        id: Uuid::new_v4(),
+        owner_id: SYSTEM_ACTOR_ID,
+        name: "Climb Tag".to_string(),
+        description: None,
+        config: AttributeConfig::Multiselect(MultiselectConfig {
+            options: vec![
+                "lead".to_string(),
+                "top-rope".to_string(),
+                "trad".to_string(),
+            ],
+            default: Some(vec!["lead".to_string()]),
+        }),
+    };
+    let row = AttributeRow::from_attribute(&attr).unwrap();
+    let got = row.to_attribute().unwrap();
+    assert_eq!(got, attr);
+}
+
+#[test]
+fn value_round_trips_multiselect() {
+    let value = Value {
+        entry_id: Uuid::new_v4(),
+        attribute_id: Uuid::new_v4(),
+        index_float: None,
+        index_string: None,
+        // An empty set is distinct from no value (None).
+        plan: Some(AttributeValue::Multiselect(vec![])),
+        actual: Some(AttributeValue::Multiselect(vec![
+            "trad".to_string(),
+            "crack".to_string(),
+        ])),
+    };
+    let row = ValueRow::from_value(&value).unwrap();
+    let got = row.to_value().unwrap();
+    assert_eq!(got, value);
 }
 
 #[test]

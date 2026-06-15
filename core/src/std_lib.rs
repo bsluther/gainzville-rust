@@ -7,7 +7,8 @@ use crate::{
         activity::{Activity, ActivityName},
         attribute::{
             Attribute, AttributeValue, LengthConfig, LengthUnit, MassConfig, MassMeasurement,
-            MassUnit, MassValue, NumericConfig, NumericValue, SelectConfig, TextConfig, Value,
+            MassUnit, MassValue, MultiselectConfig, NumericConfig, NumericValue, SelectConfig,
+            TextConfig, Value,
         },
         entry::{Entry, Position, Temporal},
     },
@@ -37,6 +38,7 @@ const HOLD_SIZE_ID: Uuid = uuid!("00000000-0000-4000-8000-000000000008");
 const DISTANCE_ID: Uuid = uuid!("00000000-0000-4000-8000-000000000009");
 const NOTES_ID: Uuid = uuid!("00000000-0000-4000-8000-00000000000a");
 const LOCATION_ID: Uuid = uuid!("00000000-0000-4000-8000-00000000000b");
+const CLIMB_TAG_ID: Uuid = uuid!("00000000-0000-4000-8000-00000000000c");
 
 /// Stable ids for one std-lib activity: its own id plus the ids of its template
 /// entries. Grouping keeps each activity's ids together and lets call sites read
@@ -312,9 +314,36 @@ impl StandardLibrary {
             .into(),
         };
 
+        let climb_tag = Attribute {
+            id: CLIMB_TAG_ID,
+            owner_id: DEFAULT_USER_ID,
+            name: "Climb Tag".to_string(),
+            description: Some(
+                "Free-form tags describing a climb — how it was done, the wall, or the style."
+                    .to_string(),
+            ),
+            config: MultiselectConfig {
+                options: vec![
+                    "warm up".to_string(),
+                    "repeat".to_string(),
+                    "working".to_string(),
+                    "with downclimb".to_string(),
+                    "traverse".to_string(),
+                    "moon board".to_string(),
+                    "tension board".to_string(),
+                    "lead".to_string(),
+                    "top-rope".to_string(),
+                    "trad".to_string(),
+                    "crack".to_string(),
+                ],
+                default: None,
+            }
+            .into(),
+        };
+
         vec![
             reps, load, outcome, yds_grade, rpe, v_grade, grip_type, hold_size, distance, notes,
-            location,
+            location, climb_tag,
         ]
     }
 
@@ -330,13 +359,13 @@ impl StandardLibrary {
                 &BOULDER,
                 "Boulder",
                 "A rock or gym climb performed without a rope, usually 10-20 feet tall.",
-                &[V_GRADE_ID, OUTCOME_ID],
+                &[V_GRADE_ID, OUTCOME_ID, CLIMB_TAG_ID],
             ),
             scalar_activity(
                 &SPORT_CLIMB,
                 "Sport Climb",
                 "A rock or gym climb equipped with bolts, usually 30-200 feet tall.",
-                &[YDS_GRADE_ID, OUTCOME_ID],
+                &[YDS_GRADE_ID, OUTCOME_ID, CLIMB_TAG_ID],
             ),
             scalar_activity(
                 &BENCH_PRESS,

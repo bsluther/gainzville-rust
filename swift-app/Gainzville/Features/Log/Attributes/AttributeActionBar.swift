@@ -142,6 +142,16 @@ extension Array where Element == AttributeBarAction {
             + [.remove(remove)]
     }
 
+    // A keyboard-less picker like select, but never has a Range toggle — a
+    // multiselect value is an unordered set. Clear (when there's a selection)
+    // + Remove.
+    static func multiselect(
+        clear: (() -> Void)?,
+        remove: @escaping () -> Void
+    ) -> Self {
+        (clear.map { [.clear($0)] } ?? []) + [.remove(remove)]
+    }
+
     static func temporal(clear: (() -> Void)?) -> Self {
         clear.map { [.clear($0)] } ?? []
     }

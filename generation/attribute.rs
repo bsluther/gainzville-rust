@@ -1,8 +1,9 @@
 use gv_core::models::{
     attribute::{
         Attribute, AttributeConfig, AttributeValue, LengthConfig, LengthMeasurement, LengthUnit,
-        LengthValue, MassConfig, MassMeasurement, MassUnit, MassValue, NumericConfig, NumericValue,
-        SelectConfig, SelectValue, TextConfig, Value,
+        LengthValue, MAX_MULTISELECT_OPTION_LEN, MassConfig, MassMeasurement, MassUnit, MassValue,
+        MultiselectConfig, NumericConfig, NumericValue, SelectConfig, SelectValue, TextConfig,
+        Value,
     },
     entry::Entry,
 };
@@ -33,11 +34,12 @@ impl Arbitrary for Attribute {
 
 impl Arbitrary for AttributeConfig {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
-        match rng.random_range(0..=4) {
+        match rng.random_range(0..=5) {
             0 => AttributeConfig::Numeric(NumericConfig::arbitrary(rng, context)),
             1 => AttributeConfig::Select(SelectConfig::arbitrary(rng, context)),
-            2 => AttributeConfig::Mass(MassConfig::arbitrary(rng, context)),
-            3 => AttributeConfig::Length(LengthConfig::arbitrary(rng, context)),
+            2 => AttributeConfig::Multiselect(MultiselectConfig::arbitrary(rng, context)),
+            3 => AttributeConfig::Mass(MassConfig::arbitrary(rng, context)),
+            4 => AttributeConfig::Length(LengthConfig::arbitrary(rng, context)),
             _ => AttributeConfig::Text(TextConfig::arbitrary(rng, context)),
         }
     }
@@ -95,6 +97,33 @@ impl Arbitrary for SelectConfig {
             ordered,
             default,
         }
+    }
+}
+
+impl Arbitrary for MultiselectConfig {
+    fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
+        let n = rng.random_range(0..=8);
+        // Dedupe and cap length: short random text can collide, and the config
+        // rejects duplicate or over-long options. An empty option list is valid.
+        let mut options: Vec<String> = Vec::with_capacity(n);
+        for _ in 0..n {
+            let option = gen_random_text(rng, 1..3);
+            if option.chars().count() <= MAX_MULTISELECT_OPTION_LEN && !options.contains(&option) {
+                options.push(option);
+            }
+        }
+        // A default is a random subset of the options, kept in option order so
+        // it validates (membership + no duplicates). An empty subset collapses
+        // to `None` — an empty default is treated as no default.
+        let default = maybe(rng, 0.5, |rng| {
+            options
+                .iter()
+                .filter(|_| rng.random_bool(0.5))
+                .cloned()
+                .collect::<Vec<String>>()
+        })
+        .filter(|d: &Vec<String>| !d.is_empty());
+        MultiselectConfig { options, default }
     }
 }
 
@@ -206,6 +235,16 @@ impl ArbitraryFrom<&AttributeConfig> for AttributeValue {
             AttributeConfig::Select(c) => {
                 AttributeValue::Select(SelectValue::arbitrary_from(rng, context, c))
             }
+            // A multiselect value is a random subset of the options, kept in
+            // option order so it validates (membership + no duplicates). The
+            // value carries no `*Value` type, so build the `Vec<String>` here.
+            AttributeConfig::Multiselect(c) => AttributeValue::Multiselect(
+                c.options
+                    .iter()
+                    .filter(|_| rng.random_bool(0.5))
+                    .cloned()
+                    .collect(),
+            ),
             AttributeConfig::Mass(c) => {
                 AttributeValue::Mass(MassValue::arbitrary_from(rng, context, c))
             }

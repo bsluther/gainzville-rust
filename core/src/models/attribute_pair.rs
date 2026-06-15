@@ -4,7 +4,8 @@ use crate::{
     error::DomainError,
     models::attribute::{
         Attribute, AttributeConfig, LengthConfig, LengthUnit, LengthValue, MassConfig, MassUnit,
-        MassValue, NumericConfig, NumericValue, SelectConfig, SelectValue, TextConfig, Value,
+        MassValue, MultiselectConfig, NumericConfig, NumericValue, SelectConfig, SelectValue,
+        TextConfig, Value,
     },
 };
 
@@ -12,6 +13,7 @@ use crate::{
 pub enum AttributePair {
     Numeric(NumericAttributePair),
     Select(SelectAttributePair),
+    Multiselect(MultiselectAttributePair),
     Mass(MassAttributePair),
     Length(LengthAttributePair),
     Text(TextAttributePair),
@@ -22,6 +24,7 @@ impl AttributePair {
         match self {
             AttributePair::Numeric(p) => p.attr_id,
             AttributePair::Select(p) => p.attr_id,
+            AttributePair::Multiselect(p) => p.attr_id,
             AttributePair::Mass(p) => p.attr_id,
             AttributePair::Length(p) => p.attr_id,
             AttributePair::Text(p) => p.attr_id,
@@ -32,6 +35,7 @@ impl AttributePair {
         match self {
             AttributePair::Numeric(p) => p.name.clone(),
             AttributePair::Select(p) => p.name.clone(),
+            AttributePair::Multiselect(p) => p.name.clone(),
             AttributePair::Mass(p) => p.name.clone(),
             AttributePair::Length(p) => p.name.clone(),
             AttributePair::Text(p) => p.name.clone(),
@@ -61,6 +65,20 @@ impl TryFrom<(Attribute, Value)> for AttributePair {
                 let plan = plan.map(|v| v.expect_select()).transpose()?;
                 let actual = actual.map(|v| v.expect_select()).transpose()?;
                 Ok(AttributePair::Select(SelectAttributePair {
+                    attr_id: attr.id,
+                    entry_id: val.entry_id,
+                    owner_id: attr.owner_id,
+                    name: attr.name,
+                    config: cfg,
+                    index_string: val.index_string,
+                    plan,
+                    actual,
+                }))
+            }
+            (AttributeConfig::Multiselect(cfg), plan, actual) => {
+                let plan = plan.map(|v| v.expect_multiselect()).transpose()?;
+                let actual = actual.map(|v| v.expect_multiselect()).transpose()?;
+                Ok(AttributePair::Multiselect(MultiselectAttributePair {
                     attr_id: attr.id,
                     entry_id: val.entry_id,
                     owner_id: attr.owner_id,
@@ -139,6 +157,20 @@ pub struct SelectAttributePair {
     pub index_string: Option<String>,
     pub plan: Option<SelectValue>,
     pub actual: Option<SelectValue>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MultiselectAttributePair {
+    pub attr_id: Uuid,
+    pub entry_id: Uuid,
+    pub owner_id: Uuid,
+    pub name: String,
+    pub config: MultiselectConfig,
+    pub index_string: Option<String>,
+    // A multiselect value is the bare set of chosen options (no exact/range
+    // axis), so plan/actual are `Option<Vec<String>>` directly.
+    pub plan: Option<Vec<String>>,
+    pub actual: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

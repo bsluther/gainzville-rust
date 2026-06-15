@@ -351,6 +351,14 @@ impl Arbitrary for UpdateAttribute {
                     };
                     AttributeChange::Select(SelectChange::SetDefault(default))
                 }
+                AttributeConfig::Multiselect(_) => {
+                    // No type-specific config edit exists for multiselect yet
+                    // (config editing is deferred), so fall back to a common
+                    // edit the mutator always accepts.
+                    AttributeChange::SetDescription(maybe(rng, 0.5, |rng| {
+                        gen_random_text(rng, 2..6)
+                    }))
+                }
                 AttributeConfig::Mass(_) => {
                     let all = [MassUnit::Gram, MassUnit::Kilogram, MassUnit::Pound];
                     let unit = pick(&all[..], rng).unwrap().clone();

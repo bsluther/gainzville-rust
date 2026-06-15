@@ -39,11 +39,12 @@ struct AttributesListView: View {
 private extension AttributeConfig {
     var typeName: String {
         switch self {
-        case .numeric:  return "Numeric"
-        case .select:   return "Select"
-        case .mass:     return "Mass"
-        case .length:   return "Length"
-        case .text:     return "Text"
+        case .numeric:     return "Numeric"
+        case .select:      return "Select"
+        case .multiselect: return "Multiselect"
+        case .mass:        return "Mass"
+        case .length:      return "Length"
+        case .text:        return "Text"
         }
     }
 }

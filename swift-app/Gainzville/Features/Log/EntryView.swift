@@ -634,11 +634,12 @@ private struct AttributesSection: View {
             VStack(alignment: .leading, spacing: GvSpacing.lg) {
                 ForEach(sorted) { pair in
                     switch pair {
-                    case .numeric(let p): NumericAttribute(entry: entry, pair: p)
-                    case .select(let p):  SelectAttribute(entry: entry, pair: p)
-                    case .mass(let p):    MassAttribute(entry: entry, pair: p)
-                    case .length(let p):  LengthAttribute(entry: entry, pair: p)
-                    case .text(let p):    TextAttribute(entry: entry, pair: p)
+                    case .numeric(let p):     NumericAttribute(entry: entry, pair: p)
+                    case .select(let p):      SelectAttribute(entry: entry, pair: p)
+                    case .multiselect(let p): MultiselectAttribute(entry: entry, pair: p)
+                    case .mass(let p):        MassAttribute(entry: entry, pair: p)
+                    case .length(let p):      LengthAttribute(entry: entry, pair: p)
+                    case .text(let p):        TextAttribute(entry: entry, pair: p)
                     }
                 }
             }

@@ -3674,6 +3674,138 @@ public func FfiConverterTypeMoveEntry_lower(_ value: MoveEntry) -> RustBuffer {
 }
 
 
+public struct MultiselectAttributePair: Equatable, Hashable {
+    public var attrId: Uuid
+    public var entryId: Uuid
+    public var ownerId: Uuid
+    public var name: String
+    public var config: MultiselectConfig
+    public var indexString: String?
+    public var plan: [String]?
+    public var actual: [String]?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(attrId: Uuid, entryId: Uuid, ownerId: Uuid, name: String, config: MultiselectConfig, indexString: String?, plan: [String]?, actual: [String]?) {
+        self.attrId = attrId
+        self.entryId = entryId
+        self.ownerId = ownerId
+        self.name = name
+        self.config = config
+        self.indexString = indexString
+        self.plan = plan
+        self.actual = actual
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension MultiselectAttributePair: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultiselectAttributePair: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultiselectAttributePair {
+        return
+            try MultiselectAttributePair(
+                attrId: FfiConverterTypeUuid.read(from: &buf), 
+                entryId: FfiConverterTypeUuid.read(from: &buf), 
+                ownerId: FfiConverterTypeUuid.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                config: FfiConverterTypeMultiselectConfig.read(from: &buf), 
+                indexString: FfiConverterOptionString.read(from: &buf), 
+                plan: FfiConverterOptionSequenceString.read(from: &buf), 
+                actual: FfiConverterOptionSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MultiselectAttributePair, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.attrId, into: &buf)
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+        FfiConverterTypeUuid.write(value.ownerId, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterTypeMultiselectConfig.write(value.config, into: &buf)
+        FfiConverterOptionString.write(value.indexString, into: &buf)
+        FfiConverterOptionSequenceString.write(value.plan, into: &buf)
+        FfiConverterOptionSequenceString.write(value.actual, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultiselectAttributePair_lift(_ buf: RustBuffer) throws -> MultiselectAttributePair {
+    return try FfiConverterTypeMultiselectAttributePair.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultiselectAttributePair_lower(_ value: MultiselectAttributePair) -> RustBuffer {
+    return FfiConverterTypeMultiselectAttributePair.lower(value)
+}
+
+
+public struct MultiselectConfig: Equatable, Hashable {
+    public var options: [String]
+    public var `default`: [String]?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(options: [String], `default`: [String]?) {
+        self.options = options
+        self.`default` = `default`
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension MultiselectConfig: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultiselectConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultiselectConfig {
+        return
+            try MultiselectConfig(
+                options: FfiConverterSequenceString.read(from: &buf), 
+                default: FfiConverterOptionSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MultiselectConfig, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.options, into: &buf)
+        FfiConverterOptionSequenceString.write(value.`default`, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultiselectConfig_lift(_ buf: RustBuffer) throws -> MultiselectConfig {
+    return try FfiConverterTypeMultiselectConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultiselectConfig_lower(_ value: MultiselectConfig) -> RustBuffer {
+    return FfiConverterTypeMultiselectConfig.lower(value)
+}
+
+
 public struct NumericAttributePair: Equatable, Hashable {
     public var attrId: Uuid
     public var entryId: Uuid
@@ -5374,6 +5506,8 @@ public enum AttributeConfig: Equatable, Hashable {
     )
     case select(SelectConfig
     )
+    case multiselect(MultiselectConfig
+    )
     case mass(MassConfig
     )
     case length(LengthConfig
@@ -5407,13 +5541,16 @@ public struct FfiConverterTypeAttributeConfig: FfiConverterRustBuffer {
         case 2: return .select(try FfiConverterTypeSelectConfig.read(from: &buf)
         )
         
-        case 3: return .mass(try FfiConverterTypeMassConfig.read(from: &buf)
+        case 3: return .multiselect(try FfiConverterTypeMultiselectConfig.read(from: &buf)
         )
         
-        case 4: return .length(try FfiConverterTypeLengthConfig.read(from: &buf)
+        case 4: return .mass(try FfiConverterTypeMassConfig.read(from: &buf)
         )
         
-        case 5: return .text(try FfiConverterTypeTextConfig.read(from: &buf)
+        case 5: return .length(try FfiConverterTypeLengthConfig.read(from: &buf)
+        )
+        
+        case 6: return .text(try FfiConverterTypeTextConfig.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5434,18 +5571,23 @@ public struct FfiConverterTypeAttributeConfig: FfiConverterRustBuffer {
             FfiConverterTypeSelectConfig.write(v1, into: &buf)
             
         
-        case let .mass(v1):
+        case let .multiselect(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeMultiselectConfig.write(v1, into: &buf)
+            
+        
+        case let .mass(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterTypeMassConfig.write(v1, into: &buf)
             
         
         case let .length(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeLengthConfig.write(v1, into: &buf)
             
         
         case let .text(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeTextConfig.write(v1, into: &buf)
             
         }
@@ -5476,6 +5618,8 @@ public enum AttributePair: Equatable, Hashable {
     case numeric(NumericAttributePair
     )
     case select(SelectAttributePair
+    )
+    case multiselect(MultiselectAttributePair
     )
     case mass(MassAttributePair
     )
@@ -5510,13 +5654,16 @@ public struct FfiConverterTypeAttributePair: FfiConverterRustBuffer {
         case 2: return .select(try FfiConverterTypeSelectAttributePair.read(from: &buf)
         )
         
-        case 3: return .mass(try FfiConverterTypeMassAttributePair.read(from: &buf)
+        case 3: return .multiselect(try FfiConverterTypeMultiselectAttributePair.read(from: &buf)
         )
         
-        case 4: return .length(try FfiConverterTypeLengthAttributePair.read(from: &buf)
+        case 4: return .mass(try FfiConverterTypeMassAttributePair.read(from: &buf)
         )
         
-        case 5: return .text(try FfiConverterTypeTextAttributePair.read(from: &buf)
+        case 5: return .length(try FfiConverterTypeLengthAttributePair.read(from: &buf)
+        )
+        
+        case 6: return .text(try FfiConverterTypeTextAttributePair.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5537,18 +5684,23 @@ public struct FfiConverterTypeAttributePair: FfiConverterRustBuffer {
             FfiConverterTypeSelectAttributePair.write(v1, into: &buf)
             
         
-        case let .mass(v1):
+        case let .multiselect(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeMultiselectAttributePair.write(v1, into: &buf)
+            
+        
+        case let .mass(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterTypeMassAttributePair.write(v1, into: &buf)
             
         
         case let .length(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeLengthAttributePair.write(v1, into: &buf)
             
         
         case let .text(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeTextAttributePair.write(v1, into: &buf)
             
         }
@@ -5579,6 +5731,8 @@ public enum AttributeValue: Equatable, Hashable {
     case numeric(NumericValue
     )
     case select(SelectValue
+    )
+    case multiselect([String]
     )
     case mass(MassValue
     )
@@ -5613,13 +5767,16 @@ public struct FfiConverterTypeAttributeValue: FfiConverterRustBuffer {
         case 2: return .select(try FfiConverterTypeSelectValue.read(from: &buf)
         )
         
-        case 3: return .mass(try FfiConverterTypeMassValue.read(from: &buf)
+        case 3: return .multiselect(try FfiConverterSequenceString.read(from: &buf)
         )
         
-        case 4: return .length(try FfiConverterTypeLengthValue.read(from: &buf)
+        case 4: return .mass(try FfiConverterTypeMassValue.read(from: &buf)
         )
         
-        case 5: return .text(try FfiConverterString.read(from: &buf)
+        case 5: return .length(try FfiConverterTypeLengthValue.read(from: &buf)
+        )
+        
+        case 6: return .text(try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5640,18 +5797,23 @@ public struct FfiConverterTypeAttributeValue: FfiConverterRustBuffer {
             FfiConverterTypeSelectValue.write(v1, into: &buf)
             
         
-        case let .mass(v1):
+        case let .multiselect(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterSequenceString.write(v1, into: &buf)
+            
+        
+        case let .mass(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterTypeMassValue.write(v1, into: &buf)
             
         
         case let .length(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeLengthValue.write(v1, into: &buf)
             
         
         case let .text(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -7172,6 +7334,30 @@ fileprivate struct FfiConverterOptionTypeSelectValue: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeSelectValue.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceString.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

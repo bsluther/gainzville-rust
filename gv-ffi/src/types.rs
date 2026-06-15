@@ -13,11 +13,12 @@ use gv_core::{
         attribute::{
             Attribute, AttributeConfig, AttributeValue, LengthConfig, LengthMeasurement,
             LengthUnit, LengthValue, MassConfig, MassMeasurement, MassUnit, MassValue,
-            NumericConfig, NumericValue, SelectConfig, SelectValue, TextConfig, Value,
+            MultiselectConfig, NumericConfig, NumericValue, SelectConfig, SelectValue, TextConfig,
+            Value,
         },
         attribute_pair::{
-            AttributePair, LengthAttributePair, MassAttributePair, NumericAttributePair,
-            SelectAttributePair, TextAttributePair,
+            AttributePair, LengthAttributePair, MassAttributePair, MultiselectAttributePair,
+            NumericAttributePair, SelectAttributePair, TextAttributePair,
         },
         entry::{Entry, Position, Temporal},
         entry_join::EntryJoin,
@@ -185,6 +186,12 @@ pub struct SelectConfig {
     pub default: Option<String>,
 }
 
+#[uniffi::remote(Record)]
+pub struct MultiselectConfig {
+    pub options: Vec<String>,
+    pub default: Option<Vec<String>>,
+}
+
 #[uniffi::remote(Enum)]
 pub enum MassUnit {
     Gram,
@@ -224,6 +231,7 @@ pub struct TextConfig {
 pub enum AttributeConfig {
     Numeric(NumericConfig),
     Select(SelectConfig),
+    Multiselect(MultiselectConfig),
     Mass(MassConfig),
     Length(LengthConfig),
     Text(TextConfig),
@@ -301,6 +309,7 @@ pub fn length_value_converted_to(value: LengthValue, unit: LengthUnit) -> Length
 pub enum AttributeValue {
     Numeric(NumericValue),
     Select(SelectValue),
+    Multiselect(Vec<String>),
     Mass(MassValue),
     Length(LengthValue),
     Text(String),
@@ -343,6 +352,18 @@ pub struct SelectAttributePair {
 }
 
 #[uniffi::remote(Record)]
+pub struct MultiselectAttributePair {
+    pub attr_id: Uuid,
+    pub entry_id: Uuid,
+    pub owner_id: Uuid,
+    pub name: String,
+    pub config: MultiselectConfig,
+    pub index_string: Option<String>,
+    pub plan: Option<Vec<String>>,
+    pub actual: Option<Vec<String>>,
+}
+
+#[uniffi::remote(Record)]
 pub struct MassAttributePair {
     pub attr_id: Uuid,
     pub entry_id: Uuid,
@@ -382,6 +403,7 @@ pub struct TextAttributePair {
 pub enum AttributePair {
     Numeric(NumericAttributePair),
     Select(SelectAttributePair),
+    Multiselect(MultiselectAttributePair),
     Mass(MassAttributePair),
     Length(LengthAttributePair),
     Text(TextAttributePair),
