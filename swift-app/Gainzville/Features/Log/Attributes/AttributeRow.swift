@@ -12,24 +12,32 @@ struct AttributeRow<Content: View>: View {
     // candidate subtrees, re-making the field and dropping first responder
     // mid-type.
     let usesViewThatFits: Bool
+    // How the label aligns to the value column. `.top` (default) is right for
+    // the compact pills, whose height equals the label band — top and center
+    // coincide. The text editor's field is taller than the band (extra vertical
+    // padding for multi-line breathing room), so it passes `.firstTextBaseline`
+    // to sit the label on the field's first line instead of riding high above it.
+    let verticalAlignment: VerticalAlignment
     private let content: Content
 
     init(
         label: String,
         indent: CGFloat = 0,
         usesViewThatFits: Bool = true,
+        verticalAlignment: VerticalAlignment = .top,
         @ViewBuilder content: () -> Content
     ) {
         self.label = label
         self.indent = indent
         self.usesViewThatFits = usesViewThatFits
+        self.verticalAlignment = verticalAlignment
         self.content = content()
     }
 
     var body: some View {
-        // Top alignment so that when value pills wrap to multiple lines the
-        // label stays anchored at the first row.
-        HStack(alignment: .top, spacing: 0) {
+        // Top/first-baseline alignment (see `verticalAlignment`) keeps the label
+        // anchored to the first row when value pills wrap to multiple lines.
+        HStack(alignment: verticalAlignment, spacing: 0) {
             // Label, sized to content, on the left.
             HStack(alignment: .center, spacing: 0) {
                 Text(label)

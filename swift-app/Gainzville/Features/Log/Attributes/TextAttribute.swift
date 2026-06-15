@@ -53,7 +53,7 @@ struct TextAttribute: View {
     }
 
     var body: some View {
-        AttributeRow(label: pair.name, usesViewThatFits: false) {
+        AttributeRow(label: pair.name, usesViewThatFits: false, verticalAlignment: .firstTextBaseline) {
             textField
                 // Publish bounds + matches so LogView can float the suggestion
                 // list outside this (clipped) card. Attached to the pill before
@@ -117,14 +117,14 @@ struct TextAttribute: View {
             // then scroll past the cap.
             .lineLimit(focused ? 1...12 : 1...3)
             .focused($focused)
-            // Same pill border as the other attribute fields. The pill's
-            // minHeight vertically centers a single line on the label (without
-            // it, a one-line field floats to the top of the row). No
-            // `.fixedSize` — unlike the compact numeric/mass pills, this one
-            // fills the row width and grows downward for long notes. Vertical
-            // padding is bumped up (one notch below the horizontal inset) so a
-            // multi-line note breathes (the compact pills keep the default —
-            // their height is driven by minHeight anyway).
+            // Same pill border as the other attribute fields. Vertical padding
+            // is bumped up (one notch below the horizontal inset) so a
+            // multi-line note breathes (the compact pills keep the default).
+            // That makes this field taller than the label band, so the row
+            // baseline-aligns the label to the field's first line (see
+            // AttributeRow's `verticalAlignment`) rather than center-aligning.
+            // No `.fixedSize` — unlike the compact numeric/mass pills, this one
+            // fills the row width and grows downward for long notes.
             .gvAttributePill(verticalPadding: GvSpacing.md)
         // macOS: anchor the action-bar popover (Remove) to the field, mirroring
         // the other editors. Closing it ends editing.
