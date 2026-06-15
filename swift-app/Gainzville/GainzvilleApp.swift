@@ -18,6 +18,7 @@ struct GainzvilleApp: App {
     let logDayStore: LogDayStore
     let dragState: DragState
     let attributeFocus: AttributeFocusModel
+    let autocomplete: AutocompleteCoordinator
 
     init() {
         let listener = AppListener()
@@ -61,6 +62,7 @@ struct GainzvilleApp: App {
         logDayStore = LogDayStore()
         dragState = DragState()
         attributeFocus = AttributeFocusModel()
+        autocomplete = AutocompleteCoordinator()
     }
 
     var body: some Scene {
@@ -74,6 +76,7 @@ struct GainzvilleApp: App {
                 .environmentObject(logDayStore)
                 .environmentObject(dragState)
                 .environmentObject(attributeFocus)
+                .environmentObject(autocomplete)
                 #if os(macOS)
                 // The per-view `.background(Color.gvBackground)` modifiers paint
                 // the sidebar and detail correctly, but the bare window region

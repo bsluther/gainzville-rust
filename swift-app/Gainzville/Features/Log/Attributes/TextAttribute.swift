@@ -20,6 +20,7 @@ struct TextAttribute: View {
     @EnvironmentObject private var forestVM: ForestViewModel
     @EnvironmentObject private var coreEnv: CoreEnv
     @EnvironmentObject private var dataChange: DataChange
+    @EnvironmentObject private var autocomplete: AutocompleteCoordinator
 
     @State private var text: String = ""
     @State private var debounceTask: Task<Void, Never>?
@@ -52,6 +53,15 @@ struct TextAttribute: View {
     var body: some View {
         AttributeRow(label: pair.name) {
             textField
+                // Publish bounds + matches so LogView can float the suggestion
+                // list outside this (clipped) card. Attached to the pill before
+                // the leading padding so the anchor tracks the visible field.
+                .anchorPreference(key: AutocompleteRequestKey.self, value: .bounds) { anchor in
+                    (focused && !filteredSuggestions.isEmpty)
+                        ? AutocompleteRequest(
+                            fieldKey: focusToken, suggestions: filteredSuggestions, anchor: anchor)
+                        : nil
+                }
                 // Gap between the label and the full-width text pill. The
                 // compact numeric/mass pills get this spacing for free from
                 // being right-aligned; the greedy text pill otherwise butts
@@ -90,6 +100,13 @@ struct TextAttribute: View {
                     syncEditState()
                 }
             }
+        }
+        // Apply a suggestion tapped in the LogView overlay (routed by fieldKey)
+        // through the field's own pick(): set text, blur, commit.
+        .onChange(of: autocomplete.pendingPick) { _, pending in
+            guard let pending, pending.fieldKey == focusToken else { return }
+            pick(pending.value)
+            autocomplete.pendingPick = nil
         }
     }
 
@@ -139,29 +156,6 @@ struct TextAttribute: View {
                 .frame(width: 280)
             }
         #endif
-    }
-
-    private var suggestionList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(filteredSuggestions, id: \.self) { suggestion in
-                Button {
-                    pick(suggestion)
-                } label: {
-                    Text(suggestion)
-                        .font(.attrField)
-                        .foregroundStyle(Color.entryTextPrimary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, GvSpacing.sm)
-                        .padding(.horizontal, GvSpacing.sm)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .background(Color.gvSurface)
-        .clipShape(RoundedRectangle(cornerRadius: GvSpacing.sm))
-        // Lift it off the content it now floats over.
-        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
     }
 
     // Fill the field from a suggestion and dismiss. The blur handler owns the

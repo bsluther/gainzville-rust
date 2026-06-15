@@ -5,6 +5,7 @@ struct LogView: View {
     @EnvironmentObject var forestVM: ForestViewModel
     @EnvironmentObject var logDayStore: LogDayStore
     @EnvironmentObject var dragState: DragState
+    @EnvironmentObject var autocomplete: AutocompleteCoordinator
     @State private var isCreatePresented = false
     @State private var pendingRootDrop: PendingRootDrop?
 
@@ -38,6 +39,27 @@ struct LogView: View {
                     .padding(.horizontal, GvSpacing.lg)
                     .padding(.vertical, GvSpacing.xl)
                     .gvReadableWidth()
+                    // Floating autocomplete host: a focused text field deep in a
+                    // (clipped) entry card publishes its bounds + matches via
+                    // AutocompleteRequestKey; rendering the list here — outside
+                    // every card clip and above every entry — lets it escape the
+                    // clip and the checkbox z-order. The list scrolls with the
+                    // content (it's inside the ScrollView) so it tracks the field.
+                    .overlayPreferenceValue(AutocompleteRequestKey.self) { request in
+                        GeometryReader { proxy in
+                            if let request {
+                                let rect = proxy[request.anchor]
+                                AutocompleteSuggestionList(
+                                    suggestions: request.suggestions
+                                ) { picked in
+                                    autocomplete.pendingPick = .init(
+                                        fieldKey: request.fieldKey, value: picked)
+                                }
+                                .frame(width: rect.width)
+                                .offset(x: rect.minX, y: rect.maxY + GvSpacing.sm)
+                            }
+                        }
+                    }
                 }
                 // Blue background scoped to the scroll area (below the nav bar).
                 // Color.gvBackground on the outer view — a bare Color — extends
@@ -198,5 +220,6 @@ private struct LogCalendarPickerContent: View {
             .environmentObject(ForestViewModel())
             .environmentObject(LogDayStore())
             .environmentObject(DragState())
+            .environmentObject(AutocompleteCoordinator())
     }
 }
