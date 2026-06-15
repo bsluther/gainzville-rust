@@ -122,9 +122,7 @@ struct LengthAttribute: View {
                 endpointField(.max)
             }
             Text(displayUnit.shortLabel)
-                // Monospaced + padded labels give every unit a consistent width
-                // so the pills line up across rows regardless of unit length.
-                .font(.attrLabel.monospaced())
+                .font(.attrLabel)
                 .foregroundStyle(Color.entryTextSecondary)
                 .fixedSize(horizontal: true, vertical: false)
         }
@@ -424,11 +422,9 @@ private extension LengthUnit {
 
     var shortLabel: String {
         switch self {
-        // Pad single-char units to two chars so, under a monospaced font, every
-        // unit label occupies the same width.
         case .millimeter: return "mm"
         case .centimeter: return "cm"
-        case .meter:      return "m "
+        case .meter:      return "m"
         case .kilometer:  return "km"
         case .inch:       return "in"
         case .foot:       return "ft"
