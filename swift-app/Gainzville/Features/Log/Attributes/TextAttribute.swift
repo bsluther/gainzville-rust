@@ -1,5 +1,10 @@
 internal import Combine
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 // Editor for text attributes — free-form notes, locations, route names. The
 // value is a bare string (no exact/range axis, no units), so this is the
@@ -59,10 +64,17 @@ struct TextAttribute: View {
                 // list outside this (clipped) card. Attached to the pill before
                 // the leading padding so the anchor tracks the visible field.
                 .anchorPreference(key: AutocompleteRequestKey.self, value: .bounds) { anchor in
+                    #if os(macOS)
+                    // macOS hosts suggestions inside the field's popover (see
+                    // `textField`); the transient popover swallows clicks on a
+                    // floating overlay, so suppress it here to avoid a dead duplicate.
+                    nil
+                    #else
                     (focused && !filteredSuggestions.isEmpty)
                         ? AutocompleteRequest(
                             fieldKey: focusToken, suggestions: filteredSuggestions, anchor: anchor)
                         : nil
+                    #endif
                 }
                 // Gap between the label and the full-width text pill. The
                 // compact numeric/mass pills get this spacing for free from
@@ -126,6 +138,17 @@ struct TextAttribute: View {
             // No `.fixedSize` — unlike the compact numeric/mass pills, this one
             // fills the row width and grows downward for long notes.
             .gvAttributePill(verticalPadding: GvSpacing.md)
+            // Pin the row's baseline to the field's first text line. An empty
+            // vertical TextField lays out no glyphs, so it has no real
+            // first-text-baseline; without this the row's
+            // HStack(.firstTextBaseline) snaps the label to a degenerate
+            // baseline and it rides to the top of the field. The first line
+            // sits at the pill's top inset (GvSpacing.md) + the body font's
+            // ascent — a constant that holds whether the field is empty,
+            // single-line, multi-line, or focused, so the label tracks line one
+            // in every state. (A hidden ZStack/overlay donor does not work —
+            // those don't propagate a child's text baseline to the parent.)
+            .alignmentGuide(.firstTextBaseline) { _ in firstLineBaseline }
         // macOS: anchor the action-bar popover (Remove) to the field, mirroring
         // the other editors. Closing it ends editing.
         #if os(macOS)
@@ -147,13 +170,41 @@ struct TextAttribute: View {
                 ),
                 arrowEdge: .top
             ) {
-                AttributeSheetBar(
-                    title: pair.name,
-                    actions: barActions,
-                    onDismiss: { focused = false }
-                )
+                // macOS autocomplete lives here rather than in a floating overlay:
+                // clicks inside the popover are handled natively, while the
+                // transient popover would swallow clicks on an external list. The
+                // suggestions sit below the standard title + action bar — the
+                // popover usually opens above the field, so the rows land closest
+                // to where the user is typing.
+                VStack(spacing: 0) {
+                    AttributeSheetBar(
+                        title: pair.name,
+                        actions: barActions,
+                        onDismiss: { focused = false }
+                    )
+                    if !filteredSuggestions.isEmpty {
+                        AutocompleteSuggestionList(
+                            suggestions: filteredSuggestions, framed: false
+                        ) { picked in
+                            pick(picked)
+                        }
+                    }
+                }
                 .frame(width: 280)
             }
+        #endif
+    }
+
+    // First text line of the pill: top inset (GvSpacing.md) + body ascent.
+    // Pins the row's firstTextBaseline (see `textField`). `.body` mirrors the
+    // `attrField` / `gvAttributePill` font and tracks Dynamic Type.
+    private var firstLineBaseline: CGFloat {
+        #if canImport(UIKit)
+        return GvSpacing.md + UIFont.preferredFont(forTextStyle: .body).ascender
+        #elseif canImport(AppKit)
+        return GvSpacing.md + NSFont.preferredFont(forTextStyle: .body).ascender
+        #else
+        return GvSpacing.md + 17
         #endif
     }
 

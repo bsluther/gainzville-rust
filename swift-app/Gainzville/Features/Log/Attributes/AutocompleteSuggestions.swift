@@ -42,6 +42,12 @@ final class AutocompleteCoordinator: ObservableObject {
 /// focused field's anchor.
 struct AutocompleteSuggestionList: View {
     let suggestions: [String]
+    // When true (the iOS floating overlay) the list draws its own raised box —
+    // background, border, shadow — to read above the entries it covers. When
+    // false (hosted inside the macOS field popover) it renders bare rows and
+    // lets the popover supply the chrome. Declared before `onPick` so the
+    // latter stays the trailing closure at call sites.
+    var framed: Bool = true
     let onPick: (String) -> Void
 
     // Show up to this many rows at natural height; beyond it, cap and scroll.
@@ -55,7 +61,27 @@ struct AutocompleteSuggestionList: View {
         return rows * rowHeight + (rows - 1) * GvSpacing.md + GvSpacing.md * 2
     }
 
+    @ViewBuilder
     var body: some View {
+        if framed {
+            sizedRows
+                // One step lighter than the scalar entry background (gvNeutral900)
+                // so the floating box reads as raised above the entries it covers.
+                .background(Color.gvNeutral850)
+                // Corner radius + border match the input pill (gvAttributePill uses 8).
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.entryTextSecondary, lineWidth: 1)
+                )
+                // Lift it off the content it floats over.
+                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+        } else {
+            sizedRows
+        }
+    }
+
+    private var sizedRows: some View {
         Group {
             if suggestions.count <= visibleRows {
                 rows
@@ -67,17 +93,6 @@ struct AutocompleteSuggestionList: View {
                     .scrollBounceBehavior(.basedOnSize)
             }
         }
-        // One step lighter than the scalar entry background (gvNeutral900) so the
-        // floating box reads as raised above the entries it covers.
-        .background(Color.gvNeutral850)
-        // Corner radius + border match the input pill (gvAttributePill uses 8).
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.entryTextSecondary, lineWidth: 1)
-        )
-        // Lift it off the content it floats over.
-        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
     }
 
     private var rows: some View {
