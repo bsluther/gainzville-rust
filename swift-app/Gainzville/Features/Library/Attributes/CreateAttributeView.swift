@@ -244,7 +244,7 @@ struct CreateAttributeView: View {
 
     private var textConfigEditor: some View {
         VStack(spacing: GvSpacing.xl) {
-            ConfigRow(label: "Default") {
+            ConfigRow(labelColor: .gvTextSecondary, label:"Default") {
                 TextField("None", text: $textDefault)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.center)
@@ -252,7 +252,7 @@ struct CreateAttributeView: View {
                     .gvAttributePill(borderColor: editableBorder)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            ConfigRow(label: "Autocomplete") {
+            ConfigRow(labelColor: .gvTextSecondary, label:"Autocomplete") {
                 checkbox(isOn: textAutocomplete) { textAutocomplete.toggle() }
             }
         }
@@ -260,10 +260,10 @@ struct CreateAttributeView: View {
 
     private var numericConfigEditor: some View {
         VStack(spacing: GvSpacing.xl) {
-            ConfigRow(label: "Min") { numberField($numMinText) }
-            ConfigRow(label: "Max") { numberField($numMaxText) }
-            ConfigRow(label: "Default") { numberField($numDefaultText) }
-            ConfigRow(label: "Integer") {
+            ConfigRow(labelColor: .gvTextSecondary, label:"Min") { numberField($numMinText) }
+            ConfigRow(labelColor: .gvTextSecondary, label:"Max") { numberField($numMaxText) }
+            ConfigRow(labelColor: .gvTextSecondary, label:"Default") { numberField($numDefaultText) }
+            ConfigRow(labelColor: .gvTextSecondary, label:"Integer") {
                 checkbox(isOn: numInteger) { numInteger.toggle() }
             }
         }
@@ -279,7 +279,7 @@ struct CreateAttributeView: View {
     ]
 
     private var massConfigEditor: some View {
-        ConfigRow(label: "Default unit") {
+        ConfigRow(labelColor: .gvTextSecondary, label:"Default unit") {
             unitPicker(selectedLabel: massLabel(massUnit), options: massUnits.map(massLabel)) { picked in
                 if let unit = massUnits.first(where: { massLabel($0) == picked }) { massUnit = unit }
             }
@@ -287,7 +287,7 @@ struct CreateAttributeView: View {
     }
 
     private var lengthConfigEditor: some View {
-        ConfigRow(label: "Default unit") {
+        ConfigRow(labelColor: .gvTextSecondary, label:"Default unit") {
             unitPicker(selectedLabel: lengthLabel(lengthUnit), options: lengthUnits.map(lengthLabel)) { picked in
                 if let unit = lengthUnits.first(where: { lengthLabel($0) == picked }) { lengthUnit = unit }
             }
@@ -364,10 +364,10 @@ struct CreateAttributeView: View {
     private var selectConfigEditor: some View {
         VStack(alignment: .leading, spacing: GvSpacing.xl) {
             optionsBuilder($selectOptions)
-            ConfigRow(label: "Ordered") {
+            ConfigRow(labelColor: .gvTextSecondary, label:"Ordered") {
                 checkbox(isOn: selectOrdered) { selectOrdered.toggle() }
             }
-            ConfigRow(label: "Default") { selectDefaultField }
+            ConfigRow(labelColor: .gvTextSecondary, label:"Default") { selectDefaultField }
         }
     }
 
@@ -409,7 +409,7 @@ struct CreateAttributeView: View {
     private var multiselectConfigEditor: some View {
         VStack(alignment: .leading, spacing: GvSpacing.xl) {
             optionsBuilder($multiOptions)
-            ConfigRow(label: "Default") { multiDefaultField }
+            ConfigRow(labelColor: .gvTextSecondary, label:"Default") { multiDefaultField }
         }
     }
 
@@ -627,59 +627,6 @@ private enum AttributeTypeKind: String, CaseIterable, Identifiable {
 
 // MARK: - Option picker
 
-/// Modal string-option picker used by the type and default-unit fields. Styled
-/// like the detail view's option pickers (centered rows, trailing checkmark;
-/// sheet on iOS, popover on macOS). `onPick` reports nil only when `includeNone`
-/// is set and the "None" row is chosen.
-private struct OptionPickerList: View {
-    let title: String
-    let options: [String]
-    let selection: String?
-    var includeNone: Bool = false
-    let onPick: (String?) -> Void
-
-    var body: some View {
-        #if os(iOS)
-        NavigationStack { list.navigationTitle(title).navigationBarTitleDisplayMode(.inline) }
-            .presentationDetents([.medium, .large])
-        #else
-        list.padding(GvSpacing.md).frame(minWidth: 220)
-        #endif
-    }
-
-    private var list: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                if includeNone {
-                    row(label: "None", value: nil, isSelected: selection == nil)
-                }
-                ForEach(options, id: \.self) { option in
-                    row(label: option, value: option, isSelected: option == selection)
-                }
-            }
-        }
-    }
-
-    private func row(label: String, value: String?, isSelected: Bool) -> some View {
-        Button { onPick(value) } label: {
-            HStack {
-                Spacer()
-                Text(label).font(.gvBody).foregroundStyle(Color.gvTextPrimary)
-                Spacer()
-            }
-            .overlay(alignment: .trailing) {
-                if isSelected {
-                    Image(systemName: "checkmark").foregroundStyle(Color.gvLoggedBlue)
-                }
-            }
-            .padding(.horizontal, GvSpacing.lg)
-            .padding(.vertical, GvSpacing.lg)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 /// Multi-select variant of `OptionPickerList`: tapping a row toggles its
 /// membership (checkmark) and the list stays open. Used for a multiselect
 /// attribute's default subset.
@@ -720,26 +667,6 @@ private struct MultiPickerList: View {
                     .buttonStyle(.plain)
                 }
             }
-        }
-    }
-}
-
-// MARK: - Shared config-row layout
-
-// Mirrors AttributeDetailView's ConfigRow so config edits read as the same
-// visual language. Kept local for now; consolidate into the design system once
-// Select/Multiselect land and the shared shape across create + detail is stable.
-private struct ConfigRow<Control: View>: View {
-    let label: String
-    @ViewBuilder var control: () -> Control
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.gvBody)
-                .foregroundStyle(Color.gvTextSecondary)
-            Spacer()
-            control()
         }
     }
 }

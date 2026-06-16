@@ -110,25 +110,6 @@ struct AttributeDetailView: View {
     }
 }
 
-// MARK: - Shared config-row layout
-
-/// Label on the left, a value control on the right — mirrors the log's
-/// attribute-row rhythm so config reads as the same visual language.
-private struct ConfigRow<Control: View>: View {
-    let label: String
-    @ViewBuilder var control: () -> Control
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.gvBody)
-                .foregroundStyle(Color.gvTextPrimary)
-            Spacer()
-            control()
-        }
-    }
-}
-
 // Editable config controls get the brighter border; read-only ones recede.
 private let editableBorder = Color.gvNeutral400
 
@@ -250,9 +231,11 @@ private struct SelectConfigEditor: View {
                 }
                 .buttonStyle(.plain)
                 .platformPopover(isPresented: $isPicking) {
-                    DefaultOptionList(
+                    OptionPickerList(
+                        title: "Default",
                         options: config.options,
                         selection: config.default,
+                        includeNone: true,
                         onPick: { picked in onSetDefault(picked); isPicking = false }
                     )
                 }
@@ -303,56 +286,6 @@ private struct MultiselectConfigEditor: View {
     }
 }
 
-/// Option picker. Offers a "None" row to clear the default unless the config
-/// requires a value (e.g. mass's default unit).
-private struct DefaultOptionList: View {
-    let options: [String]
-    let selection: String?
-    var includeNone = true
-    let onPick: (String?) -> Void
-
-    var body: some View {
-        #if os(iOS)
-        NavigationStack { list.navigationTitle("Default").navigationBarTitleDisplayMode(.inline) }
-            .presentationDetents([.medium, .large])
-        #else
-        list.padding(GvSpacing.md).frame(minWidth: 220)
-        #endif
-    }
-
-    private var list: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                if includeNone {
-                    row(label: "None", value: nil, isSelected: selection == nil)
-                }
-                ForEach(options, id: \.self) { option in
-                    row(label: option, value: option, isSelected: option == selection)
-                }
-            }
-        }
-    }
-
-    private func row(label: String, value: String?, isSelected: Bool) -> some View {
-        Button { onPick(value) } label: {
-            HStack {
-                Spacer()
-                Text(label).font(.gvBody).foregroundStyle(Color.gvTextPrimary)
-                Spacer()
-            }
-            .overlay(alignment: .trailing) {
-                if isSelected {
-                    Image(systemName: "checkmark").foregroundStyle(Color.gvLoggedBlue)
-                }
-            }
-            .padding(.horizontal, GvSpacing.lg)
-            .padding(.vertical, GvSpacing.lg)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 // MARK: - Mass
 
 private struct MassConfigEditor: View {
@@ -374,7 +307,8 @@ private struct MassConfigEditor: View {
             .buttonStyle(.plain)
             .platformPopover(isPresented: $isPicking) {
                 // No "None" row: a mass config always has a default unit.
-                DefaultOptionList(
+                OptionPickerList(
+                    title: "Default",
                     options: allUnits.map(label(for:)),
                     selection: label(for: config.defaultUnit),
                     includeNone: false,
@@ -424,7 +358,8 @@ private struct LengthConfigEditor: View {
             .buttonStyle(.plain)
             .platformPopover(isPresented: $isPicking) {
                 // No "None" row: a length config always has a default unit.
-                DefaultOptionList(
+                OptionPickerList(
+                    title: "Default",
                     options: allUnits.map(label(for:)),
                     selection: label(for: config.defaultUnit),
                     includeNone: false,
