@@ -412,18 +412,18 @@ class EntryViewModel: ObservableObject {
     }
 }
 
-// TODO: AttributesViewModel does not subscribe to DataChange.didChange, so the
-// library attribute list (AttributesListView) won't live-refresh when an
-// attribute is created or edited — it only reflects what was cached at subscribe
-// time. Wire a DataChange sink that calls refresh(from:) like EntryViewModel /
-// EditAttributesViewModel do. Surfaces once name/description editing lands (the
-// list shows those fields); not visible while only config defaults are editable.
+// View model for the library attribute list. Subscribes once via subscribe_query;
+// stays live for the app's lifetime. The list refreshes on every data change
+// because `listener.onChanged` (see GainzvilleApp) calls `refresh(from:)` directly,
+// the same way it does for ActivitiesViewModel — no DataChange sink needed.
 @MainActor
 class AttributesViewModel: ObservableObject {
     @Published var attributes: [Attribute] = []
     private var subscription: FfiQuerySubscription?
+    private var core: GainzvilleCore?
 
     func subscribe(to core: GainzvilleCore) {
+        self.core = core
         subscription = try? core.subscribeQuery(query: .allAttributes(AllAttributes()))
         refresh(from: core)
     }
@@ -432,6 +432,26 @@ class AttributesViewModel: ObservableObject {
         if case .allAttributes(let list) = core.readQuery(query: .allAttributes(AllAttributes())) {
             attributes = list
         }
+    }
+
+    /// Create a new attribute owned by the system actor. Core validates the
+    /// config (see `create_attribute` in core/src/mutators.rs) and rejects an
+    /// invalid one; the create UI keeps Create disabled until the draft is valid.
+    /// No manual refresh — runAction writes the cache and fires on_data_changed,
+    /// which calls refresh(from:) via AppListener.
+    func createAttribute(name: String, description: String?, config: AttributeConfig) {
+        guard let core else { return }
+        let attribute = Attribute(
+            id: UUID().uuidString,
+            ownerId: SYSTEM_ACTOR_ID,
+            name: name,
+            description: description,
+            config: config
+        )
+        try? core.runAction(action: .createAttribute(CreateAttribute(
+            actorId: SYSTEM_ACTOR_ID,
+            attribute: attribute
+        )))
     }
 }
 

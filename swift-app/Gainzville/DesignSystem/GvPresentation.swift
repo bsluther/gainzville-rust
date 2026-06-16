@@ -30,13 +30,31 @@ extension View {
             // Border drawn ON TOP of content so an opaque header band can't
             // occlude it — drawing it behind (in presentationBackground) made it
             // show only around the picker, where the content is transparent.
+            //
+            // Round only the TOP corners (matching the sheet's top radius) and run
+            // square to the screen's bottom edge, ignoring the entire bottom safe
+            // area (home indicator + keyboard). This makes the chrome hug the
+            // bottom like a classic sheet instead of floating a rounded bottom
+            // above the safe area — which both strands content in the gap below it
+            // and rides up with the keyboard.
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
-                    .allowsHitTesting(false)
+                UnevenRoundedRectangle(
+                    topLeadingRadius: cornerRadius,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: cornerRadius,
+                    style: .continuous
+                )
+                .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                .allowsHitTesting(false)
+                .ignoresSafeArea(edges: .bottom)
             )
             .presentationCornerRadius(cornerRadius)
-            .presentationBackground(Color.gvBackground)
+            // Content form + ignoresSafeArea keeps the sheet backing full-height
+            // so the keyboard slides over it rather than shrinking it.
+            .presentationBackground {
+                Color.gvBackground.ignoresSafeArea()
+            }
         #else
         self
         #endif
@@ -46,12 +64,16 @@ extension View {
     /// Content may apply `.presentationDetents` — it's a no-op on macOS.
     func platformPopover<Content: View>(
         isPresented: Binding<Bool>,
+        onDismiss: (() -> Void)? = nil,
+        attachmentAnchor: PopoverAttachmentAnchor = .rect(.bounds),
+        arrowEdge: Edge = .top,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         #if os(iOS)
-        sheet(isPresented: isPresented, content: content)
+        // iOS presents as a sheet; the anchor/arrow only matter for the macOS popover.
+        sheet(isPresented: isPresented, onDismiss: onDismiss, content: content)
         #else
-        popover(isPresented: isPresented) {
+        popover(isPresented: isPresented, attachmentAnchor: attachmentAnchor, arrowEdge: arrowEdge) {
             content()
                 .onAppear {
                     // AppKit-backed controls grab first responder on appear,
@@ -60,6 +82,11 @@ extension View {
                         NSApp.keyWindow?.makeFirstResponder(nil)
                     }
                 }
+        }
+        // `.popover` has no onDismiss parameter; fire it when the binding clears
+        // so callers get a post-dismissal hook on both platforms.
+        .onChange(of: isPresented.wrappedValue) { _, presented in
+            if !presented { onDismiss?() }
         }
         #endif
     }
