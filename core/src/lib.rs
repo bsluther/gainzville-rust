@@ -2,6 +2,7 @@ pub mod actions;
 pub mod constants;
 pub mod queries;
 pub use constants::{DEFAULT_USER_ID, SYSTEM_ACTOR_ID};
+pub mod analysis;
 pub mod delta;
 pub mod delta_executor;
 pub mod error;
