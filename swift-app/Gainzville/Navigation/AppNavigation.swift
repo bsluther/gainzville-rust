@@ -27,6 +27,12 @@ struct IOSNavigation: View {
                 }
                 .background(Color.gvBackground)
             }
+            Tab("Analysis", systemImage: AppSection.analysis.icon) {
+                NavigationStack {
+                    AnalysisView()
+                }
+                .background(Color.gvBackground)
+            }
             Tab("Library", systemImage: AppSection.library.icon) {
                 NavigationStack {
                     LibraryView()
@@ -72,6 +78,8 @@ struct MacNavigation: View {
                 switch selection {
                 case .log:
                     LogView()
+                case .analysis:
+                    AnalysisView()
                 case .library:
                     LibraryView()
                 case .settings:
@@ -89,6 +97,7 @@ struct MacNavigation: View {
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case log
+    case analysis
     case library
     case settings
 
@@ -97,6 +106,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .log:      return "Log"
+        case .analysis: return "Analysis"
         case .library:  return "Library"
         case .settings: return "Settings"
         }
@@ -105,13 +115,14 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     var icon: String {
         switch self {
         case .log:      return "list.dash.header.rectangle"
+        case .analysis: return "chart.bar.xaxis"
         case .library:  return "rectangle.portrait.on.rectangle.portrait.angled"
         case .settings: return "gearshape"
         }
     }
 
     /// Primary navigation sections shown above the divider in the macOS sidebar.
-    static let mainSections: [AppSection] = [.log, .library]
+    static let mainSections: [AppSection] = [.log, .analysis, .library]
     /// Utility sections shown below the divider.
     static let utilitySections: [AppSection] = [.settings]
 }

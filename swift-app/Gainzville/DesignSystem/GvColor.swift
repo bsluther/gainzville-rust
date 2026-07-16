@@ -40,3 +40,30 @@ extension Color {
     static var entryTextSecondary: Color          { .gvNeutral500 }
 }
 
+// MARK: - Chart tokens
+//
+// Categorical series palette for analysis charts. The slot ORDER is load-bearing:
+// it was chosen to maximize adjacent-pair colorblind separation and validated
+// against gvSurface (#111111) — reorder and the guarantee is gone. Series are
+// assigned slots in fixed order, never cycled; a 9th series folds into "Other".
+// (See docs/analysis/chart-model.md, decision D3.)
+
+extension Color {
+    static let gvChartSeries: [Color] = [
+        .gvAzure500, .gvTeal500, .gvAmber500, .gvGreen600,
+        .gvViolet400, .gvRed400, .gvMagenta500, .gvOrange500,
+    ]
+
+    /// Palette lookup for a model's `colorSlot`. `render_model` guarantees slots
+    /// stay in range; the clamp is a belt for hand-written fixtures.
+    static func gvChartSeries(slot: Int) -> Color {
+        gvChartSeries[max(0, min(slot, gvChartSeries.count - 1))]
+    }
+
+    /// The pie "Other" bundle — deliberately neutral so it never reads as a series.
+    static var gvChartOther: Color { .gvNeutral600 }
+
+    static var gvChartGrid: Color      { .gvNeutral900 }
+    static var gvChartAxisLabel: Color { .gvTextSecondary }
+}
+

@@ -27,12 +27,14 @@ authoring UI · templates · LLM assist
 
 | Doc | Covers | Status |
 |---|---|---|
-| [glossary.md](./glossary.md) | the GV terms; cf-notes to Malloy & friends inline | seeded |
+| [handoff-2026-07-09.md](./handoff-2026-07-09.md) | **start here**: trust map, current leanings, full open-question queue | snapshot |
+| [glossary.md](./glossary.md) | the GV terms; cf-notes to Malloy & friends inline | seeded — partially superseded, see handoff |
 | [base-source.md](./base-source.md) | BaseSource, Catalog, defaults, the field taxonomy | draft |
 | query-spec.md | Segment/Reduce shape, filters, metrics-in-queries, calculate | planned |
 | metrics.md | named metrics: stdlib set, activation, user definition form | planned |
 | result-table.md | the query→viz contract (from the POC boundary findings) | planned |
-| chart-spec.md | chart kinds, channel binding, presentation options | planned |
+| [chart-spec.md](./chart-spec.md) | chart kinds, channel binding, presentation options | draft |
+| [chart-model.md](./chart-model.md) | fully-resolved per-kind render models (component API) | co-design |
 | execution.md | SourceAdapter, interpreter, spine densification, determinism | planned |
 | persistence-ffi.md | SavedQuery entity, serde/versioning, uniffi crossing | planned |
 
