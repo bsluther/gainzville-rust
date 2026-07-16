@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "gv-import": {
+      "command": "cargo",
+      "args": [
+        "run",
+        "-q",
+        "-p",
+        "gv-import",
+        "--",
+        "mcp",
+        "--db",
+        "${HOME}/gv/import/scratch.db",
+        "--workspace",
+        "${HOME}/gv/import"
+      ]
+    }
+  }
+}

@@ -22,6 +22,13 @@ changes together into a single log per client?
     - This sorta breaks electric compatability. Could stream join on the client, perhaps.
 
 ### Ingesting data from third-parties
+The LLM markdown importer (docs/import-design.md) dedupes via deterministic UUIDv5 entry ids
+keyed on (source, file, date, tree-path) — re-ingest re-derives the same ids and collides. Two
+sync implications to design for when the mutation log ships: (a) a multi-year bulk import run
+through `run_action` would enqueue tens of thousands of pending mutations, so initial upload
+probably wants a bulk/snapshot path; (b) imports done before the log existed leave no replayable
+mutation history at all.
+
 Say we ingest data from a third-party source like a markdown file or Strava. We don't want to
 duplicate data if we ingest from the source more than once. Two simple approaches come to mind
 1. Hash the source data and store it. When we ingest in the future, compare hashes.

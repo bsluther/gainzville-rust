@@ -4,6 +4,7 @@ members = [
     "generation",
     "gv-ffi",
     "gv-sql",
+    "import",
     "integration-tests",
     "ivm",
     "client",

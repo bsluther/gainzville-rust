@@ -9,6 +9,7 @@
 | `gv-client` | SQLite app shell: connection pool, app lifecycle, subscriptions. Offline-first target. |
 | `gv-server` | Postgres HTTP server: routes, auth, request handling. HTTP API + sync target. |
 | `gv-ffi` | FFI boundary: exposes `gv-core` types to Swift via uniffi (`[uniffi::remote]` + `custom_type!`). Depends on `gv-core`/`gv-client`, not `gv-sql`. |
+| `gv-import` | LLM import: day-document pivot format, `import_day` handler over `gv-client`, stdio MCP server (`gv-import mcp`), import workspace. See [import design](./docs/import-design.md). |
 | `generation` | Arbitrary data generation traits for deterministic simulation and integration tests. |
 | `ivm` | Experimental DBSP/incremental view maintenance for sync. |
 
