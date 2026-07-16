@@ -1492,8 +1492,16 @@ pub async fn update_entry(
                 deltas.extend(values.into_iter().map(|v| Delta::Delete { old: v }.into()));
             }
 
-            let update = entry.update().is_sequence(*is_sequence).to_delta();
-            deltas.push(update.into());
+            // Completion is a leaf concept (update_entry_completion rejects
+            // sequences), so converting a completed scalar sheds its
+            // completion atomically — the same one-mutation rider pattern as
+            // break-out naming below. Without this, the conversion would
+            // strand a stored "complete sequence" that no action can repair.
+            let mut update = entry.update().is_sequence(*is_sequence);
+            if *is_sequence {
+                update = update.is_complete(false);
+            }
+            deltas.push(update.to_delta().into());
         }
         EntryChange::SetDisplayAsSets(display_as_sets) => {
             if entry.display_as_sets == *display_as_sets {

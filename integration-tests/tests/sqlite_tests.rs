@@ -1108,6 +1108,33 @@ async fn test_update_entry_set_is_sequence(pool: SqlitePool) {
         find(&sqlite_client, parent.id).await.map(|e| e.is_sequence),
         Some(true)
     );
+
+    // Converting a COMPLETED scalar is legal and sheds its completion in the
+    // same mutation — completion is a leaf concept, and leaving it set would
+    // strand a stored "complete sequence" no action can repair.
+    let mut done = log_entry(user.actor_id, None, None);
+    done.is_complete = true;
+    done.temporal = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+    sqlite_client
+        .run_action(CreateEntry::from(done.clone()).into())
+        .await
+        .unwrap();
+    sqlite_client
+        .run_action(
+            UpdateEntry {
+                actor_id: user.actor_id,
+                entry_id: done.id,
+                change: EntryChange::SetIsSequence(true),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+    let converted = find(&sqlite_client, done.id).await.unwrap();
+    assert!(converted.is_sequence);
+    assert!(!converted.is_complete, "conversion must shed scalar completion");
 }
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]

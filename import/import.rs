@@ -20,7 +20,7 @@ use chrono::{NaiveDate, Utc};
 use chrono_tz::Tz;
 use fractional_index::FractionalIndex;
 use gv_client::client::SqliteClient;
-use gv_core::actions::{CreateEntry, CreateValue, EntryChange, UpdateEntry, UpdateEntryCompletion};
+use gv_core::actions::{CreateEntry, CreateValue, EntryChange, UpdateEntry};
 use gv_core::error::DomainError;
 use gv_core::models::attribute::{AttributeValue, Value};
 use gv_core::models::entry::{Entry, Position, Temporal};
@@ -467,6 +467,19 @@ impl Importer {
                     outcome.path
                 ));
             }
+            // Backstop for extraction typos ("7:30am-9:30pm" where one
+            // meridiem is wrong): a span this long is almost never real.
+            if node.temporal.start().is_some()
+                && node.temporal.end().is_some()
+                && let Some(span_ms) = node.temporal.infer_duration_ms()
+                && span_ms > 12 * 3_600_000
+            {
+                warnings.push(format!(
+                    "{}: spans {:.1}h - probably a timestamp typo, verify with the user",
+                    outcome.path,
+                    span_ms as f64 / 3_600_000.0
+                ));
+            }
             for value in &outcome.values {
                 if matches!(value.status, ValueStatus::Failed) {
                     warnings.push(format!(
@@ -495,38 +508,24 @@ impl Importer {
         })
     }
 
-    /// Promote an existing scalar entry to a sequence (clearing completion —
-    /// sequences derive it from members). Inner `Err` is a rejection the
-    /// caller reports; outer `Err` is infrastructure failure.
+    /// Promote an existing scalar entry to a sequence. One action: the
+    /// conversion itself sheds scalar completion atomically in core. Inner
+    /// `Err` is a rejection the caller reports; outer `Err` is
+    /// infrastructure failure.
     async fn promote_to_sequence(
         &self,
         existing: &Entry,
     ) -> anyhow::Result<Result<(), String>> {
-        // Completion first: core rejects marking a complete entry a sequence
-        // (sequences derive completion from members).
-        if existing.is_complete {
-            let update = UpdateEntryCompletion {
-                actor_id: self.config.actor_id,
-                entry_id: existing.id,
-                is_complete: false,
-            };
-            match self.client.run_action(update.into()).await {
-                Ok(_) => {}
-                Err(DomainError::Rejected(reason)) => return Ok(Err(reason.to_string())),
-                Err(e) => return Err(e).context("clear completion"),
-            }
-        }
         let update = UpdateEntry {
             actor_id: self.config.actor_id,
             entry_id: existing.id,
             change: EntryChange::SetIsSequence(true),
         };
         match self.client.run_action(update.into()).await {
-            Ok(_) => {}
-            Err(DomainError::Rejected(reason)) => return Ok(Err(reason.to_string())),
-            Err(e) => return Err(e).context("promote to sequence"),
+            Ok(_) => Ok(Ok(())),
+            Err(DomainError::Rejected(reason)) => Ok(Err(reason.to_string())),
+            Err(e) => Err(e).context("promote to sequence"),
         }
-        Ok(Ok(()))
     }
 
     /// Next append position under `parent_id`: after the last index handed
