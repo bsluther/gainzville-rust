@@ -21,6 +21,7 @@ use gv_core::{
         AllEntries, FindAttributeById, FindDescendants, FindEntryById, FindValueByKey,
         FindValuesForEntries,
     },
+    error::{DomainError, RejectReason},
     query_executor::QueryExecutor,
     validation::{Email, Username},
 };
@@ -2169,6 +2170,13 @@ async fn test_create_entry_placement_guards(pool: SqlitePool) {
         start: sqlx::types::chrono::Utc::now(),
     };
 
+    // Guards must fire for their own reasons, not incidentally — a reorder
+    // or merge that changes the taxonomy should fail these.
+    let reject_reason = |result: Result<_, DomainError>| match result {
+        Err(DomainError::Rejected(reason)) => reason,
+        other => panic!("expected a rejection, got {other:?}"),
+    };
+
     // Parent must exist.
     let orphan = log_entry(
         user.actor_id,
@@ -2176,11 +2184,11 @@ async fn test_create_entry_placement_guards(pool: SqlitePool) {
         child_position(Uuid::new_v4(), FractionalIndex::default()),
     );
     assert!(
-        client
-            .run_action(CreateEntry::from(orphan).into())
-            .await
-            .is_err(),
-        "creating under a missing parent must be rejected"
+        matches!(
+            reject_reason(client.run_action(CreateEntry::from(orphan).into()).await),
+            RejectReason::NotFound(m) if m.contains("parent")
+        ),
+        "creating under a missing parent must be NotFound"
     );
 
     // Parent must be a sequence.
@@ -2196,10 +2204,14 @@ async fn test_create_entry_placement_guards(pool: SqlitePool) {
         child_position(scalar_root.id, FractionalIndex::default()),
     );
     assert!(
-        client
-            .run_action(CreateEntry::from(under_scalar).into())
-            .await
-            .is_err(),
+        matches!(
+            reject_reason(
+                client
+                    .run_action(CreateEntry::from(under_scalar).into())
+                    .await
+            ),
+            RejectReason::Precondition(m) if m.contains("non-sequence")
+        ),
         "creating under a non-sequence parent must be rejected"
     );
 
@@ -2207,11 +2219,50 @@ async fn test_create_entry_placement_guards(pool: SqlitePool) {
     // covered by the template temporal rules).
     let off_timeline_root = log_entry(user.actor_id, None, None);
     assert!(
-        client
-            .run_action(CreateEntry::from(off_timeline_root).into())
-            .await
-            .is_err(),
+        matches!(
+            reject_reason(
+                client
+                    .run_action(CreateEntry::from(off_timeline_root).into())
+                    .await
+            ),
+            RejectReason::Precondition(m) if m.contains("start or end")
+        ),
         "root without start or end must be rejected"
+    );
+
+    // An entry's owner must match its activity's owner (docs/model.md).
+    let other = User {
+        actor_id: Uuid::new_v4(),
+        email: Email::parse("other@test.com".to_string()).unwrap(),
+        username: Username::parse("other".to_string()).unwrap(),
+    };
+    client
+        .run_action(CreateUser::from(other.clone()).into())
+        .await
+        .unwrap();
+    let foreign_activity = Activity {
+        id: Uuid::new_v4(),
+        owner_id: other.actor_id,
+        name: ActivityName::parse("Foreign".to_string()).unwrap(),
+        description: None,
+        source_activity_id: None,
+    };
+    client
+        .run_action(foreign_activity.into_create_activity(Uuid::new_v4()).into())
+        .await
+        .unwrap();
+    let mut cross_owner = log_entry(user.actor_id, Some(foreign_activity.id), None);
+    cross_owner.temporal = on_timeline.clone();
+    assert!(
+        matches!(
+            reject_reason(
+                client
+                    .run_action(CreateEntry::from(cross_owner).into())
+                    .await
+            ),
+            RejectReason::Precondition(m) if m.contains("same owner as its activity")
+        ),
+        "entry owned by a different actor than its activity must be rejected"
     );
 
     // Sanity: a child under a sequence root passes all placement guards.

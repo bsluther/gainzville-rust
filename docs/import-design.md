@@ -56,10 +56,16 @@ Handler responsibilities on `import_day(document)`:
 
 - Resolve activity/attribute names → UUIDs via the registry (exact + alias table). An unknown name
   is a rejection, never a silent create — new schema goes through the resolution workflow below.
-- Mint **deterministic UUIDv5** entry ids keyed on `(source, source_file, date, tree-path,
-  occurrence-index)` — stable under file edits (not line numbers). Re-applying a document (or a
-  re-extraction of the same file) re-derives the same ids, so already-imported entries are detected
-  and skipped rather than duplicated. Re-run-after-answering-questions is the routine primitive.
+- Mint **deterministic UUIDv5** entry ids keyed on `(source, source_file, date, tree-path)`,
+  where tree-path components are `<label>#<occurrence-among-same-label-siblings>` — stable under
+  file edits (not line numbers). Labels are **registry-canonical** (aliases resolved, trimmed,
+  lowercased, `/`/`#` defused), so alias or casing wobble between extraction runs cannot re-key
+  ids; `source_file` is validated (plain relative path only) for the same reason. Re-applying a
+  document (or a re-extraction of the same file) re-derives the same ids, so already-imported
+  entries are detected and skipped rather than duplicated. Re-run-after-answering-questions is
+  the routine primitive. A previously-imported scalar that a re-extraction gives children is
+  promoted to a sequence in place (never demoted — that would delete children); values are never
+  overwritten on re-runs, so app-side edits survive.
 - Derive `Position` fractional indices from array order (via `Forest` helpers); set
   `is_sequence` on anything with children; enforce parent-shape rules.
 - Historical imports are **actuals** with `is_complete = true`; attribute values validate against
@@ -87,9 +93,10 @@ Sets mapping (e.g. `8x 20 / 8x 20 / 5x 40` dumbbell blocks → per-set child ent
 - **Steady state**: live-load — the agent calls `import_day` directly — but every applied
   day-document is persisted to the import workspace regardless, so audit, diff, and re-run exist
   without a gate. Review by sampling + the questions file.
-- **Regression set**: the gate-approved documents *are* the gold set. A `check` command re-extracts
-  those files and diffs against the approved versions; run before any prompt change is trusted for
-  a bulk re-run.
+- **Regression set**: the gate-approved documents *are* the gold set — copied once to a `gold/`
+  directory when the gate ends (live artifacts are overwritten by re-runs). `gv-import check`
+  diffs re-extracted candidates against it (volatile provenance fields ignored; drift, missing,
+  and unexpected files all fail); run before any prompt change is trusted for a bulk re-run.
 - **Rollback**: runs target a **scratch copy** of the app DB (promoted manually when satisfied);
   the loader snapshots the SQLite file (db + wal + shm) before each run. The Swift app stays closed
   during any run against its real DB (its reactive cache only refreshes on in-process broadcasts).
@@ -178,3 +185,5 @@ handlers in-process — no MCP hop, no Claude Code dependency.
 | D9 | Provenance on artifacts (source name, file, hash, load date, model/prompt) + ids written back | Bidirectional file↔data attribution with zero core changes |
 | D10 | Gate-approved documents double as the regression gold set | Zero extra labeling; `check` guards prompt changes before bulk re-runs |
 | D11 | Import-shaped tools, not Action/Query passthrough | Model never handles ids/indices/validation; hardened boundary against LLM-typical errors |
+| D12 | Tree-path labels are registry-canonical and sanitized; `source_file` strictly validated | Review finding: surface-form labels let alias/casing/path wobble re-key every UUIDv5 and duplicate the archive; canonicalization makes id stability hold under prompt iteration |
+| D13 | Existed entries: promote scalar→sequence when a re-extraction brings children; never demote; never overwrite values | The answer-questions-and-re-run loop must converge — without promotion, core's placement guard rejects the children forever; without no-overwrite, re-runs clobber app-side edits |

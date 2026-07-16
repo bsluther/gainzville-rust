@@ -119,6 +119,9 @@ async fn load_registry(client: &SqliteClient) -> Registry {
     aliases
         .activities
         .insert("autobelays".to_string(), "Autobelay".to_string());
+    aliases
+        .attributes
+        .insert("bw".to_string(), "Bodyweight".to_string());
     Registry::new(activities, attributes, aliases)
 }
 
@@ -238,7 +241,7 @@ async fn import_day_applies_then_rerun_is_idempotent(pool: SqlitePool) {
     let ab2_outcome = report
         .entries
         .iter()
-        .find(|e| e.path == "climbing#0/autobelays#1")
+        .find(|e| e.path == "climbing#0/autobelay#1")
         .unwrap();
     let ab2 = client
         .run_query(FindEntryById { entry_id: ab2_outcome.id })
@@ -297,7 +300,7 @@ async fn rerun_with_new_child_appends_only_the_new_one(pool: SqlitePool) {
         .filter(|e| e.status == EntryStatus::Created)
         .collect();
     assert_eq!(created.len(), 1);
-    assert_eq!(created[0].path, "climbing#0/autobelays#2");
+    assert_eq!(created[0].path, "climbing#0/autobelay#2");
 
     // The new member appended after the existing ones.
     let ab3 = client
@@ -308,7 +311,7 @@ async fn rerun_with_new_child_appends_only_the_new_one(pool: SqlitePool) {
     let ab2_id = report
         .entries
         .iter()
-        .find(|e| e.path == "climbing#0/autobelays#1")
+        .find(|e| e.path == "climbing#0/autobelay#1")
         .unwrap()
         .id;
     let ab2 = client
@@ -371,4 +374,214 @@ async fn shape_rules_are_enforced(pool: SqlitePool) {
         .as_ref()
         .unwrap()
         .contains("start or end"));
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn rerun_preserves_app_edits_and_adds_new_values(pool: SqlitePool) {
+    use gv_core::actions::{UpdateAttributeValue, ValueField};
+    use gv_core::models::attribute::{AttributeValue, SelectValue};
+
+    let client = SqliteClient::from_pool(pool.clone(), Arc::new(SystemIo::default()));
+    let (user, registry) = seed(&client).await;
+    let importer = importer(pool, user.actor_id);
+    let mut doc = session_doc();
+    importer.import_day(&registry, &doc, false).await.unwrap();
+
+    // The user corrects a grade in the app after import.
+    let report = importer.import_day(&registry, &doc, true).await.unwrap();
+    let ab2_id = report
+        .entries
+        .iter()
+        .find(|e| e.path == "climbing#0/autobelay#1")
+        .unwrap()
+        .id;
+    let yds = registry.resolve_attribute("YDS").unwrap();
+    let corrected = AttributeValue::Select(SelectValue::Exact("5.12".to_string()));
+    client
+        .run_action(
+            UpdateAttributeValue {
+                actor_id: user.actor_id,
+                entry_id: ab2_id,
+                attribute_id: yds.id,
+                field: ValueField::Actual,
+                value: Some(corrected.clone()),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // A re-extraction adds a new attribute to that entry (via alias "bw").
+    doc.entries[2].children[1]
+        .attributes
+        .insert("bw".to_string(), json!({"value": 188.4, "unit": "lb"}));
+
+    let rerun = importer.import_day(&registry, &doc, false).await.unwrap();
+    assert!(rerun.ok, "{:?}", rerun.warnings);
+
+    // The app edit survived (values are never overwritten on re-run) …
+    let value = client
+        .run_query(FindValueByKey {
+            entry_id: ab2_id,
+            attribute_id: yds.id,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(value.actual, Some(corrected));
+
+    // … while the newly-extracted attribute was created on the existing entry.
+    let bodyweight = registry.resolve_attribute("bw").unwrap();
+    assert_eq!(bodyweight.name, "Bodyweight");
+    assert!(
+        client
+            .run_query(FindValueByKey {
+                entry_id: ab2_id,
+                attribute_id: bodyweight.id,
+            })
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn failed_root_recovers_on_rerun_without_duplicates(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool.clone(), Arc::new(SystemIo::default()));
+    let (user, registry) = seed(&client).await;
+    let importer = importer(pool, user.actor_id);
+
+    let mut bad_root = scalar(Some("Rowing"), None); // unknown activity
+    bad_root.start = Some("6am".to_string());
+    bad_root.children = vec![scalar(None, Some("warmup"))];
+    let mut good_root = scalar(None, Some("Woke"));
+    good_root.start = Some("5am".to_string());
+    let mut doc = day_doc(vec![good_root, bad_root]);
+
+    let first = importer.import_day(&registry, &doc, false).await.unwrap();
+    assert!(!first.ok);
+    assert_eq!(first.entry_ids.len(), 1); // only the good root confirmed
+
+    // Fix: the activity was actually Climbing.
+    doc.entries[1].activity = Some("Climbing".to_string());
+    let second = importer.import_day(&registry, &doc, false).await.unwrap();
+    assert!(second.ok, "{:?}", second.warnings);
+    let statuses: Vec<_> = second.entries.iter().map(|e| (e.path.as_str(), e.status)).collect();
+    assert!(statuses.contains(&("woke#0", EntryStatus::Existed)));
+    assert!(statuses.contains(&("climbing#0", EntryStatus::Created)));
+    assert!(statuses.contains(&("climbing#0/warmup#0", EntryStatus::Created)));
+
+    // No duplicates: exactly 3 imported entries exist (plus std-lib templates,
+    // which are is_template).
+    let entries = {
+        use gv_core::queries::AllEntries;
+        client.run_query(AllEntries {}).await.unwrap()
+    };
+    assert_eq!(entries.iter().filter(|e| !e.is_template).count(), 3);
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn alias_and_canonical_name_derive_the_same_ids(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool.clone(), Arc::new(SystemIo::default()));
+    let (user, registry) = seed(&client).await;
+    let importer = importer(pool, user.actor_id);
+
+    // First run extracts with the alias …
+    let doc = session_doc(); // children use "Autobelays"
+    let first = importer.import_day(&registry, &doc, false).await.unwrap();
+    assert!(first.ok);
+
+    // … a later prompt iteration normalizes to the canonical name. Same ids,
+    // no duplicates.
+    let mut canonical = session_doc();
+    for child in &mut canonical.entries[2].children {
+        child.activity = Some("Autobelay".to_string());
+    }
+    let second = importer.import_day(&registry, &canonical, false).await.unwrap();
+    assert!(second.ok);
+    assert!(second.entries.iter().all(|e| e.status == EntryStatus::Existed));
+    assert_eq!(second.entry_ids, first.entry_ids);
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn scalar_promoted_to_sequence_when_rerun_brings_children(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool.clone(), Arc::new(SystemIo::default()));
+    let (user, registry) = seed(&client).await;
+    let importer = importer(pool, user.actor_id);
+
+    // Run 1: the session imported with its problems still in questions.
+    let mut climb = scalar(Some("Climbing"), None);
+    climb.start = Some("1pm".to_string());
+    let mut doc = day_doc(vec![climb]);
+    importer.import_day(&registry, &doc, false).await.unwrap();
+
+    // Run 2: questions answered, children extracted.
+    doc.entries[0].children = vec![scalar(Some("Autobelay"), None)];
+    let report = importer.import_day(&registry, &doc, false).await.unwrap();
+    assert!(report.ok, "{:?}", report.warnings);
+
+    let parent = &report.entries[0];
+    assert_eq!(parent.status, EntryStatus::Existed);
+    assert!(parent.detail.as_deref().unwrap_or("").contains("promoted"));
+    let stored = client
+        .run_query(FindEntryById { entry_id: parent.id })
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(stored.is_sequence && !stored.is_complete);
+
+    let child = &report.entries[1];
+    assert_eq!(child.status, EntryStatus::Created);
+    let stored_child = client
+        .run_query(FindEntryById { entry_id: child.id })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored_child.parent_id(), Some(parent.id));
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn duration_only_children_and_forced_sequences_import(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool.clone(), Arc::new(SystemIo::default()));
+    let (user, registry) = seed(&client).await;
+    let importer = importer(pool, user.actor_id);
+
+    let mut climb = scalar(Some("Climbing"), None);
+    climb.start = Some("1pm".to_string());
+    let mut plank = scalar(None, Some("Plank"));
+    plank.duration = Some("40s".to_string());
+    climb.children = vec![plank];
+
+    // A sequence declared before its members are extracted.
+    let mut empty_session = scalar(Some("Climbing"), None);
+    empty_session.start = Some("6pm".to_string());
+    empty_session.sequence = Some(true);
+
+    let doc = day_doc(vec![climb, empty_session]);
+    let report = importer.import_day(&registry, &doc, false).await.unwrap();
+    assert!(report.ok, "{:?}", report.warnings);
+
+    let plank_outcome = report
+        .entries
+        .iter()
+        .find(|e| e.path == "climbing#0/plank#0")
+        .unwrap();
+    let stored_plank = client
+        .run_query(FindEntryById { entry_id: plank_outcome.id })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored_plank.temporal.duration(), Some(40_000));
+
+    let forced = report
+        .entries
+        .iter()
+        .find(|e| e.path == "climbing#1")
+        .unwrap();
+    let stored_forced = client
+        .run_query(FindEntryById { entry_id: forced.id })
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(stored_forced.is_sequence && !stored_forced.is_complete);
 }

@@ -20,7 +20,7 @@ use chrono::{NaiveDate, Utc};
 use chrono_tz::Tz;
 use fractional_index::FractionalIndex;
 use gv_client::client::SqliteClient;
-use gv_core::actions::{CreateEntry, CreateValue};
+use gv_core::actions::{CreateEntry, CreateValue, EntryChange, UpdateEntry, UpdateEntryCompletion};
 use gv_core::error::DomainError;
 use gv_core::models::attribute::{AttributeValue, Value};
 use gv_core::models::entry::{Entry, Position, Temporal};
@@ -137,6 +137,22 @@ struct PlanNode {
     errors: Vec<String>,
 }
 
+/// The identity label an entry contributes to its tree-path component:
+/// **registry-canonical** activity name where one resolves (so alias/casing
+/// wobble between extraction runs can't re-key ids), else the surface form,
+/// else the entry name — all sanitized (trim/lowercase/defuse '/' and '#').
+fn canonical_label(registry: &Registry, entry: &DocEntry) -> String {
+    let surface = match (&entry.activity, &entry.name) {
+        (Some(activity), _) => registry
+            .resolve_activity(activity)
+            .map(|a| a.name.to_string())
+            .unwrap_or_else(|_| activity.clone()),
+        (None, Some(name)) => name.clone(),
+        (None, None) => "anonymous".to_string(),
+    };
+    ident::sanitize_label(&surface)
+}
+
 /// DFS pre-order plan: parents always precede children, so the execute phase
 /// can run as a flat sequential pass.
 fn plan(registry: &Registry, doc: &DayDocument, tz: Tz) -> Vec<PlanNode> {
@@ -145,8 +161,15 @@ fn plan(registry: &Registry, doc: &DayDocument, tz: Tz) -> Vec<PlanNode> {
     // document order under pop().
     let mut stack: Vec<(&DocEntry, Option<usize>, String)> = Vec::new();
 
-    let components = ident::sibling_components(&doc.entries);
-    for (entry, component) in doc.entries.iter().zip(components).rev() {
+    let sibling_components = |siblings: &[DocEntry]| {
+        let labels: Vec<String> = siblings
+            .iter()
+            .map(|e| canonical_label(registry, e))
+            .collect();
+        ident::components(&labels)
+    };
+
+    for (entry, component) in doc.entries.iter().zip(sibling_components(&doc.entries)).rev() {
         stack.push((entry, None, component));
     }
 
@@ -154,8 +177,8 @@ fn plan(registry: &Registry, doc: &DayDocument, tz: Tz) -> Vec<PlanNode> {
         let node_index = nodes.len();
         nodes.push(plan_node(registry, doc, tz, entry, parent, &path));
 
-        let components = ident::sibling_components(&entry.children);
-        for (child, component) in entry.children.iter().zip(components).rev() {
+        for (child, component) in entry.children.iter().zip(sibling_components(&entry.children)).rev()
+        {
             stack.push((child, Some(node_index), format!("{path}/{component}")));
         }
     }
@@ -188,6 +211,10 @@ fn plan_node(
         errors.push("entry has children but sequence: false".to_string());
     }
 
+    if entry.name.as_deref().is_some_and(|n| n.trim().is_empty()) {
+        errors.push("entry name is empty".to_string());
+    }
+
     // Anonymous naming rules (docs/model.md): anonymous scalars need a name
     // to render as; anonymous sequences render as their members and take none.
     if entry.activity.is_none() {
@@ -213,6 +240,20 @@ fn plan_node(
     };
     if parent.is_none() && temporal.start().is_none() && temporal.end().is_none() {
         errors.push("root entry must have a start or end time".to_string());
+    }
+
+    // A stated duration that contradicts the start-end span signals a
+    // misparse (or an end on the wrong side of midnight) - surface it rather
+    // than silently discarding the duration.
+    if let (Some(_), Some(_), Some(stated)) = (&entry.start, &entry.end, &entry.duration)
+        && let Ok(stated_ms) = crate::temporal::parse_duration_ms(stated)
+        && let Some(span_ms) = temporal.infer_duration_ms()
+        && (span_ms - stated_ms as i64).abs() > 60_000
+    {
+        errors.push(format!(
+            "stated duration '{stated}' contradicts the start-end span ({} min)",
+            span_ms / 60_000
+        ));
     }
 
     let mut values = Vec::new();
@@ -291,7 +332,9 @@ impl Importer {
                     id: node.id,
                     status: EntryStatus::Blocked,
                     detail: Some("ancestor failed".to_string()),
-                    values: vec![],
+                    // Keep per-value diagnostics so a layered problem doesn't
+                    // cost an extra fix-and-rerun round trip.
+                    values: node.value_errors.clone(),
                 });
                 continue;
             }
@@ -317,6 +360,29 @@ impl Importer {
                 (None, true) => (EntryStatus::Planned, None),
                 (None, false) => (EntryStatus::Created, None),
             };
+
+            // A previously-imported scalar that the re-extraction now gives
+            // children (e.g. after a question was answered) must become a
+            // sequence, or core's placement guard rejects every child forever.
+            if let Some(existing) = &existing {
+                if node.is_sequence && !existing.is_sequence {
+                    if dry_run {
+                        detail = Some("would be promoted to a sequence".to_string());
+                    } else {
+                        match self.promote_to_sequence(existing).await? {
+                            Ok(()) => detail = Some("promoted to a sequence".to_string()),
+                            Err(reason) => {
+                                status = EntryStatus::Failed;
+                                detail = Some(format!("cannot promote to a sequence: {reason}"));
+                            }
+                        }
+                    }
+                } else if !node.is_sequence && existing.is_sequence {
+                    // Never demote — SetIsSequence(false) deep-deletes children.
+                    detail =
+                        Some("exists as a sequence; document says scalar - left as-is".to_string());
+                }
+            }
 
             if existing.is_none() && !dry_run {
                 let position = match node.parent {
@@ -348,7 +414,18 @@ impl Importer {
                     entry,
                 };
                 match self.client.run_action(action.into()).await {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        // Mid-insertion order is not preserved on re-runs:
+                        // new children of an existing parent append at the end.
+                        if let Some(i) = node.parent
+                            && matches!(outcomes[i].status, EntryStatus::Existed)
+                        {
+                            detail = Some(
+                                "appended after existing children (document order not preserved for mid-insertions)"
+                                    .to_string(),
+                            );
+                        }
+                    }
                     Err(DomainError::Rejected(reason)) => {
                         status = EntryStatus::Failed;
                         detail = Some(reason.to_string());
@@ -362,6 +439,10 @@ impl Importer {
                 for planned in &node.values {
                     value_outcomes.push(self.apply_value(node.id, planned, dry_run, status).await?);
                 }
+            }
+            // Only entries confirmed present — Planned ids on dry runs are
+            // phantoms and must not leak into applied provenance.
+            if matches!(status, EntryStatus::Created | EntryStatus::Existed) {
                 entry_ids.push(node.id);
             }
 
@@ -375,9 +456,26 @@ impl Importer {
         }
 
         let mut warnings = Vec::new();
-        for outcome in &outcomes {
+        for (node, outcome) in nodes.iter().zip(&outcomes) {
             if matches!(outcome.status, EntryStatus::Failed | EntryStatus::Blocked) {
                 warnings.push(format!("{}: {}", outcome.path, outcome.status_line()));
+            } else if node.parent.is_none() && node.temporal.start().is_none() {
+                // Allowed by the model, but the day queries filter on start
+                // time, so an end-only root is invisible to get_day.
+                warnings.push(format!(
+                    "{}: end-only root - not visible to day views",
+                    outcome.path
+                ));
+            }
+            for value in &outcome.values {
+                if matches!(value.status, ValueStatus::Failed) {
+                    warnings.push(format!(
+                        "{}: value '{}' failed: {}",
+                        outcome.path,
+                        value.attribute,
+                        value.detail.as_deref().unwrap_or("")
+                    ));
+                }
             }
         }
 
@@ -395,6 +493,40 @@ impl Importer {
             entry_ids,
             ok,
         })
+    }
+
+    /// Promote an existing scalar entry to a sequence (clearing completion —
+    /// sequences derive it from members). Inner `Err` is a rejection the
+    /// caller reports; outer `Err` is infrastructure failure.
+    async fn promote_to_sequence(
+        &self,
+        existing: &Entry,
+    ) -> anyhow::Result<Result<(), String>> {
+        // Completion first: core rejects marking a complete entry a sequence
+        // (sequences derive completion from members).
+        if existing.is_complete {
+            let update = UpdateEntryCompletion {
+                actor_id: self.config.actor_id,
+                entry_id: existing.id,
+                is_complete: false,
+            };
+            match self.client.run_action(update.into()).await {
+                Ok(_) => {}
+                Err(DomainError::Rejected(reason)) => return Ok(Err(reason.to_string())),
+                Err(e) => return Err(e).context("clear completion"),
+            }
+        }
+        let update = UpdateEntry {
+            actor_id: self.config.actor_id,
+            entry_id: existing.id,
+            change: EntryChange::SetIsSequence(true),
+        };
+        match self.client.run_action(update.into()).await {
+            Ok(_) => {}
+            Err(DomainError::Rejected(reason)) => return Ok(Err(reason.to_string())),
+            Err(e) => return Err(e).context("promote to sequence"),
+        }
+        Ok(Ok(()))
     }
 
     /// Next append position under `parent_id`: after the last index handed
@@ -504,7 +636,18 @@ impl Importer {
             .single()
             .context("day start ambiguous in timezone")?
             .with_timezone(&Utc);
-        let to = from + chrono::Duration::days(1);
+        // Next local midnight (not from+24h): correct on DST transition days.
+        let to = tz
+            .from_local_datetime(
+                &date
+                    .succ_opt()
+                    .context("date overflow")?
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap(),
+            )
+            .single()
+            .context("day end ambiguous in timezone")?
+            .with_timezone(&Utc);
         let roots = self
             .client
             .run_query(EntriesRootedInTimeInterval { from, to })

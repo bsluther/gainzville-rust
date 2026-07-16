@@ -150,7 +150,7 @@ async fn main() -> Result<()> {
 }
 
 fn snapshot(workspace: &Workspace, db: &std::path::Path) -> Result<PathBuf> {
-    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ").to_string();
     workspace.snapshot_db(db, &stamp)
 }
 
@@ -161,6 +161,10 @@ struct GvImportServer {
     importer: Arc<Importer>,
     workspace: Arc<Workspace>,
     source: String,
+    /// Serializes mutating tool calls: agents batch parallel tool calls, and
+    /// the exists-then-create sequences and questions-file read-modify-write
+    /// are not safe to interleave.
+    write_lock: Arc<tokio::sync::Mutex<()>>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -172,12 +176,20 @@ fn invalid(e: impl std::fmt::Display) -> McpError {
     McpError::invalid_params(e.to_string(), None)
 }
 
+fn domain_error(e: gv_core::error::DomainError) -> McpError {
+    match e {
+        gv_core::error::DomainError::Rejected(_) => invalid(e),
+        _ => internal(e),
+    }
+}
+
 impl GvImportServer {
     fn new(importer: Importer, workspace: Workspace, source: String) -> Self {
         GvImportServer {
             importer: Arc::new(importer),
             workspace: Arc::new(workspace),
             source,
+            write_lock: Arc::new(tokio::sync::Mutex::new(())),
             tool_router: Self::tool_router(),
         }
     }
@@ -392,7 +404,9 @@ impl GvImportServer {
         &self,
         Parameters(req): Parameters<ImportDayRequest>,
     ) -> Result<Json<ImportDayResult>, McpError> {
+        let _write_guard = self.write_lock.lock().await;
         let mut doc = req.document;
+        gv_import::workspace::validate_source_file(&doc.source_file).map_err(invalid)?;
         if doc.source != self.source {
             return Err(invalid(format!(
                 "document source '{}' does not match this server's source '{}'",
@@ -425,6 +439,7 @@ impl GvImportServer {
         &self,
         Parameters(req): Parameters<CreateActivityRequest>,
     ) -> Result<Json<CreatedSchema>, McpError> {
+        let _write_guard = self.write_lock.lock().await;
         let name = ActivityName::parse(req.name.clone()).map_err(invalid)?;
         let activity = Activity {
             id: Uuid::new_v4(),
@@ -438,7 +453,7 @@ impl GvImportServer {
             .client
             .run_action(action.into())
             .await
-            .map_err(invalid)?;
+            .map_err(domain_error)?;
         Ok(Json(CreatedSchema {
             id: activity.id,
             name: req.name,
@@ -452,6 +467,7 @@ impl GvImportServer {
         &self,
         Parameters(req): Parameters<CreateAttributeRequest>,
     ) -> Result<Json<CreatedSchema>, McpError> {
+        let _write_guard = self.write_lock.lock().await;
         let config: AttributeConfig = serde_json::from_value(req.config)
             .map_err(|e| invalid(format!("bad config: {e}")))?;
         let attribute = Attribute {
@@ -471,7 +487,7 @@ impl GvImportServer {
                 .into(),
             )
             .await
-            .map_err(invalid)?;
+            .map_err(domain_error)?;
         Ok(Json(CreatedSchema {
             id: attribute.id,
             name: req.name,

@@ -39,6 +39,9 @@ pub fn parse_time_of_day(s: &str) -> Result<NaiveTime, TemporalError> {
             h.parse::<u32>().map_err(|_| bad())?,
             m.parse::<u32>().map_err(|_| bad())?,
         ),
+        // A bare number with no meridiem ("7") is ambiguous — reject it, like
+        // the duration parser rejects unitless numbers.
+        None if meridiem.is_none() => return Err(bad()),
         None => (body.parse::<u32>().map_err(|_| bad())?, 0),
     };
 
@@ -79,7 +82,7 @@ pub fn parse_duration_ms(s: &str) -> Result<u32, TemporalError> {
     let raw = s.trim().to_lowercase().replace(' ', "");
     let bad = || TemporalError::BadDuration(s.to_string());
 
-    let mut total_ms: u64 = 0;
+    let mut total_ms: f64 = 0.0;
     let mut num = String::new();
     let mut unit = String::new();
     let mut saw_component = false;
@@ -105,14 +108,14 @@ pub fn parse_duration_ms(s: &str) -> Result<u32, TemporalError> {
             "s" | "sec" | "secs" | "second" | "seconds" => 1_000.0,
             _ => return Err(bad()),
         };
-        total_ms += (n * per_unit_ms) as u64;
+        total_ms += n * per_unit_ms;
         saw_component = true;
     }
 
-    if !saw_component {
+    if !saw_component || !total_ms.is_finite() || total_ms < 0.0 || total_ms > u32::MAX as f64 {
         return Err(bad());
     }
-    u32::try_from(total_ms).map_err(|_| bad())
+    Ok(total_ms as u32)
 }
 
 /// Build a core [`Temporal`] from the document's optional start/end/duration
@@ -128,13 +131,18 @@ pub fn build_temporal(
     let start_utc = start
         .map(|s| parse_time_of_day(s).and_then(|t| local_to_utc(date, t, tz)))
         .transpose()?;
-    let mut end_utc = end
-        .map(|s| parse_time_of_day(s).and_then(|t| local_to_utc(date, t, tz)))
-        .transpose()?;
-    if let (Some(s), Some(e)) = (start_utc, end_utc)
-        && e <= s
+    let end_tod = end.map(parse_time_of_day).transpose()?;
+    let mut end_utc = end_tod.map(|t| local_to_utc(date, t, tz)).transpose()?;
+    if let (Some(s), Some(e), Some(tod)) = (start_utc, end_utc, end_tod)
+        && e < s
     {
-        end_utc = Some(e + chrono::Duration::days(1));
+        // Crossed midnight: re-anchor the wall-clock end on the next LOCAL
+        // day (not +24h in UTC, which is wrong across DST transitions).
+        // start == end stays instantaneous rather than becoming a 24h entry.
+        let next_day = date
+            .succ_opt()
+            .ok_or_else(|| TemporalError::AmbiguousLocal(format!("{date} +1 day")))?;
+        end_utc = Some(local_to_utc(next_day, tod, tz)?);
     }
     let duration_ms = duration.map(parse_duration_ms).transpose()?;
 
@@ -173,6 +181,8 @@ mod tests {
         );
         assert!(parse_time_of_day("25:00").is_err());
         assert!(parse_time_of_day("13pm").is_err());
+        // Bare numbers without a meridiem are ambiguous.
+        assert!(parse_time_of_day("7").is_err());
     }
 
     #[test]
@@ -182,6 +192,28 @@ mod tests {
         assert_eq!(parse_duration_ms("1h30m").unwrap(), 5_400_000);
         assert!(parse_duration_ms("90").is_err());
         assert!(parse_duration_ms("").is_err());
+        // Absurd magnitudes error instead of overflowing.
+        assert!(parse_duration_ms("99999999999999999999h1s").is_err());
+    }
+
+    #[test]
+    fn equal_start_and_end_is_instantaneous_not_a_day() {
+        let date = NaiveDate::from_ymd_opt(2026, 2, 24).unwrap();
+        let t = build_temporal(date, chrono_tz::America::Denver, Some("7:31am"), Some("7:31am"), None)
+            .unwrap();
+        assert_eq!(t.start(), t.end());
+    }
+
+    #[test]
+    fn midnight_roll_reanchors_across_spring_forward() {
+        // Denver springs forward 2026-03-08 02:00 -> 03:00. Start 11:30pm on
+        // the 7th, end 3am "the next day" = 3am MDT: 150 elapsed minutes, not
+        // the 210 a naive +24h would produce.
+        let date = NaiveDate::from_ymd_opt(2026, 3, 7).unwrap();
+        let t = build_temporal(date, chrono_tz::America::Denver, Some("11:30pm"), Some("3am"), None)
+            .unwrap();
+        let (s, e) = (t.start().unwrap(), t.end().unwrap());
+        assert_eq!((e - s).num_minutes(), 150);
     }
 
     #[test]

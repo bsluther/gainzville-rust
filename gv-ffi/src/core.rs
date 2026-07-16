@@ -300,15 +300,21 @@ impl GainzvilleCore {
         let mut rng = rand::rng();
 
         for _ in 0..count {
-            let entry = Entry::arbitrary(&mut rng, &context);
-            let action: CreateEntry = entry.clone().into();
-            let mx = RUNTIME
-                .block_on(self.client.run_action(action.into()))
-                .map_err(FfiError::from)?;
-            // Update the model.
-            RUNTIME
-                .block_on(context.apply_mutation(mx))
-                .map_err(FfiError::from)?;
+            // CreateEntry::arbitrary (not bare Entry::arbitrary) so log-root
+            // temporals are patched onto the timeline; remaining rejections
+            // (e.g. sets-membership constraints) are best-effort skips, like
+            // the values seeder above.
+            let action = CreateEntry::arbitrary(&mut rng, &context);
+            match RUNTIME.block_on(self.client.run_action(action.into())) {
+                Ok(mx) => {
+                    // Update the model.
+                    RUNTIME
+                        .block_on(context.apply_mutation(mx))
+                        .map_err(FfiError::from)?;
+                }
+                Err(gv_core::error::DomainError::Rejected(_)) => continue,
+                Err(e) => return Err(FfiError::from(e)),
+            }
         }
         Ok(())
     }

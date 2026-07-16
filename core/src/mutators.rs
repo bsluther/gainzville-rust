@@ -292,17 +292,22 @@ pub async fn create_entry(
         )));
     }
 
-    // Check if referenced activity exists.
+    // Check the referenced activity exists and shares the entry's owner
+    // (docs/model.md: an entry has the same owner as its activity).
     if let Some(activity_id) = action.entry.activity_id {
-        if executor
+        let activity = executor
             .execute(FindActivityById { id: activity_id })
             .await?
-            .is_none()
-        {
-            return Err(DomainError::Rejected(RejectReason::NotFound(format!(
-                "create entry failed, activity '{}' not found",
-                activity_id
-            ))));
+            .ok_or_else(|| {
+                DomainError::Rejected(RejectReason::NotFound(format!(
+                    "create entry failed, activity '{}' not found",
+                    activity_id
+                )))
+            })?;
+        if activity.owner_id != action.entry.owner_id {
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "entry must have the same owner as its activity",
+            )));
         }
     };
 

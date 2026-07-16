@@ -53,7 +53,7 @@ impl Registry {
         let matches: Vec<&Activity> = self
             .activities
             .iter()
-            .filter(|a| a.name.to_string().eq_ignore_ascii_case(&canonical))
+            .filter(|a| a.name.to_string().to_lowercase() == canonical.to_lowercase())
             .collect();
         match matches.as_slice() {
             [one] => Ok(one),
@@ -67,7 +67,7 @@ impl Registry {
         let matches: Vec<&Attribute> = self
             .attributes
             .iter()
-            .filter(|a| a.name.eq_ignore_ascii_case(&canonical))
+            .filter(|a| a.name.to_lowercase() == canonical.to_lowercase())
             .collect();
         match matches.as_slice() {
             [one] => Ok(one),
@@ -90,7 +90,7 @@ impl Registry {
 fn resolve_alias(aliases: &BTreeMap<String, String>, name: &str) -> String {
     aliases
         .iter()
-        .find(|(k, _)| k.eq_ignore_ascii_case(name))
+        .find(|(k, _)| k.to_lowercase() == name.to_lowercase())
         .map(|(_, v)| v.clone())
         .unwrap_or_else(|| name.to_string())
 }

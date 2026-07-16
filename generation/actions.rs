@@ -69,11 +69,13 @@ impl Arbitrary for CreateActivity {
 impl Arbitrary for CreateEntry {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
         let mut entry = Entry::arbitrary(rng, context);
-        // Log roots must sit on the timeline (create_entry rejects start-and-
+        // LOG roots must sit on the timeline (create_entry rejects start-and-
         // end-less roots) — patch the temporal rather than fabricating an
-        // action core always rejects. Validity lives here in the action
-        // generator; Entry::arbitrary stays unconstrained for row-layer tests.
+        // action core always rejects. Template roots are exempt (they must
+        // NOT carry start/end). Validity lives here in the action generator;
+        // Entry::arbitrary stays unconstrained for row-layer tests.
         if entry.position.is_none()
+            && !entry.is_template
             && entry.temporal.start().is_none()
             && entry.temporal.end().is_none()
         {

@@ -36,8 +36,19 @@ fn round2(v: f64) -> f64 {
 }
 
 /// Convert a document value into the typed value the attribute's config
-/// expects.
+/// expects, validated against the config exactly as the apply path will
+/// (`Attribute::validate_value`) so dry runs catch config-level rejections
+/// (bounds, integer-only, text length, range rules), not just shape errors.
 pub fn convert(attribute: &Attribute, raw: &Json) -> Result<AttributeValue, ValueError> {
+    let value = convert_shape(attribute, raw)?;
+    attribute.validate_value(&value).map_err(|e| ValueError::Shape {
+        attribute: attribute.name.clone(),
+        message: e.to_string(),
+    })?;
+    Ok(value)
+}
+
+fn convert_shape(attribute: &Attribute, raw: &Json) -> Result<AttributeValue, ValueError> {
     let name = attribute.name.clone();
     let shape = |message: &str| ValueError::Shape {
         attribute: name.clone(),
@@ -69,10 +80,20 @@ pub fn convert(attribute: &Attribute, raw: &Json) -> Result<AttributeValue, Valu
             let items = raw
                 .as_array()
                 .ok_or_else(|| shape("expected an array of strings"))?;
-            let mut chosen = Vec::with_capacity(items.len());
+            if items.is_empty() {
+                // App convention: an empty selection means no value — omit
+                // the attribute instead of storing an attached-but-empty set.
+                return Err(shape("empty multiselect - omit the attribute instead"));
+            }
+            let mut chosen: Vec<String> = Vec::with_capacity(items.len());
             for item in items {
                 let s = item.as_str().ok_or_else(|| shape("expected string items"))?;
-                chosen.push(match_option(&name, &config.options, s)?);
+                let canonical = match_option(&name, &config.options, s)?;
+                // Case-variant duplicates canonicalize to the same option;
+                // dedupe here rather than letting core reject the pair.
+                if !chosen.contains(&canonical) {
+                    chosen.push(canonical);
+                }
             }
             Ok(AttributeValue::Multiselect(chosen))
         }
@@ -138,9 +159,10 @@ pub fn convert(attribute: &Attribute, raw: &Json) -> Result<AttributeValue, Valu
 /// Case-insensitively match a string onto a select/multiselect option,
 /// returning the option's canonical casing.
 fn match_option(attribute: &str, options: &[String], given: &str) -> Result<String, ValueError> {
+    let given_lower = given.to_lowercase();
     options
         .iter()
-        .find(|o| o.eq_ignore_ascii_case(given))
+        .find(|o| o.to_lowercase() == given_lower)
         .cloned()
         .ok_or_else(|| ValueError::NotAnOption {
             attribute: attribute.to_string(),

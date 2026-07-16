@@ -6,9 +6,11 @@
 //! The tree-path is content-anchored, not positional: each component is
 //! `<label>#<occurrence-among-same-label-siblings>`. Inserting an unrelated
 //! sibling in a re-extraction does not shift the ids of existing entries;
-//! only same-label reordering does (docs/import-design.md, D3).
+//! only same-label reordering does (docs/import-design.md, D3). Labels are
+//! **registry-canonical** (the caller resolves aliases before minting
+//! components), so alias/casing wobble between extraction runs can't re-key
+//! ids either.
 
-use crate::document::DocEntry;
 use chrono::NaiveDate;
 use uuid::Uuid;
 
@@ -17,22 +19,31 @@ use uuid::Uuid;
 /// only in that it never changes).
 pub const IMPORT_NAMESPACE: Uuid = uuid::uuid!("f1bd2f61-6b3b-5d2e-9f6a-3a7c9e4b8d10");
 
-/// The label a doc entry contributes to its tree-path component: activity
-/// name, else entry name, else "anonymous" — lowercased so extraction-side
-/// case wobble doesn't change identity.
-pub fn entry_label(entry: &DocEntry) -> String {
-    entry
-        .activity
-        .as_deref()
-        .or(entry.name.as_deref())
-        .unwrap_or("anonymous")
-        .to_lowercase()
+/// Normalize a label for identity: trimmed and lowercased (extraction-side
+/// case/whitespace wobble must not change ids), with the path
+/// metacharacters '/' and '#' replaced so a free-form name can never forge a
+/// component boundary and collide with a genuinely nested path. Empty labels
+/// degrade to "anonymous".
+pub fn sanitize_label(s: &str) -> String {
+    let cleaned = s.trim().to_lowercase().replace(['/', '#'], "_");
+    if cleaned.is_empty() {
+        "anonymous".to_string()
+    } else {
+        cleaned
+    }
 }
 
-/// Path component for `entry`, given how many earlier siblings share its
-/// label.
-pub fn path_component(entry: &DocEntry, occurrence: usize) -> String {
-    format!("{}#{}", entry_label(entry), occurrence)
+/// Tree-path components for a sibling list of (already canonical, sanitized)
+/// labels, in order: `<label>#<occurrence among equal labels before it>`.
+pub fn components(labels: &[String]) -> Vec<String> {
+    labels
+        .iter()
+        .enumerate()
+        .map(|(i, label)| {
+            let occurrence = labels[..i].iter().filter(|l| *l == label).count();
+            format!("{label}#{occurrence}")
+        })
+        .collect()
 }
 
 /// Deterministic id for the entry at `tree_path` (root-to-leaf components
@@ -42,37 +53,9 @@ pub fn entry_id(source: &str, source_file: &str, date: NaiveDate, tree_path: &st
     Uuid::new_v5(&IMPORT_NAMESPACE, key.as_bytes())
 }
 
-/// Tree-path components for a sibling list, in order: each entry paired with
-/// its occurrence index among same-label predecessors.
-pub fn sibling_components(siblings: &[DocEntry]) -> Vec<String> {
-    let mut components = Vec::with_capacity(siblings.len());
-    for (i, entry) in siblings.iter().enumerate() {
-        let label = entry_label(entry);
-        let occurrence = siblings[..i]
-            .iter()
-            .filter(|s| entry_label(s) == label)
-            .count();
-        components.push(path_component(entry, occurrence));
-    }
-    components
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn doc_entry(activity: Option<&str>, name: Option<&str>) -> DocEntry {
-        DocEntry {
-            activity: activity.map(str::to_string),
-            name: name.map(str::to_string),
-            start: None,
-            end: None,
-            duration: None,
-            attributes: Default::default(),
-            children: vec![],
-            sequence: None,
-        }
-    }
 
     #[test]
     fn ids_are_stable_and_distinct() {
@@ -85,18 +68,23 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_normalizes_and_defuses_metacharacters() {
+        assert_eq!(sanitize_label("  Bench Press "), "bench press");
+        // A name that would otherwise forge "a#0/b#0" — a nested-looking path.
+        assert_eq!(sanitize_label("a#0/b"), "a_0_b");
+        assert_eq!(sanitize_label("  "), "anonymous");
+    }
+
+    #[test]
     fn unrelated_sibling_insertion_preserves_components() {
-        let before = vec![
-            doc_entry(Some("Autobelay"), None),
-            doc_entry(Some("Autobelay"), None),
-        ];
+        let before = vec!["autobelay".to_string(), "autobelay".to_string()];
         let after = vec![
-            doc_entry(Some("Autobelay"), None),
-            doc_entry(Some("Stretch"), None),
-            doc_entry(Some("Autobelay"), None),
+            "autobelay".to_string(),
+            "stretch".to_string(),
+            "autobelay".to_string(),
         ];
-        let before_c = sibling_components(&before);
-        let after_c = sibling_components(&after);
+        let before_c = components(&before);
+        let after_c = components(&after);
         // The two autobelays keep their components despite the insertion.
         assert_eq!(before_c[0], after_c[0]);
         assert_eq!(before_c[1], after_c[2]);
