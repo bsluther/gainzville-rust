@@ -136,7 +136,7 @@ impl QueryExecutor<EntriesRootedInTimeInterval> for PostgresQueryExecutor<'_> {
                 WHERE e.start_time BETWEEN $1 AND $2
                     AND e.parent_id IS NULL
                 UNION ALL
-                SELECT * FROM entries c
+                SELECT c.* FROM entries c
                     INNER JOIN forest ON c.parent_id = forest.id
             )
             SELECT * FROM forest
