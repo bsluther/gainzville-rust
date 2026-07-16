@@ -26,6 +26,7 @@
 | [Attributes/Values design](./docs/attributes-design.md) | Typed attribute system and serde gotchas (`arbitrary_precision`) |
 | [Sets design](./docs/sets-design.md) | display_as_sets: invariants, ConvertToSets/DuplicateEntry actions, temporal model, sets UI |
 | [Forest UI model](./docs/forest-ui-model.md) | How the entry forest is presented and traversed in the UI |
+| [LLM import design](./docs/import-design.md) | LLM-driven markdown import: day-document pivot format, gv-import crate + MCP server, two-phase schema-first workflow, idempotency/provenance |
 
 Swift app patterns, platform targets, design system, and open work: [`swift-app/SWIFT-APP.md`](./swift-app/SWIFT-APP.md). Swift/iOS architecture research and decisions live in [`docs/swift-architecture/`](./docs/swift-architecture/).
 
