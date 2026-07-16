@@ -60,6 +60,21 @@ impl Arbitrary for Entry {
     }
 }
 
+/// A temporal carrying a start or end — what log roots require to sit on the
+/// timeline. Samples the qualifying variants directly (no rejection re-rolls,
+/// which bloat shrink-based property-test inputs). Used by action generators;
+/// `Entry::arbitrary` itself stays unconstrained so row-layer property tests
+/// cover off-timeline shapes too.
+pub(crate) fn arbitrary_timeline_temporal<R: RngExt, C: GenerationContext>(
+    rng: &mut R,
+    context: &C,
+) -> Temporal {
+    // All variants except None (0) and Duration (3).
+    const TIMELINE_VARIANTS: [u8; 5] = [1, 2, 4, 5, 6];
+    let variant = TIMELINE_VARIANTS[rng.random_range(0..TIMELINE_VARIANTS.len())];
+    temporal_variant(variant, rng, context)
+}
+
 impl Arbitrary for FractionalIndex {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, _context: &C) -> Self {
         // Found the terminator in the fractional_index internals, seems to work.
@@ -139,37 +154,40 @@ pub fn gen_random_exercise_duration_ms<R: RngExt>(rng: &mut R) -> u32 {
 // TODO: this doesn't enforce that start <= end. Should impl ArbitraryFrom<Range>
 impl Arbitrary for Temporal {
     fn arbitrary<R: RngExt, C: GenerationContext>(rng: &mut R, context: &C) -> Self {
-        let t = match rng.random_range(0..=6) {
-            0 => Temporal::None,
-            1 => Temporal::Start {
-                start: DateTime::<Utc>::arbitrary(rng, context),
-            },
-            2 => Temporal::End {
-                end: DateTime::<Utc>::arbitrary(rng, context),
-            },
-            3 => Temporal::Duration {
-                duration: rng.random(),
-            },
-            4 => Temporal::StartAndEnd {
-                start: DateTime::<Utc>::arbitrary(rng, context),
-                end: DateTime::<Utc>::arbitrary(rng, context),
-            },
-            5 => Temporal::StartAndDuration {
-                start: DateTime::<Utc>::arbitrary(rng, context),
-                duration_ms: rng.random(),
-            },
-            6 => {
-                let d = gen_random_exercise_duration_ms(rng);
+        let variant = rng.random_range(0..=6);
+        temporal_variant(variant, rng, context)
+    }
+}
 
-                Temporal::DurationAndEnd {
-                    duration_ms: d,
-                    end: DateTime::<Utc>::arbitrary(rng, context),
-                }
-            }
-            _ => unreachable!(),
-        };
-
-        t
+fn temporal_variant<R: RngExt, C: GenerationContext>(
+    variant: u8,
+    rng: &mut R,
+    context: &C,
+) -> Temporal {
+    match variant {
+        0 => Temporal::None,
+        1 => Temporal::Start {
+            start: DateTime::<Utc>::arbitrary(rng, context),
+        },
+        2 => Temporal::End {
+            end: DateTime::<Utc>::arbitrary(rng, context),
+        },
+        3 => Temporal::Duration {
+            duration: rng.random(),
+        },
+        4 => Temporal::StartAndEnd {
+            start: DateTime::<Utc>::arbitrary(rng, context),
+            end: DateTime::<Utc>::arbitrary(rng, context),
+        },
+        5 => Temporal::StartAndDuration {
+            start: DateTime::<Utc>::arbitrary(rng, context),
+            duration_ms: rng.random(),
+        },
+        6 => Temporal::DurationAndEnd {
+            duration_ms: gen_random_exercise_duration_ms(rng),
+            end: DateTime::<Utc>::arbitrary(rng, context),
+        },
+        _ => unreachable!(),
     }
 }
 

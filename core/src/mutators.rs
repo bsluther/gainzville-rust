@@ -306,37 +306,56 @@ pub async fn create_entry(
         }
     };
 
-    // A child must match its parent's template/log kind — a template tree and a
-    // log tree never mix. Enforced here (not just in move_entry) so no caller
-    // can create a mismatched child that would then fail to move.
+    // Placement validation mirrors move_entry / create_entry_from_activity so
+    // no caller can create an entry that would then be illegal to move there.
     if let Some(position) = &action.entry.position {
-        if let Some(parent) = executor
+        let parent = executor
             .execute(FindEntryById {
                 entry_id: position.parent_id,
             })
             .await?
-        {
-            if parent.is_template != action.entry.is_template {
-                return Err(DomainError::Rejected(RejectReason::Precondition(
-                    "child entry must match its parent's template/log kind",
-                )));
-            }
+            .ok_or_else(|| {
+                DomainError::Rejected(RejectReason::NotFound(
+                    "create entry parent does not exist".to_string(),
+                ))
+            })?;
 
-            // Joining a sets sequence: the new member must match the members'
-            // shared activity (or shared anonymity).
-            if parent.display_as_sets {
-                let forest = load_subtree_forest(executor, parent.id).await?;
-                if let Some(required) =
-                    sets_member_activity_constraint(parent.id, &forest.children(parent.id))?
-                {
-                    if action.entry.activity_id != required {
-                        return Err(DomainError::Rejected(RejectReason::Precondition(
-                            "sets members must share one activity",
-                        )));
-                    }
+        if !parent.is_sequence {
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "cannot create entry in a non-sequence entry",
+            )));
+        }
+
+        // A child must match its parent's template/log kind — a template tree
+        // and a log tree never mix.
+        if parent.is_template != action.entry.is_template {
+            return Err(DomainError::Rejected(RejectReason::Precondition(
+                "child entry must match its parent's template/log kind",
+            )));
+        }
+
+        // Joining a sets sequence: the new member must match the members'
+        // shared activity (or shared anonymity).
+        if parent.display_as_sets {
+            let forest = load_subtree_forest(executor, parent.id).await?;
+            if let Some(required) =
+                sets_member_activity_constraint(parent.id, &forest.children(parent.id))?
+            {
+                if action.entry.activity_id != required {
+                    return Err(DomainError::Rejected(RejectReason::Precondition(
+                        "sets members must share one activity",
+                    )));
                 }
             }
         }
+    } else if !action.entry.is_template
+        && action.entry.temporal.start().is_none()
+        && action.entry.temporal.end().is_none()
+    {
+        // Log roots must be placed on the timeline; template roots are exempt.
+        return Err(DomainError::Rejected(RejectReason::Precondition(
+            "root entry must have defined start or end time",
+        )));
     }
 
     validate_template_temporal(action.entry.is_template, &action.entry.temporal)?;

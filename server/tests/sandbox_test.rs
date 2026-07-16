@@ -57,7 +57,10 @@ async fn test_create_user_activity_entry(pool: PgPool) {
             display_as_sets: false,
             is_sequence: false,
             is_complete: false,
-            temporal: Temporal::None,
+            // Log roots must sit on the timeline.
+            temporal: Temporal::Start {
+                start: sqlx::types::chrono::Utc::now(),
+            },
         },
     };
     postgres_server

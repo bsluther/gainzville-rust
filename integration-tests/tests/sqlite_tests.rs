@@ -63,13 +63,17 @@ async fn test_find_descendants(pool: SqlitePool) {
         activity_id: None,
         display_as_sets: false,
         id: Uuid::new_v4(),
-        is_sequence: false,
+        // Parent of `b` below — children live under sequences only.
+        is_sequence: true,
         is_complete: false,
         is_template: false,
         name: None,
         owner_id: user.actor_id,
         position: None,
-        temporal: Temporal::None,
+        // Log roots must sit on the timeline.
+        temporal: Temporal::Start {
+            start: sqlx::types::chrono::Utc::now(),
+        },
     };
 
     let b: Entry = Entry {
@@ -167,7 +171,10 @@ async fn test_create_attribute_and_value(pool: SqlitePool) {
         is_sequence: false,
         is_complete: false,
         is_template: false,
-        temporal: Temporal::None,
+        // Log roots must sit on the timeline.
+        temporal: Temporal::Start {
+            start: sqlx::types::chrono::Utc::now(),
+        },
     };
     sqlite_client
         .run_action(CreateEntry::from(entry.clone()).into())
@@ -250,7 +257,10 @@ async fn test_attach_and_detach_value(pool: SqlitePool) {
         is_sequence: false,
         is_complete: false,
         is_template: false,
-        temporal: Temporal::None,
+        // Log roots must sit on the timeline.
+        temporal: Temporal::Start {
+            start: sqlx::types::chrono::Utc::now(),
+        },
     };
     sqlite_client
         .run_action(CreateEntry::from(entry.clone()).into())
@@ -346,7 +356,10 @@ async fn seed_entry(client: &SqliteClient) -> (User, Entry) {
         is_sequence: false,
         is_complete: false,
         is_template: false,
-        temporal: Temporal::None,
+        // Log roots must sit on the timeline.
+        temporal: Temporal::Start {
+            start: sqlx::types::chrono::Utc::now(),
+        },
     };
     client
         .run_action(CreateEntry::from(entry.clone()).into())
@@ -1522,26 +1535,16 @@ async fn test_convert_to_sets_rejections(pool: SqlitePool) {
         "colliding sequence_id must be rejected"
     );
 
-    // A log root with no start/end cannot be converted: the sequence would
-    // land off the timeline.
+    // An off-timeline log root can no longer be created at all — create_entry
+    // enforces the root start-or-end rule, so ConvertToSets' own off-timeline
+    // guard is defense-in-depth against legacy/out-of-band data.
     let off_timeline = log_entry(user.actor_id, None, None);
-    client
-        .run_action(CreateEntry::from(off_timeline.clone()).into())
-        .await
-        .unwrap();
     assert!(
         client
-            .run_action(
-                ConvertToSets {
-                    actor_id: user.actor_id,
-                    entry_id: off_timeline.id,
-                    sequence_id: Uuid::new_v4(),
-                }
-                .into(),
-            )
+            .run_action(CreateEntry::from(off_timeline).into())
             .await
             .is_err(),
-        "off-timeline root conversion must be rejected"
+        "off-timeline root creation must be rejected"
     );
 
     // A member of an activity-bearing sets sequence cannot be converted: the
@@ -2156,6 +2159,79 @@ async fn test_create_entry_born_flagged_rejected(pool: SqlitePool) {
             .is_err(),
         "a new entry cannot be born with display_as_sets"
     );
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn test_create_entry_placement_guards(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool, Arc::new(gv_core::io::SystemIo::default()));
+    let user = create_user(&client).await;
+    let on_timeline = Temporal::Start {
+        start: sqlx::types::chrono::Utc::now(),
+    };
+
+    // Parent must exist.
+    let orphan = log_entry(
+        user.actor_id,
+        None,
+        child_position(Uuid::new_v4(), FractionalIndex::default()),
+    );
+    assert!(
+        client
+            .run_action(CreateEntry::from(orphan).into())
+            .await
+            .is_err(),
+        "creating under a missing parent must be rejected"
+    );
+
+    // Parent must be a sequence.
+    let mut scalar_root = log_entry(user.actor_id, None, None);
+    scalar_root.temporal = on_timeline.clone();
+    client
+        .run_action(CreateEntry::from(scalar_root.clone()).into())
+        .await
+        .unwrap();
+    let under_scalar = log_entry(
+        user.actor_id,
+        None,
+        child_position(scalar_root.id, FractionalIndex::default()),
+    );
+    assert!(
+        client
+            .run_action(CreateEntry::from(under_scalar).into())
+            .await
+            .is_err(),
+        "creating under a non-sequence parent must be rejected"
+    );
+
+    // Log roots must sit on the timeline (template roots are exempt and are
+    // covered by the template temporal rules).
+    let off_timeline_root = log_entry(user.actor_id, None, None);
+    assert!(
+        client
+            .run_action(CreateEntry::from(off_timeline_root).into())
+            .await
+            .is_err(),
+        "root without start or end must be rejected"
+    );
+
+    // Sanity: a child under a sequence root passes all placement guards.
+    let mut sequence_root = log_entry(user.actor_id, None, None);
+    sequence_root.is_sequence = true;
+    sequence_root.temporal = on_timeline;
+    client
+        .run_action(CreateEntry::from(sequence_root.clone()).into())
+        .await
+        .unwrap();
+    let mut child = log_entry(
+        user.actor_id,
+        None,
+        child_position(sequence_root.id, FractionalIndex::default()),
+    );
+    child.name = Some("child".to_string());
+    client
+        .run_action(CreateEntry::from(child).into())
+        .await
+        .unwrap();
 }
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
