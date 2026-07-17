@@ -4,6 +4,8 @@ Gainzville is a platform for athletes to log, analyze, and explore (refine? expa
 training. Instead of just giving you a menu of predefined activities and data attributes, Gainzville
 gives you the building blocks to create them. 
 
+https://github.com/user-attachments/assets/422e7303-3c18-4b64-affc-62a6cbc2eec8
+
 Gainzville models workouts, activities, and arbitrary structured measurements as an ordered forest
 of entries, syncs across devices, and drives a native Swift app for iOS and macOS.
 
