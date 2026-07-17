@@ -16,7 +16,9 @@ The project is built around a single Rust domain core that is shared, unchanged,
 SQLite client, a Postgres HTTP server, and a Swift UI (via a UniFFI boundary). The same actions and
 queries run on every target.
 
-https://github.com/user-attachments/assets/422e7303-3c18-4b64-affc-62a6cbc2eec8
+<p align="center">
+    <video src="https://github.com/user-attachments/assets/422e7303-3c18-4b64-affc-62a6cbc2eec8" width="300" muted autoplay loop playsinline controls></video>
+  </p>
 
 ## In-Progress
 
