@@ -4,7 +4,7 @@ Gainzville is a platform for athletes to log, analyze, and explore (refine? expa
 training. Instead of just giving you a menu of predefined activities and data attributes, Gainzville
 gives you the building blocks to create them. 
 
-https://github.com/user-attachments/assets/422e7303-3c18-4b64-affc-62a6cbc2eec8
+<img width="590" height="1278" alt="log-str-workout" src="https://github.com/user-attachments/assets/bdb7107b-444d-4a56-9bc6-795fa24190f5" />
 
 Gainzville models workouts, activities, and arbitrary structured measurements as an ordered forest
 of entries, syncs across devices, and drives a native Swift app for iOS and macOS.
@@ -12,6 +12,8 @@ of entries, syncs across devices, and drives a native Swift app for iOS and macO
 The project is built around a single Rust domain core that is shared, unchanged, by an offline
 SQLite client, a Postgres HTTP server, and a Swift UI (via a UniFFI boundary). The same actions and
 queries run on every target.
+
+https://github.com/user-attachments/assets/422e7303-3c18-4b64-affc-62a6cbc2eec8
 
 ## In-Progress
 
