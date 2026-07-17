@@ -78,7 +78,7 @@ const BOULDER: ActivityIds = ActivityIds::new(
     uuid!("00000000-0000-4000-8000-000000000302"),
 );
 
-const SPORT_CLIMB: ActivityIds = ActivityIds::new(
+const ROUTE_CLIMB: ActivityIds = ActivityIds::new(
     uuid!("00000000-0000-4000-8000-000000000311"),
     uuid!("00000000-0000-4000-8000-000000000312"),
 );
@@ -191,6 +191,10 @@ impl StandardLibrary {
             description: Some("Yosemite Decimal System climbing grade".to_string()),
             config: SelectConfig {
                 options: vec![
+                    "<5.5".to_string(),
+                    "5.5".to_string(),
+                    "5.6".to_string(),
+                    "5.7".to_string(),
                     "5.8".to_string(),
                     "5.9".to_string(),
                     "10-".to_string(),
@@ -333,8 +337,12 @@ impl StandardLibrary {
                     "tension board".to_string(),
                     "lead".to_string(),
                     "top-rope".to_string(),
+                    "autobelay".to_string(),
                     "trad".to_string(),
                     "crack".to_string(),
+                    "uncertain grade".to_string(),
+                    "indoor".to_string(),
+                    "outdoor".to_string(),
                 ],
                 default: None,
             }
@@ -362,9 +370,10 @@ impl StandardLibrary {
                 &[V_GRADE_ID, OUTCOME_ID, CLIMB_TAG_ID],
             ),
             scalar_activity(
-                &SPORT_CLIMB,
-                "Sport Climb",
-                "A rock or gym climb equipped with bolts, usually 30-200 feet tall.",
+                &ROUTE_CLIMB,
+                "Route Climb",
+                "A roped climb — sport, top-rope, autobelay, or lead — graded on the YDS scale. \
+                 The rope style is recorded as a Climb Tag.",
                 &[YDS_GRADE_ID, OUTCOME_ID, CLIMB_TAG_ID],
             ),
             scalar_activity(
