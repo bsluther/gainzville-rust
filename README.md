@@ -12,6 +12,11 @@ gives you the building blocks to create them.
 Gainzville models workouts, activities, and arbitrary structured measurements as an ordered forest
 of entries, syncs across devices, and drives a native Swift app for iOS and macOS.
 
+<p align="center">
+    <img src="docs/2025-11-23-core-model.png" width="600" alt="Forest data model"><br>
+    <em>The core model: exercises form a time-ordered forest with typed attributes and activity categorization</em>
+</p>
+
 The project is built around a single Rust domain core that is shared, unchanged, by an offline
 SQLite client, a Postgres HTTP server, and a Swift UI (via a UniFFI boundary). The same actions and
 queries run on every target.
