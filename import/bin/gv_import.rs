@@ -285,6 +285,10 @@ struct CreateAttributeRequest {
     /// {"Multiselect": {"options": ["crimpy"], "default": null}} ·
     /// {"Numeric": {"min": 0, "max": 10, "integer": false, "default": null}} ·
     /// {"Mass": {"default_unit": "Pound"}} · {"Length": {"default_unit": "Millimeter"}}
+    // Pin the schema to an object so MCP clients that stringify untyped params
+    // pass a JSON object, not a string (serde_json::Value's default schema is
+    // untyped). Runtime type stays Value; from_value handles the object.
+    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     config: serde_json::Value,
 }
 

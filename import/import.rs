@@ -131,6 +131,7 @@ struct PlanNode {
     activity_id: Option<Uuid>,
     name: Option<String>,
     is_sequence: bool,
+    display_as_sets: bool,
     temporal: Temporal,
     values: Vec<PlannedValue>,
     value_errors: Vec<ValueOutcome>,
@@ -211,6 +212,23 @@ fn plan_node(
         errors.push("entry has children but sequence: false".to_string());
     }
 
+    // A `display_as_sets` sequence is the "sets" shape: an exercise (Bench Press)
+    // whose children are its sets — same activity on the node and every child. A
+    // climbing session (activity Climbing) holding Boulder children is NOT sets,
+    // so requiring the node's own activity to match the children's is what
+    // separates the two. The importer only sets the flag; the sets UI reads it.
+    let display_as_sets = is_sequence
+        && activity_id.is_some()
+        && !entry.children.is_empty()
+        && entry.children.iter().all(|child| {
+            child
+                .activity
+                .as_ref()
+                .and_then(|name| registry.resolve_activity(name).ok())
+                .map(|a| a.id)
+                == activity_id
+        });
+
     if entry.name.as_deref().is_some_and(|n| n.trim().is_empty()) {
         errors.push("entry name is empty".to_string());
     }
@@ -287,6 +305,7 @@ fn plan_node(
         activity_id,
         name: entry.name.clone(),
         is_sequence,
+        display_as_sets,
         temporal,
         values,
         value_errors,
@@ -402,6 +421,9 @@ impl Importer {
                     name: node.name.clone(),
                     position,
                     is_template: false,
+                    // Core rejects display_as_sets on a fresh entry (the shape
+                    // isn't there yet). Flipped on in a post-pass once members
+                    // exist — see below.
                     display_as_sets: false,
                     is_sequence: node.is_sequence,
                     // Historical imports are completed actuals; sequences
@@ -455,7 +477,37 @@ impl Importer {
             });
         }
 
+        // Sets post-pass: an exercise sequence (Bench Press with set children)
+        // gets display_as_sets, but core rejects the flag on a fresh entry and
+        // requires the members to exist first — so flip it on only now that the
+        // whole subtree is created. Idempotent: SetDisplayAsSets no-ops when the
+        // flag already matches, so re-runs cost nothing.
         let mut warnings = Vec::new();
+        if !dry_run {
+            for (node, outcome) in nodes.iter().zip(&outcomes) {
+                if !node.display_as_sets
+                    || !matches!(outcome.status, EntryStatus::Created | EntryStatus::Existed)
+                {
+                    continue;
+                }
+                let update = UpdateEntry {
+                    actor_id: self.config.actor_id,
+                    entry_id: node.id,
+                    change: EntryChange::SetDisplayAsSets(true),
+                };
+                match self.client.run_action(update.into()).await {
+                    Ok(_) => {}
+                    Err(DomainError::Rejected(reason)) => {
+                        warnings.push(format!(
+                            "{}: could not mark as sets: {reason}",
+                            node.path
+                        ));
+                    }
+                    Err(e) => return Err(e).context("set display_as_sets"),
+                }
+            }
+        }
+
         for (node, outcome) in nodes.iter().zip(&outcomes) {
             if matches!(outcome.status, EntryStatus::Failed | EntryStatus::Blocked) {
                 warnings.push(format!("{}: {}", outcome.path, outcome.status_line()));
@@ -647,11 +699,16 @@ impl Importer {
             .single()
             .context("day end ambiguous in timezone")?
             .with_timezone(&Utc);
-        let roots = self
+        // The query returns the whole day forest (roots in-interval *and* their
+        // descendants); keep only the roots and rebuild each subtree below.
+        let roots: Vec<Entry> = self
             .client
             .run_query(EntriesRootedInTimeInterval { from, to })
             .await
-            .context("EntriesRootedInTimeInterval")?;
+            .context("EntriesRootedInTimeInterval")?
+            .into_iter()
+            .filter(|e| e.parent_id().is_none())
+            .collect();
         let mut out = Vec::with_capacity(roots.len());
         for root in roots {
             let descendants = self

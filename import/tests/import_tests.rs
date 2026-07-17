@@ -185,6 +185,14 @@ fn session_doc() -> DayDocument {
     day_doc(vec![woke, weight, climb])
 }
 
+/// A child go with a grade + outcome, for building set/climb sequences.
+fn child(activity: &str, yds: &str, outcome: &str) -> DocEntry {
+    let mut c = scalar(Some(activity), None);
+    c.attributes.insert("YDS".to_string(), json!(yds));
+    c.attributes.insert("Outcome".to_string(), json!(outcome));
+    c
+}
+
 fn importer(pool: SqlitePool, actor_id: Uuid) -> Importer {
     Importer {
         client: SqliteClient::from_pool(pool, Arc::new(SystemIo::default())),
@@ -193,6 +201,76 @@ fn importer(pool: SqlitePool, actor_id: Uuid) -> Importer {
             timezone: TZ,
         },
     }
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn day_entries_returns_roots_with_subtrees(pool: SqlitePool) {
+    // Exercises EntriesRootedInTimeInterval (get_day's query): its recursive CTE
+    // must SELECT c.* — a bare SELECT * across the forest JOIN doubles the column
+    // count and the UNION ALL is rejected. Regression guard for that.
+    let client = SqliteClient::from_pool(pool.clone(), Arc::new(SystemIo::default()));
+    let (user, registry) = seed(&client).await;
+    let importer = importer(pool, user.actor_id);
+    let doc = session_doc();
+
+    let report = importer.import_day(&registry, &doc, false).await.unwrap();
+    assert!(report.ok);
+
+    let date = chrono::NaiveDate::from_ymd_opt(2026, 2, 24).unwrap();
+    let roots = importer.day_entries(date).await.unwrap();
+    // woke, weight, climbing.
+    assert_eq!(roots.len(), 3);
+    let climbing = roots
+        .iter()
+        .find(|(root, _)| root.is_sequence)
+        .expect("climbing root present");
+    // Its two autobelay children come back as descendants.
+    assert_eq!(climbing.1.len(), 2);
+}
+
+#[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+async fn sets_flag_set_only_when_sequence_shares_children_activity(pool: SqlitePool) {
+    let client = SqliteClient::from_pool(pool.clone(), Arc::new(SystemIo::default()));
+    let (user, registry) = seed(&client).await;
+    let importer = importer(pool, user.actor_id);
+
+    // A "sets" sequence: an Autobelay parent whose children are all Autobelay
+    // (parent activity == members' activity). Plus the mixed Climbing session
+    // (Climbing parent, Autobelay children) as the negative case.
+    let mut sets = scalar(Some("Autobelay"), None);
+    sets.start = Some("1:00pm".to_string());
+    sets.children = vec![
+        child("Autobelay", "5.10", "flash"),
+        child("Autobelay", "5.11", "repeat"),
+    ];
+    let doc = day_doc(vec![sets, session_doc().entries.pop().unwrap()]);
+
+    let report = importer.import_day(&registry, &doc, false).await.unwrap();
+    assert!(report.ok, "apply should be clean: {:?}", report.warnings);
+
+    let get = |path: &str| {
+        let id = report.entries.iter().find(|e| e.path == path).unwrap().id;
+        let client = &client;
+        async move {
+            client
+                .run_query(FindEntryById { entry_id: id })
+                .await
+                .unwrap()
+                .unwrap()
+        }
+    };
+
+    // Same-activity exercise sequence → promoted to display_as_sets.
+    let exercise = get("autobelay#0").await;
+    assert!(exercise.is_sequence && exercise.display_as_sets);
+    // Mixed climbing session (Climbing over Autobelay children) → left alone.
+    let climb = get("climbing#0").await;
+    assert!(climb.is_sequence && !climb.display_as_sets);
+
+    // Re-run is idempotent: SetDisplayAsSets no-ops, no warnings.
+    let rerun = importer.import_day(&registry, &doc, false).await.unwrap();
+    assert!(rerun.ok, "rerun warnings: {:?}", rerun.warnings);
+    assert!(rerun.entries.iter().all(|e| e.status == EntryStatus::Existed));
 }
 
 #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
