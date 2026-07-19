@@ -1,45 +1,52 @@
 # Gainzville
 
-Gainzville is a platform for athletes to log, analyze, and explore (refine? expand? grow?) their
-training. Instead of just giving you a menu of predefined activities and data attributes, Gainzville
-gives you the building blocks to create them. 
+Gainzville is a platform for athletes to log, analyze, and explore their
+training. Instead of giving you a menu of predefined activities and data attributes, Gainzville
+gives you the building blocks to create them.
 
 <p align="center">
-    <img src="docs/demos/log-str-workout.png" width="300" alt="Logging a strength workout"><br>
-    <em>Nested sets with typed, range-valued attributes (Load, RPE, Reps)</em>
-</p>
+    <video src="https://github.com/user-attachments/assets/422e7303-3c18-4b64-affc-62a6cbc2eec8" width="300" muted autoplay loop playsinline controls></video>
+  </p>
 
-Gainzville models workouts, activities, and arbitrary structured measurements as an ordered forest
-of entries, syncs across devices, and drives a native Swift app for iOS and macOS.
+## Overview
+- Users define a library of `Activities` (event categories) and typed data `Attributes`. They log
+`Entries` of activities described by attributes. Training is analyzed using a domain-specific query
+engine (WIP).
+- One Rust core compiled into a SQLite client, a Postgres server, and a Swift app. The same actions
+and queries run on every target; a thin FFI crate exposes core functionality to Swift.
+- Writes are reified as mutations + deltas: mutations capture user intent, deltas are invertible
+insert/update/delete records that support undo/redo, time-travel, and client-side rebasing.
+- Randomized generation of user actions exercises rare code-paths in testing. Injected IO makes runs
+deterministic to support reproducibility and deterministic simulation testing (WIP).
+- Rust owns query subscriptions and a shared cache, Swift owns the main thread and reads cache
+updates at its own cadence to debounce rapid updates and maintain snapshot isolation.
+
+## The Data Model
+
+Gainzville models an event, like performing an exercise, as an `Entry`: a node in a forest of entry
+trees where each root has a timestamp. Entries with children are `Sequences` allowing composition of
+workouts and organization of the training log. Entries may be instances of `Activities`, a categorical
+description like "Run" or "Single-Leg Romanian Deadlift". Entries may be described by `Attributes`
+containing typed nominal/ordinal/interval/ratio data.
 
 <p align="center">
     <img src="docs/2025-11-23-core-model.png" width="600" alt="Forest data model"><br>
     <em>The core model: exercises form a time-ordered forest with typed attributes and activity categorization</em>
 </p>
 
-The project is built around a single Rust domain core that is shared, unchanged, by an offline
-SQLite client, a Postgres HTTP server, and a Swift UI (via a UniFFI boundary). The same actions and
-queries run on every target.
+Activities, attributes, and entries are defined and created by users. Gainzville includes a
+(nascent) standard library of common activities and attributes built out of the same primitives
+exposed to the user. This flexible meta-model gives users the convenience of an off-the-shelf
+library of exercises and workouts while maintaining the flexibility to accommodate novel training
+modalities.
+
+## Reads and Writes
 
 <p align="center">
-    <video src="https://github.com/user-attachments/assets/422e7303-3c18-4b64-affc-62a6cbc2eec8" width="300" muted autoplay loop playsinline controls></video>
-  </p>
+    <img src="docs/2026-07-16-action-query-architecture.excalidraw.svg" width="900" alt="Read-write architecture"><br>
+    <em>Read-write architecture</em>
+</p>
 
-## In-Progress
-
-- **Offline-first sync.** All reads/writes go through the action/mutation/query system. Writes are
-reified as as mutations and deltas, mutations capture user-intent, deltas are fine-grained
-insert/update/delete packets that allow time-travel, undo-redo, and client-side rebasing for server
-reconciliation of sync conflicts.
-- **Swift FFI**: Outbox pattern modeled after `ghostty`: the Rust core maintains query subscriptions,
-writes the latest data to a shared in-memory cache, and notifies the Swift app when updates are available.
-Swift reads the latest cache values at it's discretion, letting Swift own the main thread and debounce
-rapid updates.
-- **Deterministic simulation testing.** The `Arbitrary` trait allows for generation of arbitrary
-domain values and simulating long runs of user actions to exercise rare code paths. Heavily inspired
-by Turso and TigerBeetle.
-- **Analytic query engine.** Custom queries over the user-created catalog of activites and attributes
-via a custom query engine, WIP on the analysis branch.
 
 ## Repository layout
 
