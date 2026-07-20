@@ -32,7 +32,7 @@ description like "Run" or "Single-Leg Romanian Deadlift". Entries may be describ
 containing typed nominal/ordinal/interval/ratio data.
 
 <p align="center">
-    <img src="docs/2025-11-23-core-model.png" width="600" alt="Forest data model"><br>
+    <img src="docs/2025-11-23-core-model.png" width="1000" alt="Forest data model"><br>
     <em>The core model: exercises form a time-ordered forest with typed attributes and activity categorization</em>
 </p>
 
@@ -45,7 +45,7 @@ modalities.
 ## Reads and Writes
 
 <p align="center">
-    <img src="docs/2026-07-16-action-query-architecture.excalidraw.svg" width="900" alt="Read-write architecture"><br>
+    <img src="docs/2026-07-16-action-query-architecture.excalidraw.svg" width="1000" alt="Read-write architecture"><br>
     <em>Read-write architecture</em>
 </p>
 
