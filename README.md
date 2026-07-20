@@ -4,9 +4,11 @@ Gainzville is a platform for athletes to log, analyze, and explore their
 training. Instead of giving you a menu of predefined activities and data attributes, Gainzville
 gives you the building blocks to create them.
 
-<p align="center">
-    <video src="https://github.com/user-attachments/assets/422e7303-3c18-4b64-affc-62a6cbc2eec8" width="300" muted autoplay loop playsinline controls></video>
-  </p>
+
+
+https://github.com/user-attachments/assets/0d4f12cd-2e30-4372-9635-8e83e396f544
+
+
 
 ## Overview
 - Users define a library of `Activities` (event categories) and typed data `Attributes`. They log
