@@ -65,6 +65,12 @@ struct ActivityDetailView: View {
                         .font(.gvBody)
                         .foregroundStyle(Color.gvTextSecondary)
                 }
+
+                // macOS never consults the last .onDrop registration in the tree.
+                // Template drag/drop survives here only because sections follow the
+                // card; this makes that independent of section order. See
+                // DropRegistrationSink and docs/macos-drop-registration-bug.md.
+                DropRegistrationSink()
             }
             .padding(GvSpacing.xl)
             .gvReadableWidth(alignment: .topLeading)

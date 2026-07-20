@@ -35,6 +35,11 @@ struct LogView: View {
                         // margins visible, over-scrolling the focused field off
                         // the top; trailing content is scrolled only as needed.
                         Color.clear.frame(height: 600)
+                        // macOS drops the last drop registration in the tree; this
+                        // absorbs that so the bottom entry card keeps its targets.
+                        // See DropRegistrationSink. (Color.clear above can't serve
+                        // — no hit area, so it registers nothing.)
+                        DropRegistrationSink()
                     }
                     .padding(.horizontal, GvSpacing.lg)
                     .padding(.vertical, GvSpacing.xl)

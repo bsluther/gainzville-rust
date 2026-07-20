@@ -44,8 +44,13 @@ xcodebuild -project Gainzville.xcodeproj -target 'Gainzville macOS' build CONFIG
 
 SourceKit LSP will show false "Cannot find type" errors for FFI types (`FfiEntry`, `FfiTemporal`, etc.) and design tokens (`GvSpacing`, `Color.gvSurface`). These are noise — trust `xcodebuild` output for real errors.
 
+## Platform Gotchas
+
+- **macOS drops the last `.onDrop` registration**: the final drop registration in the view tree is never consulted — no `validateDrop`, no rejection cursor, total silence — though the view renders normally. Any view hosting entry cards must append a `DropRegistrationSink` (`Features/Log/EntryDragDrop.swift`); `LogView` and `ActivityDetailView` do. Full evidence and root-cause research plan: [`docs/macos-drop-registration-bug.md`](./docs/macos-drop-registration-bug.md).
+
 ## Future / Open Questions
 
+- **macOS drop-registration root cause**: the sink above is an empirical workaround; why AppKit skips the last registration is unknown. Research plan and open questions are in [`docs/macos-drop-registration-bug.md`](./docs/macos-drop-registration-bug.md).
 - **Attribute list not live**: `AttributesViewModel` (`Core.swift`) backing `AttributesListView` has no `DataChange.didChange` sink, so the library attribute list doesn't refresh when an attribute is created or edited — only the snapshot from subscribe time. Add a sink calling `refresh(from:)` (as `EntryViewModel`/`EditAttributesViewModel` do). Latent until name/description editing lands, since the list only shows fields not yet editable.
 - **Unset controls**: no UI yet to clear individual temporal values (start, end, duration).
 - **Inline duration field (macOS)**: current stepper popover is a placeholder; long-term goal is an inline `hh:mm:ss` text field with a custom formatter.

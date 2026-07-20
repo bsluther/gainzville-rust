@@ -40,6 +40,13 @@
 //   from transferring isTargeted @State to mis-matched slots after a drop + forest refresh.
 // - Day-root drops dispatch their callback via DispatchQueue.main.async so the drag session
 //   unwinds before SwiftUI evaluates any new sheet item — avoids "sheet during drag" bugs.
+// - macOS silently drops the LAST .onDrop registration in the view tree: it is never
+//   consulted (no validateDrop at all, not even a rejection), though the view renders and
+//   applies the modifier. LogView appends a DropRegistrationSink to absorb this; without it
+//   the bottom entry card's drops are dead. Symptom to recognise: drag ghost tracks normally,
+//   slots render, and NOTHING fires — no indicator and no forbidden cursor.
+//   The library never hit this because its template card is always followed by more content.
+//   Evidence and root-cause research plan: swift-app/docs/macos-drop-registration-bug.md
 
 import SwiftUI
 import UniformTypeIdentifiers
@@ -130,6 +137,33 @@ struct DropTarget: View, DropDelegate {
         }
         .frame(height: GvSpacing.entrySpacing)
         .onDrop(of: [UTType.plainText], delegate: self)
+    }
+}
+
+// MARK: - Trailing registration sink (macOS)
+
+/// A sacrificial drop registration placed after the last entry card in the log.
+///
+/// On macOS the LAST `.onDrop` registration in the view tree never gets consulted:
+/// no validateDrop, no dropEntered, no rejection cursor — it is simply absent from
+/// the set AppKit hit-tests, even though the view renders and applies its modifier
+/// normally. In the log that victim was the bottom entry card (with a single root
+/// entry, the only card), so drag-and-drop appeared completely dead there while
+/// working fine in the library, where a template card is always followed by another
+/// registration. This view takes the bullet instead, and declines everything.
+///
+/// Trailing `Color.clear` does NOT substitute — it has no hit area, so it forms no
+/// registration at all (same reason DropTarget uses opacity(0.001) as its base).
+struct DropRegistrationSink: View {
+    var body: some View {
+        Color.white.opacity(0.001)
+            .frame(height: 1)
+            .onDrop(of: [UTType.plainText], delegate: SinkDelegate())
+    }
+
+    private struct SinkDelegate: DropDelegate {
+        func validateDrop(info: DropInfo) -> Bool { false }
+        func performDrop(info: DropInfo) -> Bool { false }
     }
 }
 
