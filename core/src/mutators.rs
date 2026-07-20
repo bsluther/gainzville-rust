@@ -532,11 +532,11 @@ pub async fn move_entry(
             let entry_root = executor
                 .execute(FindAncestors { entry_id: entry.id })
                 .await?
-                .first()
+                .last()
                 .copied()
                 .expect("ancestors should always be non-empty");
             let dest_root = parent_ancestors
-                .first()
+                .last()
                 .copied()
                 .expect("ancestors should always be non-empty");
             if entry_root != dest_root {
