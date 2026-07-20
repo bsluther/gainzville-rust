@@ -1,6 +1,6 @@
 # Gainzville
 
-Gainzville is a platform for athletes to log, analyze, and explore their
+Gainzville is a platform for athletes to log, analyze, and expand their
 training. Instead of giving you a menu of predefined activities and data attributes, Gainzville
 gives you the building blocks to create them.
 
@@ -45,9 +45,22 @@ modalities.
 ## Reads and Writes
 
 <p align="center">
-    <img src="docs/2026-07-16-action-query-architecture.excalidraw.svg" width="1000" alt="Read-write architecture"><br>
-    <em>Read-write architecture</em>
+    <img src="docs/2026-07-16-action-query-architecture.excalidraw.svg" width="1000" alt="Read-write architecture">
 </p>
+
+A `Query` is a reified request to read from the database that encodes its return type as a `QueryResponse`. Mutators and the `QueryStore` execute queries to read and subscribe to database state.
+
+All durable writes are initiated by `Actions`, a description of a user intent such as `MoveEntry { actor_id, entry_id, position, temporal }`. Every action has a corresponding `Mutator` which reads the current database state (via queries) and returns a `Mutation` containing a set of `Deltas`, or an error if invariants would be violated. A delta is a normalized insert, update, or delete to a database table. A mutation contains the original action (user intent), computed deltas, and additional metadata.
+
+Queries and deltas contain backend-agnostic, domain-level types. `Executors` bridge the gap between domain types and backend-specific implementations (SQLite, Postgres, and an in-memory model). Executors are responsible for implementing read/write logic and encoding/decoding to the backend.
+
+## Sync (WIP)
+
+Sync supports offline-first editing, collaboration, and a no-spinner UX. The high-level approach is server-reconciliation with client-side rebasing: a single authoritative server contains the source-of-truth, clients contain a local replica where local writes are applied on top of the last authoritative server state. Local writes are committed to the local database as well as a local-only log of mutations that are pending server-acknowledgement. The server accepts or rejects local writes and commits them as global transactions. When clients receive sync changes, they rebase local writes on top of the latest server updates by reverting local-only mutations, applying server changes, then re-applying local changes modulo those acknowledged by the server.
+
+Significant inspiration is taken from [Figma's sync system design](https://www.figma.com/blog/realtime-editing-of-ordered-sequences/). Their system is particularly relevant because Figma designs are modeled as ordered trees much like Gainzville's entry forest. The Figma approach is "CRDT-like": they use fractional indexing + atomic registers to maintain the consistency of the tree, e.g. to avoid cycles. Unlike a pure CRDT approach which ensures that conflicts resulting in a cycle cannot occur, this approach accepts the possibility and leverages the central server to authoritatively resolve the cycle. In both the Figma and Gainzville use case, this server reconciliation is both rare and relatively low-cost - a misplaced node is uncommon and does not result in data loss.
+
+Mutations and deltas support the sync system by capturing user intent for conflict resolution as well as a row-level record of the precise changes.
 
 
 ## Repository layout
