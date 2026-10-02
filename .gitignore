@@ -21,8 +21,9 @@ target/
 *.swo
 *~
 
-# Claude Code local state
-.claude/
+# Claude Code local state (project skills are shared)
+.claude/*
+!.claude/skills/
 
 # Hegel (property-based testing) artifacts: process logs + constants cache
 .hegel/
