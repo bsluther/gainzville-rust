@@ -19,6 +19,8 @@
 | [Domain model](./docs/model.md) | Understanding entities (Entry, Activity, Attribute, Value) and the ordered-forest structure |
 | [Actions and queries](./docs/actions_and_queries.md) | Write path (Action→Mutator→Mutation→DeltaExecutor) and read path (Query→QueryExecutor→DB) — the core I/O architecture |
 | [Boundary transformations](./docs/boundary-transformations.md) | How domain types cross the DB (`gv-sql`) and FFI (`gv-ffi`) boundaries; `*Column`/`*Row`, uniffi remote types, and gotchas |
+| [Durability and dogfooding](./docs/durability-and-dogfooding.md) | Snapshot/restore durability, dev vs real builds, path to logging real data in GV |
+| [Convex evaluation](./docs/convex-evaluation.md) | Research on Convex as the backend/sync layer: approaches, server-side mutators, impact on planned features |
 | [Permissions](./docs/permissions.md) | Authorization rules and actor/user model |
 | [Sync](./docs/sync.md) | Offline-first sync design: rebasing, HLC, global sequence numbers |
 | [Features](./docs/features.md) | Product feature roadmap |
