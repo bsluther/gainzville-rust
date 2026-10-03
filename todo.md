@@ -1,11 +1,5 @@
 
 
-Features to add:
-- Sets
-- Attribute variants: Length, Text.
-- Categories
-- Permissions
-
 Properties to test:
 - Forest (acyclic)
 - No dangling parent pointers
