@@ -50,8 +50,6 @@ Actions to add:
 
 - [ ] Log mutations and implement undo/redo.
 
-- [ ] Use seeded rng for determinism in application code (e.g. for generating Uuid's).
-
 - [ ] Implement Delete* actions.
     - Should I use tombstones for soft-deletes? If I log all mutations/deltas, then I techincally
     don't need soft-deletes, since I retain the information needed to reconstruct. But it could be
