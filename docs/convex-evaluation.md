@@ -2,6 +2,13 @@
 
 Status: research, no design or code. Started 2026-10-01.
 
+**Lean as of 2026-10-02: toward building sync ourselves rather than on Convex.** Two reasons.
+First, deterministic simulation testing (DST) of the whole stack is seen as crucial for
+developing reconciliation policies and their UX, and with Convex the server and transport can't
+be run deterministically (see [DST prospects](#dst-prospects)). Second, Convex means losing
+control of the stack. Convex remains a useful source of design ideas
+([Inspiration for a custom sync system](#inspiration-for-a-custom-sync-system)).
+
 The question: how viable is [Convex](https://convex.dev) ([Rust client](https://docs.rs/convex/latest/convex/))
 as GV's backend, given the existing Action → Mutator → Mutation → Delta and Query → QueryExecutor
 architecture? How much of the existing model has to change, and how far does Convex reach into
@@ -94,6 +101,13 @@ GV's `Mutation` (action + deltas) is the sync payload.
   index range `seq > cursor` with `.take(n)`) that re-runs whenever the log grows. The client
   applies the incoming `AnyDelta`s through the existing `SqliteDeltaExecutor` and stores the
   cursor in SQLite.
+- **Server state vs. client subscriptions.** Convex holds both the materialized tables (which
+  server-side mutators and queries read) and the log. Clients subscribe only to the log.
+  - Convex re-runs a query from scratch whenever anything it read changes, and sends the full
+    result (no diffs). `changesSince` is safe under this because its result is bounded: the next
+    batch of log entries, never full state.
+  - Bootstrapping a new device, or one behind log compaction, is a one-off paginated read of the
+    tables (a snapshot plus its cursor), or a replay of the log. It's not a live subscription.
 
 ```mermaid
 sequenceDiagram
@@ -321,6 +335,83 @@ conclusions drawn from reading code rather than stated in docs.
 - **Schema evolution.** A deploy fails if any existing document doesn't match the schema. The
   recommended path is to add the field as optional, migrate, then make it required, using the
   `migrations` component ([schemas](https://docs.convex.dev/database/schemas)).
+
+## DST prospects
+
+Added 2026-10-02.
+
+**Running Convex itself deterministically isn't practical.**
+
+- The backend abstracts time, randomness, and task spawning behind a `Runtime` trait
+  (`crates/common/src/runtime/mod.rs`, "potentially-virtualized"), and Convex's own tests use a
+  `TestRuntime` (e.g. `crates/sync/src/worker_tests.rs`). But the open-source `runtime` crate
+  ships only `prod`; the testing module is stripped.
+- V8 work runs on dedicated OS threads (`spawn_thread`), so scheduling wouldn't be controlled
+  even with a test runtime.
+- Embedding the real backend in a GV simulation would be an unsupported fork.
+
+**What DST could still cover with Convex.**
+
+- Under Approach B, much of the hard sync logic is GV's: the durable pending log, rebase,
+  idempotent resends, cursors, late rejections, and `gv-core` mutators on the server.
+- A simulation runs real GV clients against a *server model* that runs the same `gv-core`
+  mutators natively (WASM in production) and the same log logic, over a simulated network.
+- The model is deliberately *weaker* than Convex:
+  - mutations delivered at least once, possibly duplicated or delayed (dedupe by mutation id);
+  - subscription results that may lag or skip intermediate states, but are consistent snapshots
+    and arrive in order;
+  - serializable mutations.
+
+  Real Convex is stricter than that model, so the simulation explores more behaviors than
+  production can produce. The assumptions that can't be weakened (serializability, consistent
+  snapshots) are Convex's core guarantees; keep that list short and explicit.
+- Differential tests run the same scenarios against a real local Convex backend. They aren't
+  deterministic, but they check the model's assumptions.
+- What remains in the loop but untestable: the Convex client's reconnect/resend logic.
+  `BaseConvexClient` is a sans-IO state machine and could run in a simulation, but only against
+  a fake server speaking Convex's protocol, which is the large mock to avoid.
+
+**What's lost compared with custom sync.**
+
+- No DST of the server and transport with real code: crashes mid-commit, restarts, protocol
+  bugs.
+- No end-to-end deterministic replay of incidents that involve Convex behavior.
+- With custom sync, especially multitenant SQLite where the server reuses
+  `SqliteQueryExecutor`, the whole stack runs in the simulation.
+
+**DST as a policy and UX tool, not only for correctness.** Simulated runs can measure:
+
+- how often users see rejected writes;
+- how much intent is lost or altered in rebase;
+- how long coach and athlete edits stay diverged;
+- the shape of the pending queue after long offline periods.
+
+That lets reconciliation policies be compared across many seeded scenarios: reject vs. re-run,
+field-level vs. row-level conflicts, and how late rejections are surfaced. It works best with
+control of the server and transport, which is the main reason for the lean toward building sync
+ourselves.
+
+## Inspiration for a custom sync system
+
+Even if Convex isn't used, parts of its design are worth borrowing or studying:
+
+- **Read-set invalidation.** Server queries record what they read; a write that touches a read
+  set re-runs exactly the affected subscriptions. This is a model for precise invalidation
+  without IVM (compare GV's current re-run-everything in `refresh_subscribed_queries`).
+- **Consistent multi-query snapshots.** `QuerySetSubscription` gives the client one consistent
+  view across many subscriptions at a single timestamp, and the client tracks
+  `max_observed_timestamp`.
+- **Deterministic, serializable mutations with optimistic concurrency.** Mutations run
+  deterministically (frozen time, seeded randomness) and retry on conflict, the same shape as
+  GV's mutators plus `Io`.
+- **The sans-IO client.** `BaseConvexClient` is a synchronous state machine:
+  `pop_next_message`, `receive_message`, `resend_ongoing_queries_mutations` on reconnect. That
+  is a DST-friendly shape for GV's own sync client.
+- **The `Runtime` trait.** It virtualizes time, randomness, and spawning across the backend,
+  much like GV's `Io` trait extended to the server.
+- **The object sync engine design post**
+  ([stack.convex.dev](https://stack.convex.dev/object-sync-engine)): server reconciliation with
+  a local store, close to `sync.md`'s design.
 
 ## Open questions
 
