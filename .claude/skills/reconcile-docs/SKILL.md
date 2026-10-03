@@ -55,7 +55,12 @@ The user is often on a phone with no computer. Picture the reader as someone who
 the project and how it has evolved and has forgotten many details. They don't know what is in a
 given file or at a given line number. So:
 
-- **What it is**, in one or two sentences.
+- **Lead with where it is and what it says**: "There's a todo item in the old `todo.md` list
+  that proposes …" or "GV-12, *title*, asks for …". Do this before saying anything about its
+  status.
+- **Say how much is there.** If the title or line is the whole item, say so ("that's all
+  there is: title only, no description"). If there's more, such as sub-bullets, a description,
+  or comments, give the gist of what the extra material adds.
 - **The source text, quoted verbatim.** Say where it lives in words ("the old `todo.md`
   list", "GV-48, *title*"). Don't lean on `path:line` or file names to carry meaning.
 - **Just enough current state to decide.** Describe what exists now and what doesn't, as
