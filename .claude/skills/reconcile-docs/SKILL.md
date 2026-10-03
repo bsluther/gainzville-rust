@@ -68,9 +68,15 @@ why an idea is good. If the user asks for more, add one layer at a time.
 
 ## 3. Offer reconciliations
 
-Use AskUserQuestion with 2–4 concrete options. The user can always type a custom answer.
-Each option says exactly what changes and where. **Always include "Skip"** (change nothing),
-unless the options are already at four and one of them is clearly a no-op.
+Use AskUserQuestion with up to four options. The user can always type a custom answer.
+Every question includes these two options:
+
+- **Need more context**: change nothing yet. Re-present the item one layer deeper, then ask
+  again.
+- **Skip**: change nothing.
+
+That leaves room for one or two concrete proposals. Each one says exactly what changes and
+where.
 
 Typical shapes:
 
