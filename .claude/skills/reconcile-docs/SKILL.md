@@ -51,18 +51,20 @@ a dated todo" or "leave as an issue" instead of trying to settle the design.
 
 ## 2. Present it self-contained
 
-The user may have no context at all: a free moment, cold start, small screen. Write the item
-so it can be understood without opening anything:
+The user is often on a phone with no computer. Picture the reader as someone who knows
+the project and how it has evolved and has forgotten many details. They don't know what is in a
+given file or at a given line number. So:
 
 - **What it is**, in one or two sentences.
-- **The source text, quoted verbatim**, with `path:line` for repo locations and the issue id +
-  title for Linear.
-- **Context needed to judge it**: what the referenced code or concept is, today's state
-  (verified, with what you checked), and how the locations relate (overlap, conflict, stale,
-  misplaced).
-- Re-ground any coined term or doc name inline. Don't assume earlier sessions.
+- **The source text, quoted verbatim.** Say where it lives in words ("the old `todo.md`
+  list", "GV-48, *title*"). Don't lean on `path:line` or file names to carry meaning.
+- **Just enough current state to decide.** Describe what exists now and what doesn't, as
+  behavior or concepts, not code. Name a type or file only when it's the thing being decided
+  on, and say in a few words what it does. Say briefly what you checked.
+- **How the locations relate**: overlap, conflict, stale, or misplaced.
 
-Keep it short. This is a quick decision, not an essay.
+Aim for a short paragraph or a few bullets. Don't walk through how the code works or argue for
+why an idea is good. If the user asks for more, add one layer at a time.
 
 ## 3. Offer reconciliations
 
@@ -76,8 +78,8 @@ Typical shapes:
   evidence (commit or code location).
 - **Merge.** Keep it in one canonical place and replace the others with a link. For two
   issues, mark one as Duplicate of the other.
-- **Move to Linear.** Create a GV issue whose description is the doc text verbatim, plus a link
-  back to the doc. Replace the doc text with the issue id and link.
+- **Move to Linear.** Create a GV issue (see *Writing issues* below). Replace the doc text with
+  the issue id and link, or remove it if the whole item moved.
 - **Move to a doc.** Copy the design reasoning from an issue into the doc verbatim, and comment
   on the issue with the link.
 - **Cross-link.** Leave both and link each to the other, for when the overlap is real but the
@@ -88,14 +90,26 @@ Typical shapes:
 
 Rules for the options:
 
-- Prefer moving and linking over rewriting. When text moves, move it **verbatim**.
+- Prefer moving and linking over rewriting. When text moves between docs, move it
+  **verbatim**.
 - Never paraphrase the user's ideas into "cleaner" wording unless that is the chosen option.
 - Repo text is removed only if it's preserved elsewhere (another doc, an issue) or verified
   done. Git history keeps the removed text.
 - **Never delete Linear issues or comments.** Use Done, Canceled, or Duplicate plus a comment,
   so the text survives.
 - New issues use the existing GV labels (`Bug`, `Feature`, `Improvement`, `Discovery`, `Idea`,
-  `core`, `swift`, `Attributes`). Don't create labels without asking.
+  `core`, `swift`, `Attributes`, `simulation`). Don't create labels without asking.
+
+**Writing issues.** An issue describes the work as it stands now, following ordinary
+issue-tracker practice. It is not a record of where the text came from.
+
+- Title and description state the problem or idea as it is today: what to do, why, and any
+  current-state context someone picking it up needs.
+- Keep the user's own wording wherever it still applies. Quote it or use it directly, rather
+  than rephrasing it. Leave out parts that are done, superseded, or obsolete.
+- Provenance is one short line at the end at most, e.g. "From `todo.md` (reconciled
+  2026-10-03)". Don't quote an old item in full just to preserve it, because git history
+  already keeps it.
 
 **Cross-reference conventions:**
 
