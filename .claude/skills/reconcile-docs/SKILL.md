@@ -53,23 +53,33 @@ a dated todo" or "leave as an issue" instead of trying to settle the design.
 
 The user is often on a phone with no computer. Picture the reader as someone who knows
 the project and how it has evolved and has forgotten many details. They don't know what is in a
-given file or at a given line number. So:
+given file or at a given line number.
 
-- **Lead with where it is and what it says**: "There's a todo item in the old `todo.md` list
-  that proposes …" or "GV-12, *title*, asks for …". Do this before saying anything about its
-  status.
-- **Say how much is there.** If the title or line is the whole item, say so ("that's all
-  there is: title only, no description"). If there's more, such as sub-bullets, a description,
-  or comments, give the gist of what the extra material adds.
-- **The source text, quoted verbatim.** Say where it lives in words ("the old `todo.md`
-  list", "GV-48, *title*"). Don't lean on `path:line` or file names to carry meaning.
-- **Just enough current state to decide.** Describe what exists now and what doesn't, as
-  behavior or concepts, not code. Name a type or file only when it's the thing being decided
-  on, and say in a few words what it does. Say briefly what you checked.
-- **How the locations relate**: overlap, conflict, stale, or misplaced.
+The presentation answers two questions in order. First, what does the item say, and is that
+all of it? Second, where do things stand now?
 
-Aim for a short paragraph or a few bullets. Don't walk through how the code works or argue for
-why an idea is good. If the user asks for more, add one layer at a time.
+1. **Source and proposal first, before any judgment about status.** Say where the item lives
+   in words (the old `todo.md` list; GV-12, *title*), not by `path:line`. Then say what it
+   proposes, quoting the text verbatim when it's short.
+2. **Say whether that's the whole item.** The reader needs to know they're seeing everything.
+   If a one-line title or todo is all there is, say so explicitly. If there's more, such as
+   sub-bullets, a description, or comments, give the gist of what the extra material adds.
+3. **Current state, briefly.** Describe what exists now as behavior or concepts, not code.
+   Name a type or file only when it's the thing being decided on. Say in a few words what
+   you checked, and how the locations relate (overlap, conflict, stale, misplaced).
+
+Example of the right register:
+
+> There's a Linear issue, **GV-7** "Add `clock` and `rng` to core to allow for determinism",
+> from April. That title is the whole issue: no description, no comments. There's also a
+> matching one-line todo in the old `todo.md` list: "Use seeded rng for determinism in
+> application code (e.g. for generating Uuid's)." That line is the entire todo too.
+>
+> Your June work on making the clock and random IDs injectable, so deterministic simulations
+> can control them, appears to cover both.
+
+Keep it about that long. Don't walk through how the code works or argue for why an idea is
+good. If the user asks for more, add one layer at a time.
 
 ## 3. Offer reconciliations
 
