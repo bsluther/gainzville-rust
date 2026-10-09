@@ -42,9 +42,6 @@ Actions to add:
 - [ ] Consider wrapping actions in a struct that provides actor_id.
     - Perhaps the same for reads.
 
-- [ ] Log mutations and implement undo/redo: [GV-12](https://linear.app/gainzville/issue/GV-12),
-[GV-29](https://linear.app/gainzville/issue/GV-29).
-
 - [ ] Implement Delete* actions.
     - Should I use tombstones for soft-deletes? If I log all mutations/deltas, then I techincally
     don't need soft-deletes, since I retain the information needed to reconstruct. But it could be
