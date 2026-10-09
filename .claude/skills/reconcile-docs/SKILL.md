@@ -21,6 +21,8 @@ conservative: the user decides; you surface, propose, and apply exactly what was
 - `docs/todos/*.md`
 - `docs/features.md`
 - The open-questions / deferred / future sections of `docs/*.md` and `swift-app/SWIFT-APP.md`
+- Open RFDs in `docs/rfd/` (state `ideation` or `discussion`). The process, header, and states
+  are in `docs/rfd/rfd.md`; follow it whenever an option creates or changes an RFD.
 
 **Linear:** open issues (Backlog, Todo, In Progress) in the **Gainzville** team (key `GV`).
 Use the Linear MCP tools.
@@ -46,11 +48,15 @@ Good candidates, roughly in this order:
    For example, the properties the system should hold are a design and system concern, so
    they're listed in `docs/properties.md`. The matching issue tracks the work of increasing
    property testing and links to the doc. It doesn't spell out "implement property A".
+5. **Open question without an RFD.** A big open design question, one that reaches from what
+   the user can do down to how data is modeled, living in an issue, a dated todo, or scattered
+   across docs. This includes existing design docs that are really RFDs already: a question,
+   options, and a lean, with no decision. `docs/convex-evaluation.md` is an example.
 
 There's no record of past picks. Vary the area (repo vs Linear, core vs swift, different docs)
 rather than always starting at the top of a list. Pick something answerable in a few minutes.
-If an item turns out to be a deep design question, it can still be the item: offer "turn into
-a dated todo" or "leave as an issue" instead of trying to settle the design.
+If an item turns out to be a deep design question, it can still be the item: offer "move to an
+RFD", "turn into a dated todo", or "leave as an issue" instead of trying to settle the design.
 
 ## 2. Present it self-contained
 
@@ -106,6 +112,15 @@ Typical shapes:
   the issue id and link, or remove it if the whole item moved.
 - **Move to a doc.** Copy the design reasoning from an issue into the doc verbatim, and comment
   on the issue with the link.
+- **Move to an RFD.** Create `docs/rfd/NNNN-slug.md` (next number) with the header from
+  `docs/rfd/rfd.md`. Copy each source in verbatim under its own section with a one-line origin
+  note, the newest as the latest/lean and older material as background. The user tidies it up
+  later. Then delete the copied text from the repo sources, with no link left behind. Reduce
+  the Linear issue's description to a pointer to the RFD (the issue history keeps the old
+  text), or create a `Discovery` issue if there isn't one.
+- **Convert a doc into an RFD.** For a design doc that is really an open question. `git mv` it to
+  `docs/rfd/NNNN-slug.md`, add the header, and leave the body as is. Update inbound links,
+  including the `CLAUDE.md` docs table, and point or create the Linear issue as above.
 - **Cross-link.** Leave both and link each to the other, for when the overlap is real but the
   angles differ.
 - **Cancel.** Move an issue to Canceled with a comment saying why.
