@@ -1,10 +1,5 @@
 
 
-Properties to test:
-- Forest (acyclic)
-- No dangling parent pointers
-- Undo/redo roundtrip
-
 Actions to add:
 - UpdateEntryAttribute
 - CreateEntryFromTemplate

@@ -7,6 +7,7 @@ All database rows must be capable of being parsed successfully into domain model
 
 ### Entries
 Entries must be acyclic.
+No dangling parent pointers.
 Template and log entry trees must be disjoint.
 The activity associated with an entry has the same owner as the entry.
 - This checks that Copy-On-Add is being used.
