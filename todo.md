@@ -42,11 +42,6 @@ Actions to add:
 - [ ] Consider wrapping actions in a struct that provides actor_id.
     - Perhaps the same for reads.
 
-- [ ] Implement Delete* actions.
-    - Should I use tombstones for soft-deletes? If I log all mutations/deltas, then I techincally
-    don't need soft-deletes, since I retain the information needed to reconstruct. But it could be
-    preferrable to use soft-deletes for other reasons. Not sure.
-
 - [ ] Consider using a SortedFractionalIndices type to avoid having to defensively copy/sort
 lists of fractional indices.
 
