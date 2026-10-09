@@ -171,3 +171,7 @@ counts the number of rows synced to a client, which we can use to estimate total
 that number gets close to some limit, add a filter to the change stream which will remove some old
 stuff, and include the filter clause in the synced data. Now the client knows what it's missing and
 can request it if needed.
+
+# Resources
+[Jay Kreps: The Log](https://www.linkedin.com/blog/engineering/distributed-systems/log-what-every-software-engineer-should-know-about-real-time-datas-unifying)
+
