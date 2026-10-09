@@ -116,6 +116,10 @@ Rules for the options:
 - Never paraphrase the user's ideas into "cleaner" wording unless that is the chosen option.
 - Repo text is removed only if it's preserved elsewhere (another doc, an issue) or verified
   done. Git history keeps the removed text.
+- **Linear is the home for work items.** When a `todo.md` item is covered by a GV issue
+  (already, or after Move to Linear), remove the line from `todo.md` rather than leaving a link
+  behind. Keeping both is split brain. Inline TODO comments in code are judged case by case,
+  since a code TODO that duplicates an issue can be healthy.
 - **Never delete Linear issues or comments.** Use Done, Canceled, or Duplicate plus a comment,
   so the text survives.
 - New issues use the existing GV labels (`Bug`, `Feature`, `Improvement`, `Discovery`, `Idea`,
