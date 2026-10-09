@@ -43,6 +43,9 @@ Good candidates, roughly in this order:
    later decision. Check the code and `git log` before claiming that; say what you checked.
 4. **Misplaced.** Detailed work (bugs, polish, small features) sitting in a doc that would fit
    better as an issue, or design reasoning buried in an issue that belongs in a doc.
+   For example, the properties the system should hold are a design and system concern, so
+   they're listed in `docs/properties.md`. The matching issue tracks the work of increasing
+   property testing and links to the doc. It doesn't spell out "implement property A".
 
 There's no record of past picks. Vary the area (repo vs Linear, core vs swift, different docs)
 rather than always starting at the top of a list. Pick something answerable in a few minutes.
