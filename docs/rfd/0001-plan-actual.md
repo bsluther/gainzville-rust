@@ -5,7 +5,7 @@
 
 ## Latest / lean (2026-10-02)
 
-Copied from the "planning" section of [docs/todos/2026-10-02.md](../todos/2026-10-02.md).
+Originally the "planning" section of the 2026-10-02 dated todo (`docs/todos/2026-10-02.md`).
 
 Consider moving the plan/actual split from the attribute level to the entry level. Consider
 "actual is completion of plan X" as a hint rather than a definitive statement.
@@ -24,7 +24,7 @@ retained. Add features to support plan retention later rather than anticipating 
 
 ## Background (2026-06-02)
 
-Copied from the description of
+Originally the description of
 [GV-63](https://linear.app/gainzville/issue/GV-63) "Consider moving plan/actual split from
 attribute to entry level".
 
