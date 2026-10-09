@@ -18,7 +18,7 @@ fn main() -> Result<()> {
                 Tup3(3, 4, 2)
             },
             zset! { Tup3(1, 2, 1) => -1 },
-        ] as [_; STEPS])
+        ] as [OrdZSet<Tup3<usize, usize, usize>>; STEPS])
             .into_iter();
 
         let edges = root_circuit.add_source(Generator::new(move || edges_data.next().unwrap()));
@@ -77,7 +77,7 @@ fn main() -> Result<()> {
                 Tup4(1, 3, 3, 2) => -1,
                 Tup4(1, 4, 5, 3) => -1,
             },
-        ] as [_; STEPS])
+        ] as [OrdZSet<Tup4<usize, usize, usize, usize>>; STEPS])
             .into_iter();
 
         closure.inspect(move |output| assert_eq!(*output, expected_outputs.next().unwrap()));
