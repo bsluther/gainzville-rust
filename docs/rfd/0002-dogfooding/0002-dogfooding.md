@@ -1,7 +1,7 @@
 # RFD 0002: Dogfooding
 
 - State: discussion
-- Linear: TBD
+- Linear: [GV-76](https://linear.app/gainzville/issue/GV-76)
 
 ## Latest / lean (2026-10-10)
 
