@@ -112,14 +112,14 @@ Typical shapes:
   the issue id and link, or remove it if the whole item moved.
 - **Move to a doc.** Copy the design reasoning from an issue into the doc verbatim, and comment
   on the issue with the link.
-- **Move to an RFD.** Create `docs/rfd/NNNN-slug.md` (next number) with the header from
+- **Move to an RFD.** Create `docs/rfd/NNNN-slug/NNNN-slug.md` (next number) with the header from
   `docs/rfd/rfd.md`. Copy each source in verbatim under its own section with a one-line origin
   note, the newest as the latest/lean and older material as background. The user tidies it up
   later. Then delete the copied text from the repo sources, with no link left behind. Reduce
   the Linear issue's description to a pointer to the RFD (the issue history keeps the old
   text), or create a `Discovery` issue if there isn't one.
 - **Convert a doc into an RFD.** For a design doc that is really an open question. `git mv` it to
-  `docs/rfd/NNNN-slug.md`, add the header, and leave the body as is. Update inbound links,
+  `docs/rfd/NNNN-slug/NNNN-slug.md`, add the header, and leave the body as is. Update inbound links,
   including the `CLAUDE.md` docs table, and point or create the Linear issue as above.
 - **Cross-link.** Leave both and link each to the other, for when the overlap is real but the
   angles differ.
