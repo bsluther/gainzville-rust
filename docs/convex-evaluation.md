@@ -330,7 +330,7 @@ conclusions drawn from reading code rather than stated in docs.
 - **Backups.** Manual backups on all plans, kept 7 days; daily/weekly backups need Pro. Restore
   is destructive and replaces the whole deployment; no point-in-time recovery. Export is a ZIP of
   JSONL per table ([backup-restore](https://docs.convex.dev/database/backup-restore)). GV's own
-  snapshots ([durability-and-dogfooding.md](./durability-and-dogfooding.md)) would remain the
+  snapshots ([RFD 2](./rfd/0002-dogfooding/0002-dogfooding.md)) would remain the
   trust layer.
 - **Schema evolution.** A deploy fails if any existing document doesn't match the schema. The
   recommended path is to add the field as optional, migrate, then make it required, using the
