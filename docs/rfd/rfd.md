@@ -92,13 +92,25 @@ the fly (give a bespoke persona a one-line lens in its comment's header).
 - **future-self**: me in a year, having forgotten the code. Is it reversible, legible, and
   recoverable?
 - **data-safety**: what can lose or corrupt data, and how would I notice and recover?
-- **athlete**: does it fit how training is actually done and logged, mid-session and after?
+- **power-user**: logs everything in detail, builds custom activities and attributes, wants
+  history, analysis, and speed. Does it scale to years of dense data and reward investment?
+- **casual-user**: logs a few sessions a week with minimal effort and won't read docs. Is the
+  common path obvious and fast, and does complexity stay out of the way?
 - **coach**: someone planning for and reviewing another person's training.
 - **sync**: offline-first and multi-device implications: merges, ordering, conflicts, HLC.
 - **architecture**: fit with the existing model, crate boundaries, docs, and decided RFDs.
 - **platform**: iOS/Swift/Xcode/TestFlight constraints and costs.
 - **testability**: can it be property-tested or covered by deterministic simulation?
 - **prior-art**: how other training apps and tools handle it, and what they learned.
+
+**Sports.** The user personas (power-user, casual-user, coach) can take a sport, which shapes
+what they log and how. Name it in the file: `comment-YYYY-MM-DD-casual-user-climbing.md`.
+Mix the familiar with the unusual, since odd sports are what stress the generic model:
+
+- Traditional: lifting/strength, running, cycling, swimming, team sports.
+- Newer or less conventional: climbing/bouldering, CrossFit/HYROX, calisthenics, kettlebell
+  sport, martial arts/BJJ, parkour, mobility/yoga.
+- Or something specific to the topic.
 
 ## Linear
 
