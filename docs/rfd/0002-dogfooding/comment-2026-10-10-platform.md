@@ -2,7 +2,7 @@
 
 - Date: 2026-10-10
 - Lens: iOS/Swift/Xcode/TestFlight constraints and costs
-- Read: RFD 2 at `b203b8d`; transcripts 1–3; `SWIFT-APP.md`, `DEVELOPMENT.md`, `docs/swift-architecture/`; `project.pbxproj`, schemes, `Core.swift`, `GainzvilleApp.swift`, `client/client.rs`, `scripts/`. Background-task, iCloud, and TestFlight behavior is from general platform knowledge.
+- Read: RFD 2 at `b203b8d`; transcripts 1–3; Swift app docs; `project.pbxproj`, `Core.swift`, `GainzvilleApp.swift`, `client/client.rs`, `scripts/`. iCloud, background-task, and TestFlight behavior is from general platform knowledge.
 
 ## Verdict
 The smallest milestone fits iOS well if it skips background tasks and the ubiquity container. Two cheap project changes come first: a separate dev bundle ID and a launch path that doesn't crash.
@@ -17,7 +17,7 @@ The smallest milestone fits iOS well if it skips background tasks and the ubiqui
 - TestFlight builds expire after 90 days. The data stays, but the app won't open until you ship a new build.
 - Build numbers are fixed at `CURRENT_PROJECT_VERSION = 1`, and each upload needs a higher one.
 - There's no CI at all (no `.github/`).
-- `Documents/` already goes into iCloud device backup. That's an accidental safety net, but restoring it means restoring the whole device.
+- `Documents/` already goes into iCloud device backup. It only restores as a whole device.
 
 ## Recommendation
 - Give Debug a `.dev` bundle ID suffix.
@@ -29,5 +29,5 @@ The smallest milestone fits iOS well if it skips background tasks and the ubiqui
 ## Can expand on
 - Ubiquity container vs Files export, step by step
 - File protection classes and how iCloud encrypts the backups
-- Macro-free archive/upload script, export-compliance key
+- The archive/upload script and the export-compliance Info.plist key
 - Using the macOS target as a restore/inspection tool
