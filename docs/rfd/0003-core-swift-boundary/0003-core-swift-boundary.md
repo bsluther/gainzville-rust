@@ -33,11 +33,17 @@ section wins.
 
    The forest traversal methods are queries like any other: `children(of:)`, `parent`, and "forest
    for this day".
-2. **Delivery is pushed and batched.** `subscribe` returns the first value. After each change, Rust
-   makes one FFI callback carrying a version and the results of every subscription that changed.
-   GvKit applies the whole batch in one main-thread step and routes each result to its hook. Views
-   never see a torn state, never call into Rust while rendering, and get nothing when their result
-   didn't change.
+2. **Delivery is pushed and batched, modeled on Convex's `watch_all`.** `subscribe` returns the first
+   value. After each change, Rust makes one FFI callback carrying a version and the results of every
+   subscription that changed. GvKit applies the whole batch in one main-thread step and routes each
+   result to its hook. Views never see a torn state, never call into Rust while rendering, and get
+   nothing when their result didn't change.
+
+   The model is `convex-rs`'s `watch_all()`: a stream of `QueryResults`, a copy-on-write map from
+   subscriber to latest result, where "each item in the stream contains a consistent view of the
+   results of all the queries in the query set." GV keeps that idea of one consistent map per version,
+   with each hook picking out its own entry. It differs in sending only the changed entries across the
+   FFI.
 3. **Rust picks the backing for each kind of query, and Swift can't see the choice.** Forest queries
    are answered from an in-memory forest; others, such as autocomplete history, from SQL. The snapshot
    handle is internal machinery. This leaves every optimization open, without committing to one:
@@ -47,6 +53,29 @@ section wins.
      overlapping "forest for an interval" queries into one forest and knows when a traversal walks off
      the loaded edge.
 4. **Writes are intents.** Unchanged from the earlier lean.
+
+### Reference point: Convex's Rust client, not its Swift SDK
+
+Convex's layers relate to consistency differently, and the difference matters for GV:
+
+- **The Rust client (`get-convex/convex-rs`) is a good reference.** Subscriptions drop with their
+  token, and `watch_all()` delivers one consistent view across all subscribed queries. Its stream
+  also skips lagged broadcast messages on purpose ("Ok to be lagged ... since Convex only guarantees a
+  newer value than the previous value"). That's exactly the fix for GV's refresh loop, which exits on
+  `Lagged`.
+- **The mobile FFI and Swift SDK (`convex-mobile`, `convex-swift`) drop that guarantee.** Each
+  subscription gets its own Rust task and FFI callback, and Swift applies each one separately, so
+  queries aren't consistent with each other on Swift. Convex's React client does keep them consistent.
+
+GV's shape is closer to `convex-rs` than to `convex-swift`. GV still differs in some places:
+
+- **`subscribe` returns the first value synchronously.** The data is local; Convex's subscribe is a
+  network call.
+- **Read-once uses the latest local version.** Convex's one-off query is a server round trip.
+- **Rust chooses the backing per kind of query.** Convex has no equivalent, because every query is a
+  server function.
+- **No optimistic-update layer yet.** Local mutators make a local write the truth. That changes once
+  sync exists.
 
 ### Settled for now
 

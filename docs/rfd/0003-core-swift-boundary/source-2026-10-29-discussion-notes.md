@@ -87,3 +87,23 @@ interface MobileConvexClient {
   carry data and name a target. Commands are intents on handles.
 - **Not applicable:** Swift barely reads core data, because the core renders the terminal itself. GV
   renders domain data, so it needs a read layer Ghostty has no equivalent of.
+
+## Convex's Rust client (`get-convex/convex-rs` @ `d05acaa`, read 2026-10-29)
+
+- `ConvexClient::watch_all()` returns a `QuerySetSubscription`, a `Stream<QueryResults>`. Its docs:
+  "Each item in the stream contains a consistent view of the results of all the queries in the query
+  set." `QueryResults` is a copy-on-write map (`OrdMap<QueryId, FunctionResult>` plus
+  `OrdSet<SubscriberId>`). Queries join the set via `subscribe` and leave when their
+  `QuerySubscription` token drops.
+- The stream treats a lagged broadcast as fine:
+
+  ```rust
+  // Ok to be lagged (skip intermediate values) - since Convex
+  // only guarantees a newer value than the previous value.
+  task::Poll::Ready(Some(Err(BroadcastStreamRecvError::Lagged(_amt)))) => continue,
+  ```
+
+- `convex-mobile` doesn't use `watch_all`. It subscribes per query and forwards each stream to its own
+  FFI callback, so the cross-query consistency the Rust client offers is lost on the Swift side.
+- The base client also has `OptimisticQueryResults` for patching results while a mutation is in
+  flight.
