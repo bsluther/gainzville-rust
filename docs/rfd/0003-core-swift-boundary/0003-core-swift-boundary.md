@@ -3,7 +3,74 @@
 - State: discussion
 - Linear: none yet
 
-## Latest / lean (2026-10-27)
+## Latest / lean (2026-10-29)
+
+This records the shape that came out of a follow-up discussion
+([notes](./source-2026-10-29-discussion-notes.md), including a read of the Convex and Ghostty source)
+and a survey of open-source prior art ([research](./source-2026-10-29-prior-art-research.md)). It
+hasn't been compared against the research in depth yet. It's written down so the shape doesn't get
+lost while that happens. Where it differs from the [earlier lean](#earlier-lean-2026-10-27), this
+section wins.
+
+### Reframe
+
+- **Keep the query seam.** Most systems expose queries for one of two reasons. Generality is one,
+  and it doesn't apply to GV. A clean declarative contract is the other, and it does. So GV keeps
+  queries and changes what sits around them.
+- **The boundary is the FFI plus a Swift SDK, GvKit, owned by the core side.** This is the clearest
+  takeaway so far, and it holds whatever else is decided. GvKit is a Swift package that holds the
+  generated bindings, the delivery adapter, the query hook and the intent calls. The app imports only
+  GvKit, and the raw FFI types stay internal to it. It changes when the boundary changes, not when
+  screens change.
+
+### Shape
+
+1. **Everything is a query, used two ways.**
+   - *Subscribe*, declared in a view or an `@Observable` model:
+     `@GvQuery(.children(of: parent.id)) var children`.
+   - *Read once*, for imperative checks such as drag-time validation:
+     `gv.read(.wouldCreateCycle(entry, under: target))`.
+
+   The forest traversal methods are queries like any other: `children(of:)`, `parent`, and "forest
+   for this day".
+2. **Delivery is pushed and batched.** `subscribe` returns the first value. After each change, Rust
+   makes one FFI callback carrying a version and the results of every subscription that changed.
+   GvKit applies the whole batch in one main-thread step and routes each result to its hook. Views
+   never see a torn state, never call into Rust while rendering, and get nothing when their result
+   didn't change.
+3. **Rust picks the backing for each kind of query, and Swift can't see the choice.** Forest queries
+   are answered from an in-memory forest; others, such as autocomplete history, from SQL. The snapshot
+   handle is internal machinery. This leaves every optimization open, without committing to one:
+   - naively re-running every query on every change;
+   - custom IVM;
+   - keeping only part of the forest in memory and loading more by day. A thorough version merges
+     overlapping "forest for an interval" queries into one forest and knows when a traversal walks off
+     the loaded edge.
+4. **Writes are intents.** Unchanged from the earlier lean.
+
+### Settled for now
+
+- **Read-once sees the latest version.** It could disagree with what the hooks are showing. That's
+  accepted for now, because there's a fix if needed (force every subscription to refresh to the
+  latest version), and intents are validated in Rust anyway.
+- **Performance work is deferred.** That covers an indexed forest, `Arc` snapshots and finer-grained
+  invalidation. The boundary only has to not rule them out.
+
+### Open
+
+- **A macro for query plumbing.** Adding one query touches about six Rust files plus binding
+  regeneration. If everything is a query, that cost is the real tax, and a macro is the likely
+  answer.
+- **A loading state in the hook.** Design it now for data that loads lazily: other users' data (for
+  example coaching), activity library content such as workout videos, and later virtualization.
+- **Compare against the research in depth.**
+  - Matrix: typed diffs, capability flags on records, and display items built by the core.
+  - SQLiteData: `@FetchAll` ergonomics and `FetchKeyRequest` for one consistent multi-read.
+  - Crux: intents and deterministic testing.
+- **The hook's form.** A property wrapper, an `@Observable` model, or both. AsyncSequence over
+  Combine.
+
+## Earlier lean (2026-10-27)
 
 This summarizes the [voice note](./source-2026-10-27-transcript.md) and a read of everything from
 `gv-core` outward: `gv-ffi`, `gv-client` (`client/`), the Swift app's `Core.swift` and its callers,
