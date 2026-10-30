@@ -30,10 +30,12 @@ use gv_core::{
         FindActivityTemplateRoot, FindAncestors, FindAttributeById, FindAttributePairsForEntry,
         FindAttributesByOwner, FindDescendants, FindEntryById, FindEntryJoinById, FindUserById,
         FindUserByUsername, FindValueByKey, FindValuesForEntries, FindValuesForEntry,
-        IsEmailRegistered,
+        IsEmailRegistered, RootEntriesInInterval,
     },
     validation::{Email, Username},
 };
+use gv_client::live::{LiveBatch, LiveQuery, LiveUpdate, LiveValue};
+use gv_ui::ChildSlot;
 use uuid::Uuid;
 
 // --- Errors ---
@@ -462,6 +464,12 @@ pub struct EntriesRootedInTimeInterval {
 }
 
 #[uniffi::remote(Record)]
+pub struct RootEntriesInInterval {
+    pub from: DateTime<Utc>,
+    pub to: DateTime<Utc>,
+}
+
+#[uniffi::remote(Record)]
 pub struct FindAncestors {
     pub entry_id: Uuid,
 }
@@ -534,6 +542,7 @@ pub enum AnyQuery {
     // Entry
     AllEntries(AllEntries),
     EntriesRootedInTimeInterval(EntriesRootedInTimeInterval),
+    RootEntriesInInterval(RootEntriesInInterval),
     FindAncestors(FindAncestors),
     FindEntryById(FindEntryById),
     FindEntryJoinById(FindEntryJoinById),
@@ -564,6 +573,7 @@ pub enum AnyQueryResponse {
     // Entry
     AllEntries(Vec<Entry>),
     EntriesRootedInTimeInterval(Vec<Entry>),
+    RootEntriesInInterval(Vec<Entry>),
     FindAncestors(Vec<Uuid>),
     FindEntryById(Option<Entry>),
     FindEntryJoinById(Option<EntryJoin>),
@@ -578,6 +588,57 @@ pub enum AnyQueryResponse {
     FindValuesForEntries(Vec<Value>),
     FindAttributePairsForEntry(Vec<AttributePair>),
     DistinctTextValuesForAttribute(Vec<String>),
+}
+
+// --- Live queries (gv-ui / gv-client) ---
+//
+// The live-query surface: what Swift can ask (`LiveQuery`) and what comes back (`LiveValue`,
+// delivered in `LiveBatch`es). Nothing here says how a query is answered; that is decided in
+// `gv_client::live`.
+
+#[uniffi::remote(Enum)]
+pub enum ChildSlot {
+    Drop {
+        id: String,
+        position: Position,
+        pred_id: Option<Uuid>,
+        succ_id: Option<Uuid>,
+    },
+    Entry {
+        entry: Entry,
+    },
+}
+
+#[uniffi::remote(Enum)]
+pub enum LiveQuery {
+    ChildSlots {
+        parent_id: Uuid,
+    },
+    WouldCreateCycle {
+        entry_id: Uuid,
+        proposed_parent_id: Uuid,
+    },
+    Domain(AnyQuery),
+}
+
+#[uniffi::remote(Enum)]
+pub enum LiveValue {
+    ChildSlots(Vec<ChildSlot>),
+    WouldCreateCycle(bool),
+    Domain(AnyQueryResponse),
+    Failed { message: String },
+}
+
+#[uniffi::remote(Record)]
+pub struct LiveUpdate {
+    pub subscription_id: u64,
+    pub value: LiveValue,
+}
+
+#[uniffi::remote(Record)]
+pub struct LiveBatch {
+    pub version: u64,
+    pub updates: Vec<LiveUpdate>,
 }
 
 // --- Actions ---

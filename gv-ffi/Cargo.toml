@@ -9,6 +9,7 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 gv-core      = { path = "../core" }
 gv-client    = { path = "../client" }
+gv-ui        = { path = "../gv-ui" }
 generation   = { path = "../generation" }
 rand         = { workspace = true }
 # "tokio" — static runtime for sync FFI wrappers.

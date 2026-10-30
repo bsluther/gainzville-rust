@@ -250,6 +250,13 @@ typedef void (*UniffiCallbackInterfaceCoreListenerMethod0)(uint64_t, void* _Nonn
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_LIVE_LISTENER_METHOD0
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_LIVE_LISTENER_METHOD0
+typedef void (*UniffiCallbackInterfaceLiveListenerMethod0)(uint64_t, RustBuffer, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_CORE_LISTENER
 #define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_CORE_LISTENER
 typedef struct UniffiVTableCallbackInterfaceCoreListener {
@@ -257,6 +264,15 @@ typedef struct UniffiVTableCallbackInterfaceCoreListener {
     UniffiCallbackInterfaceClone _Nonnull uniffiClone;
     UniffiCallbackInterfaceCoreListenerMethod0 _Nonnull onDataChanged;
 } UniffiVTableCallbackInterfaceCoreListener;
+
+#endif
+#ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_LIVE_LISTENER
+#define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_LIVE_LISTENER
+typedef struct UniffiVTableCallbackInterfaceLiveListener {
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
+    UniffiCallbackInterfaceLiveListenerMethod0 _Nonnull onBatch;
+} UniffiVTableCallbackInterfaceLiveListener;
 
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_CORELISTENER
@@ -364,6 +380,16 @@ int64_t uniffi_gv_ffi_fn_method_gainzvillecore_forest_suggested_root_day_inserti
 int8_t uniffi_gv_ffi_fn_method_gainzvillecore_forest_would_create_cycle(uint64_t ptr, RustBuffer entry_id, RustBuffer proposed_parent_id, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_LIVE_READ
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_LIVE_READ
+RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_live_read(uint64_t ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_LIVE_SUBSCRIBE
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_LIVE_SUBSCRIBE
+RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_live_subscribe(uint64_t ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_READ_QUERY
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_READ_QUERY
 RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_read_query(uint64_t ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
@@ -372,6 +398,11 @@ RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_read_query(uint64_t ptr, RustB
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_RUN_ACTION
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_RUN_ACTION
 void uniffi_gv_ffi_fn_method_gainzvillecore_run_action(uint64_t ptr, RustBuffer action, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_SET_LIVE_LISTENER
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_SET_LIVE_LISTENER
+void uniffi_gv_ffi_fn_method_gainzvillecore_set_live_listener(uint64_t ptr, uint64_t listener, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_START_BACKGROUND_TICKER
@@ -387,6 +418,36 @@ uint64_t uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_forest(uint64_t ptr, R
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_SUBSCRIBE_QUERY
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_SUBSCRIBE_QUERY
 uint64_t uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_query(uint64_t ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_LIVELISTENER
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_LIVELISTENER
+uint64_t uniffi_gv_ffi_fn_clone_livelistener(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FREE_LIVELISTENER
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FREE_LIVELISTENER
+void uniffi_gv_ffi_fn_free_livelistener(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_INIT_CALLBACK_VTABLE_LIVELISTENER
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_INIT_CALLBACK_VTABLE_LIVELISTENER
+void uniffi_gv_ffi_fn_init_callback_vtable_livelistener(const UniffiVTableCallbackInterfaceLiveListener* _Nonnull vtable
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_LIVELISTENER_ON_BATCH
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_LIVELISTENER_ON_BATCH
+void uniffi_gv_ffi_fn_method_livelistener_on_batch(uint64_t ptr, RustBuffer batch, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_LIVESUBSCRIPTIONHANDLE
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_CLONE_LIVESUBSCRIPTIONHANDLE
+uint64_t uniffi_gv_ffi_fn_clone_livesubscriptionhandle(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FREE_LIVESUBSCRIPTIONHANDLE
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FREE_LIVESUBSCRIPTIONHANDLE
+void uniffi_gv_ffi_fn_free_livesubscriptionhandle(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_FUNC_LENGTH_VALUE_CONVERTED_TO
@@ -749,6 +810,18 @@ uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_forest_would_create_cycle(
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_LIVE_READ
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_LIVE_READ
+uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_live_read(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_LIVE_SUBSCRIBE
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_LIVE_SUBSCRIBE
+uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_live_subscribe(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_READ_QUERY
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_READ_QUERY
 uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_read_query(void
@@ -758,6 +831,12 @@ uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_read_query(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_RUN_ACTION
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_RUN_ACTION
 uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_run_action(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_SET_LIVE_LISTENER
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_SET_LIVE_LISTENER
+uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_set_live_listener(void
     
 );
 #endif
@@ -776,6 +855,12 @@ uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_forest(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_SUBSCRIBE_QUERY
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_SUBSCRIBE_QUERY
 uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_query(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_LIVELISTENER_ON_BATCH
+#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_LIVELISTENER_ON_BATCH
+uint16_t uniffi_gv_ffi_checksum_method_livelistener_on_batch(void
     
 );
 #endif

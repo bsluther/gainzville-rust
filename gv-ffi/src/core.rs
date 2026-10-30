@@ -2,7 +2,11 @@ use std::sync::{Arc, LazyLock, Once};
 
 use chrono::{DateTime, Utc};
 use generation::{Arbitrary, Opts, SimulationContext};
-use gv_client::{client::SqliteClient, query_store::QuerySubscription};
+use gv_client::{
+    client::SqliteClient,
+    live::{LiveBatch, LiveQuery, LiveSubscription, LiveValue},
+    query_store::{QuerySubscription, next_change},
+};
 use gv_core::{
     actions::{Action, CreateAttribute, CreateEntry, CreateValue},
     forest::Forest,
@@ -45,6 +49,27 @@ pub trait CoreListener: Send + Sync {
     fn on_data_changed(&self);
 }
 
+/// Swift implements this to receive live-query batches: one call per data version, carrying only
+/// the subscriptions whose result changed. Called on a Rust thread, in version order; the
+/// implementation should hop to the main actor and apply the whole batch in one step.
+#[uniffi::export(with_foreign)]
+pub trait LiveListener: Send + Sync {
+    fn on_batch(&self, batch: LiveBatch);
+}
+
+/// Keeps a live subscription alive; releasing it unsubscribes (refcounted per identical query).
+#[derive(uniffi::Object)]
+pub struct LiveSubscriptionHandle(#[allow(dead_code)] LiveSubscription);
+
+/// Result of `live_subscribe`: the first value now, the version it belongs to, and the handle.
+#[derive(uniffi::Record)]
+pub struct LiveSubscribed {
+    pub subscription_id: u64,
+    pub version: u64,
+    pub value: LiveValue,
+    pub handle: Arc<LiveSubscriptionHandle>,
+}
+
 /// UniFFI-compatible wrapper around `QuerySubscription`. Dropping this value
 /// (when Swift releases its reference) automatically unsubscribes the query.
 /// The inner Arc is held only for its Drop side-effect.
@@ -81,7 +106,8 @@ impl GainzvilleCore {
         // on_data_changed() from a background task each time the cache updates.
         let mut cache_ready_rx = client.subscribe_cache_ready();
         RUNTIME.spawn(async move {
-            while let Ok(()) = cache_ready_rx.recv().await {
+            // `next_change`: Lagged is a (coalesced) change, not the end of the loop.
+            while next_change(&mut cache_ready_rx).await {
                 listener.on_data_changed();
             }
         });
@@ -116,6 +142,44 @@ impl GainzvilleCore {
     /// after receiving `on_data_changed()`.
     pub fn read_query(&self, query: AnyQuery) -> Option<AnyQueryResponse> {
         self.client.read_cached_query(query)
+    }
+
+    // -------------------------------------------------------------------------
+    // Live queries
+    //
+    // The successor to subscribe_query/read_query/forest_*/on_data_changed for
+    // migrated views. Swift registers one LiveListener, subscribes per view
+    // (first value returned synchronously), and receives one batch per data
+    // version with only the changed subscriptions. How each query is answered
+    // (in-memory forest or SQL) is decided in gv_client::live.
+    // -------------------------------------------------------------------------
+
+    /// Register the batch listener. Call once, before the first `live_subscribe`: batches are
+    /// deltas on top of first values, so a subscriber that misses one stays stale.
+    pub fn set_live_listener(&self, listener: Arc<dyn LiveListener>) {
+        self.client
+            .live()
+            .set_batch_sink(Arc::new(move |batch| listener.on_batch(batch)));
+    }
+
+    /// Subscribe to a live query. Returns the first value immediately.
+    pub fn live_subscribe(&self, query: LiveQuery) -> Result<LiveSubscribed, FfiError> {
+        let subscribed = RUNTIME
+            .block_on(self.client.live().subscribe(query))
+            .map_err(FfiError::from)?;
+        Ok(LiveSubscribed {
+            subscription_id: subscribed.subscription_id,
+            version: subscribed.version,
+            value: subscribed.value,
+            handle: Arc::new(LiveSubscriptionHandle(subscribed.handle)),
+        })
+    }
+
+    /// Answer a live query once against the latest version, without subscribing.
+    pub fn live_read(&self, query: LiveQuery) -> Result<LiveValue, FfiError> {
+        RUNTIME
+            .block_on(self.client.live().read(query))
+            .map_err(FfiError::from)
     }
 
     /// Spawn a background task that creates a new activity every 10 seconds.

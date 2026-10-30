@@ -1977,6 +1977,7 @@ dependencies = [
  "generation",
  "gv-client",
  "gv-core",
+ "gv-ui",
  "rand 0.10.1",
  "thiserror 2.0.17",
  "tokio",
