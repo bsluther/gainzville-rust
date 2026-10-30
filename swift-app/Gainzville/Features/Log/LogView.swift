@@ -5,12 +5,79 @@ struct LogView: View {
     @EnvironmentObject var forestVM: ForestViewModel
     @EnvironmentObject var logDayStore: LogDayStore
     @EnvironmentObject var dragState: DragState
-    @EnvironmentObject var autocomplete: AutocompleteCoordinator
     @State private var isCreatePresented = false
     @State private var pendingRootDrop: PendingRootDrop?
 
     var body: some View {
-        let dayRoots = forestVM.rootsIn(logDay: logDayStore.logDay)
+        DayRootsList(day: logDayStore.logDay, onDayRootDrop: handleDayRootDrop)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Bare Color extends through safe areas — toolbars and tab bar adopt gvBackground.
+        .background(Color.gvBackground)
+        .onDrop(of: [UTType.plainText], delegate: DayRootDropDelegate(
+            dragState: dragState,
+            onDrop: handleDayRootDrop
+        ))
+        .sheet(item: $pendingRootDrop) { drop in
+            RootDropTimePickerSheet(
+                day: drop.day,
+                initialTime: forestVM.suggestedRootInsertionTime(for: drop.day) ?? drop.day.start,
+                onConfirm: { time in
+                    forestVM.moveEntryToRoot(drop.entry, startTime: time)
+                    pendingRootDrop = nil
+                },
+                onCancel: { pendingRootDrop = nil }
+            )
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                LogDateHeader(logDay: $logDayStore.logDay)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    isCreatePresented = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $isCreatePresented) {
+            CreateEntrySheet(isPresented: $isCreatePresented) { activityId, name, isSequence in
+                forestVM.createRootEntry(
+                    activityId: activityId,
+                    name: name,
+                    isSequence: isSequence,
+                    for: logDayStore.logDay
+                )
+                isCreatePresented = false
+            }
+        }
+        #if !os(macOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .gvAttributeKeyboardBar()
+    }
+
+    private func handleDayRootDrop(_ entry: Entry) {
+        pendingRootDrop = PendingRootDrop(entry: entry, day: logDayStore.logDay)
+    }
+}
+
+// MARK: - Day roots
+
+// The day's root entries. A separate view so its live query is declared from
+// its input: a new `day` re-targets the hook (no imperative reload).
+private struct DayRootsList: View {
+    let onDayRootDrop: (Entry) -> Void
+    @GvQuery private var dayRoots: [Entry]
+    @EnvironmentObject private var dragState: DragState
+    @EnvironmentObject private var autocomplete: AutocompleteCoordinator
+
+    init(day: LogDay, onDayRootDrop: @escaping (Entry) -> Void) {
+        self.onDayRootDrop = onDayRootDrop
+        _dayRoots = GvQuery(.dayRoots(day))
+    }
+
+    var body: some View {
         Group {
             if dayRoots.isEmpty {
                 ContentUnavailableView(
@@ -22,7 +89,7 @@ struct LogView: View {
                 ScrollView {
                     VStack(spacing: GvSpacing.lg) {
                         ForEach(dayRoots, id: \.id) { entry in
-                            EntryView(entry: entry, onDayRootDrop: handleDayRootDrop)
+                            EntryView(entry: entry, onDayRootDrop: onDayRootDrop)
                         }
                         // Trailing scroll headroom: attribute editors
                         // (sheets/popovers) can cover an entry near the bottom
@@ -85,55 +152,6 @@ struct LogView: View {
                 )
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Bare Color extends through safe areas — toolbars and tab bar adopt gvBackground.
-        .background(Color.gvBackground)
-        .onDrop(of: [UTType.plainText], delegate: DayRootDropDelegate(
-            dragState: dragState,
-            onDrop: handleDayRootDrop
-        ))
-        .sheet(item: $pendingRootDrop) { drop in
-            RootDropTimePickerSheet(
-                day: drop.day,
-                initialTime: forestVM.suggestedRootInsertionTime(for: drop.day) ?? drop.day.start,
-                onConfirm: { time in
-                    forestVM.moveEntryToRoot(drop.entry, startTime: time)
-                    pendingRootDrop = nil
-                },
-                onCancel: { pendingRootDrop = nil }
-            )
-        }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                LogDateHeader(logDay: $logDayStore.logDay)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    isCreatePresented = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-            }
-        }
-        .sheet(isPresented: $isCreatePresented) {
-            CreateEntrySheet(isPresented: $isCreatePresented) { activityId, name, isSequence in
-                forestVM.createRootEntry(
-                    activityId: activityId,
-                    name: name,
-                    isSequence: isSequence,
-                    for: logDayStore.logDay
-                )
-                isCreatePresented = false
-            }
-        }
-        #if !os(macOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .gvAttributeKeyboardBar()
-    }
-
-    private func handleDayRootDrop(_ entry: Entry) {
-        pendingRootDrop = PendingRootDrop(entry: entry, day: logDayStore.logDay)
     }
 }
 

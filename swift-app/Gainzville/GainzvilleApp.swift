@@ -42,7 +42,7 @@ struct GainzvilleApp: App {
 
         // Wire the listener callback after all view models exist.
         // Singleton VMs refresh first, then dataChange fans out to per-view
-        // VMs (e.g. EntryViewModel) so they re-read the cache too.
+        // VMs (e.g. TextSuggestionsModel) so they re-read the cache too.
         listener.onChanged = { [weak avm, weak atvm, weak fvm, weak dc] in
             Task { @MainActor [weak avm, weak atvm, weak fvm, weak dc] in
                 avm?.refresh(from: c)

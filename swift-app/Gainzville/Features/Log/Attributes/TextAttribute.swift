@@ -260,7 +260,7 @@ struct TextAttribute: View {
 /// Backs a text attribute's autocomplete. Focus-scoped: `start()` on focus,
 /// `stop()` on blur. Holds the `FfiQuerySubscription` only while editing, so
 /// the query (which re-runs on every app-wide write) is live for one field at a
-/// time. Mirrors the per-component subscription pattern of `EntryViewModel` /
+/// time. Mirrors the per-component subscription pattern of
 /// `AttributeDetailViewModel`, but torn down on blur rather than on disappear.
 @MainActor
 final class TextSuggestionsModel: ObservableObject {

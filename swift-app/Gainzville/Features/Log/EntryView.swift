@@ -24,32 +24,35 @@ extension EnvironmentValues {
     }
 }
 
-// We take the full Entry rather than just an id even though `vm.entryJoin`
-// will provide its own copy of the entry. The forest gives us the entry as
-// the unit of iteration, and rendering needs structural/temporal fields
-// (position, temporal, isSequence, etc.) immediately on first render —
-// before the per-entry subscription has populated the cache. Passing the
-// full struct avoids a flash of empty layout while the EntryJoin loads,
-// and EntryJoin then supplies the joined data (activity, attributes) that
-// the forest doesn't carry.
+// We take the full Entry (from the parent's slot list or the day's roots) as
+// the unit of iteration; `join` adds what the forest doesn't carry (activity,
+// attributes, display name). Its first value arrives synchronously on the
+// first render, so there is no empty frame to paper over.
 struct EntryView: View {
     let entry: Entry
     // Only root EntryViews receive this from LogView; child EntryViews omit it
     // so EntryDropDelegate falls into its forbidding mode and blocks the
     // day-root drop indicator from activating over their bodies.
-    var onDayRootDrop: ((Entry) -> Void)? = nil
+    let onDayRootDrop: ((Entry) -> Void)?
     @EnvironmentObject var forestVM: ForestViewModel
-    @EnvironmentObject var coreEnv: CoreEnv
-    @EnvironmentObject var dataChange: DataChange
     @EnvironmentObject var dragState: DragState
-    @StateObject private var vm = EntryViewModel()
+    @GvQuery private var join: EntryJoin?
     // For sets cards: joined data of the selected member, whose identity and
     // attributes are what the card displays (the sequence level is hidden).
-    @StateObject private var selectedMemberVM = EntryViewModel()
+    // Its target depends on @State (the selection), so it can't be declared in
+    // init; it starts inactive and is re-targeted with `load` below.
+    @GvQuery private var selectedMemberJoin: EntryJoin?
     @State private var isExpanded = false
     // nil tracks the last member, so a "+" duplicate (appended at the end)
     // becomes selected automatically when the forest refreshes.
     @State private var selectedMemberId: String?
+
+    init(entry: Entry, onDayRootDrop: ((Entry) -> Void)? = nil) {
+        self.entry = entry
+        self.onDayRootDrop = onDayRootDrop
+        _join = GvQuery(.entryJoin(entry.id))
+        _selectedMemberJoin = GvQuery(.entryJoin(nil))
+    }
 
     private var setsMembers: [Entry] {
         entry.displayAsSets ? forestVM.children(of: entry.id) : []
@@ -66,13 +69,16 @@ struct EntryView: View {
         entry.displayAsSets ? setsMembers.contains { $0.isSequence } : entry.isSequence
     }
 
-    // Single source of truth lives in core (`EntryJoin::display_name`),
-    // surfaced via `EntryJoin.displayName`. Empty string covers the
-    // single render frame between view appear and the subscription
-    // populating the cache; SwiftUI swaps in the real value immediately.
     // Sets sequences are anonymous; their cards title as the selected member.
+    private var displayedJoin: EntryJoin? {
+        entry.displayAsSets ? selectedMemberJoin : join
+    }
+
+    // Single source of truth lives in core (`EntryJoin::display_name`),
+    // surfaced via `EntryJoin.displayName`. Empty only for a sets card's
+    // first frame, before its selected member's join is loaded.
     var displayName: String {
-        (entry.displayAsSets ? selectedMemberVM : vm).entryJoin?.displayName ?? ""
+        displayedJoin?.displayName ?? ""
     }
 
     var body: some View {
@@ -81,7 +87,7 @@ struct EntryView: View {
                 entry: entry,
                 attributeTarget: entry.displayAsSets ? (selectedMember ?? entry) : entry,
                 displayName: displayName,
-                activityName: (entry.displayAsSets ? selectedMemberVM : vm).entryJoin?.activity?.name,
+                activityName: displayedJoin?.activity?.name,
                 isExpanded: isExpanded,
                 onToggle: { isExpanded.toggle() }
             )
@@ -92,10 +98,10 @@ struct EntryView: View {
                         members: setsMembers,
                         selectedMember: selectedMember,
                         selectedMemberId: $selectedMemberId,
-                        memberAttributes: selectedMemberVM.entryJoin?.attributes ?? []
+                        memberAttributes: selectedMemberJoin?.attributes ?? []
                     )
                 } else {
-                    EntryBody(entry: entry, attributes: vm.entryJoin?.attributes ?? [])
+                    EntryBody(entry: entry, attributes: join?.attributes ?? [])
                 }
             }
         }
@@ -124,14 +130,11 @@ struct EntryView: View {
             if forestVM.consumePendingExpanded(entry.id) {
                 isExpanded = true
             }
-            vm.start(core: coreEnv.core, dataChange: dataChange, entryId: entry.id)
         }
         // Runs on appear and whenever the selection (or membership) changes;
-        // start is idempotent per id and re-targets across ids.
-        .task(id: selectedMember?.id) {
-            if let memberId = selectedMember?.id {
-                selectedMemberVM.start(core: coreEnv.core, dataChange: dataChange, entryId: memberId)
-            }
+        // load is a no-op for the same id (and nil for non-sets cards).
+        .onChange(of: selectedMember?.id, initial: true) { _, memberId in
+            $selectedMemberJoin.load(.entryJoin(memberId))
         }
     }
 }
@@ -246,60 +249,29 @@ private struct EntryBody: View {
 
 // MARK: - Children
 
+// Rust lays out "drop, child, drop, …, drop" (gv-ui `child_slots`): positions,
+// and slot ids derived from each gap's neighbours, so isTargeted @State never
+// transfers to a different gap after a drop.
 private struct ChildrenSection: View {
-    let parent: Entry
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @GvQuery private var slots: [ChildSlot]
+
+    init(parent: Entry) {
+        _slots = GvQuery(.childSlots(of: parent.id))
+    }
 
     var body: some View {
-        let children = forestVM.children(of: parent.id)
-        let slots = buildSlots(parentId: parent.id, children: children)
         if !slots.isEmpty {
             VStack(spacing: 0) {
                 ForEach(slots) { slot in
-                    if let position = slot.position {
-                        DropTarget(position: position, predId: slot.predId, succId: slot.succId)
-                    }
-                    if let child = slot.child {
+                    switch slot {
+                    case .drop(_, let position, let predId, let succId):
+                        DropTarget(position: position, predId: predId, succId: succId)
+                    case .entry(let child):
                         EntryView(entry: child)
                     }
                 }
             }
         }
-    }
-
-    // Identity is pred/succ-based for drop targets, entry-id-based for children.
-    // This prevents SwiftUI from transferring isTargeted @State across slots that
-    // shift positions after a drop + forest refresh.
-    private struct Slot: Identifiable {
-        let id: String
-        let position: Position?
-        let predId: String?
-        let succId: String?
-        let child: Entry?
-
-        static func dropTarget(position: Position, predId: String?, succId: String?) -> Slot {
-            Slot(id: "drop-\(predId ?? "start")-\(succId ?? "end")", position: position, predId: predId, succId: succId, child: nil)
-        }
-
-        static func childSlot(_ entry: Entry) -> Slot {
-            Slot(id: "child-\(entry.id)", position: nil, predId: nil, succId: nil, child: entry)
-        }
-    }
-
-    private func buildSlots(parentId: String, children: [Entry]) -> [Slot] {
-        var slots: [Slot] = []
-        let count = children.count
-        for i in 0...count {
-            let predId = i > 0 ? children[i - 1].id : nil
-            let succId = i < count ? children[i].id : nil
-            if let position = forestVM.positionBetween(parentId: parentId, predId: predId, succId: succId) {
-                slots.append(.dropTarget(position: position, predId: predId, succId: succId))
-            }
-            if i < count {
-                slots.append(.childSlot(children[i]))
-            }
-        }
-        return slots
     }
 }
 

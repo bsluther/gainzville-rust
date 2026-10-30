@@ -27,7 +27,7 @@ class AppListener: CoreListener {
 }
 
 // Holds the GainzvilleCore for env-based access in views that need to
-// create their own subscriptions (e.g. per-entry EntryViewModel). Not
+// create their own subscriptions (e.g. TextSuggestionsModel). Not
 // observable — exposes `core` as a constant; never publishes changes.
 @MainActor
 final class CoreEnv: ObservableObject {
@@ -117,11 +117,8 @@ class ForestViewModel: ObservableObject {
     }
 
     // Synchronous reads from the forest cache — always fresh on each render.
-
-    func rootsIn(logDay: LogDay) -> [Entry] {
-        _ = roots  // establish SwiftUI dependency so callers re-render when data changes
-        return core?.forestRootsIn(from: logDay.fromMs, to: logDay.toMs) ?? []
-    }
+    // (Day roots, child slots and the drag-time cycle check moved to GvKit
+    // live queries: see LogView, ChildrenSection, DropTarget.)
 
     func children(of parentId: String) -> [Entry] {
         core?.forestChildren(parentId: parentId) ?? []
@@ -132,16 +129,6 @@ class ForestViewModel: ObservableObject {
     func templateRoot(activityId: String) -> Entry? {
         _ = roots  // establish a SwiftUI dependency so views re-render on change
         return core?.forestActivityTemplateRoot(activityId: activityId)
-    }
-
-    func wouldCreateCycle(entryId: String, proposedParentId: String) -> Bool {
-        _ = roots
-        return core?.forestWouldCreateCycle(entryId: entryId, proposedParentId: proposedParentId) ?? false
-    }
-
-    func positionBetween(parentId: String, predId: String?, succId: String?) -> Position? {
-        _ = roots
-        return core?.forestPositionBetween(parentId: parentId, predId: predId, succId: succId)
     }
 
     func moveEntry(_ entry: Entry, to position: Position) {
@@ -376,47 +363,11 @@ class ForestViewModel: ObservableObject {
     }
 }
 
-// Per-entry view model: subscribes once to `findEntryJoinById` for its
-// entry id, re-reads from the cache on every DataChange tick, and
-// publishes the latest EntryJoin. Dropping this VM (when the
-// EntryView leaves the hierarchy) drops the FfiQuerySubscription,
-// which auto-removes the query from the Rust cache.
-@MainActor
-class EntryViewModel: ObservableObject {
-    @Published var entryJoin: EntryJoin?
-    private var subscription: FfiQuerySubscription?
-    private var cancellable: AnyCancellable?
-    private var entryId: String?
-    private var core: GainzvilleCore?
-
-    /// Idempotent for the same entry id; calling with a different id
-    /// re-targets the VM (dropping the old subscription auto-removes its
-    /// query from the Rust cache). Sets cards use this to follow the
-    /// selected member.
-    func start(core: GainzvilleCore, dataChange: DataChange, entryId: String) {
-        guard self.entryId != entryId else { return }
-        self.core = core
-        self.entryId = entryId
-        subscription = try? core.subscribeQuery(query: .findEntryJoinById(FindEntryJoinById(entryId: entryId)))
-        refresh()
-        cancellable = dataChange.didChange.sink { [weak self] in
-            self?.refresh()
-        }
-    }
-
-    private func refresh() {
-        guard let core, let entryId else { return }
-        if case .findEntryJoinById(let join) = core.readQuery(query: .findEntryJoinById(FindEntryJoinById(entryId: entryId))) {
-            entryJoin = join
-        }
-    }
-}
-
 // TODO: AttributesViewModel does not subscribe to DataChange.didChange, so the
 // library attribute list (AttributesListView) won't live-refresh when an
 // attribute is created or edited — it only reflects what was cached at subscribe
-// time. Wire a DataChange sink that calls refresh(from:) like EntryViewModel /
-// EditAttributesViewModel do. Surfaces once name/description editing lands (the
+// time. Wire a DataChange sink that calls refresh(from:) like
+// EditAttributesViewModel does (or move it to @GvQuery). Surfaces once name/description editing lands (the
 // list shows those fields); not visible while only config defaults are editable.
 @MainActor
 class AttributesViewModel: ObservableObject {

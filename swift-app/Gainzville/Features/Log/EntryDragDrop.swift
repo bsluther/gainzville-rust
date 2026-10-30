@@ -93,11 +93,15 @@ struct DropTarget: View, DropDelegate {
     let succId: String?
     @EnvironmentObject private var forestVM: ForestViewModel
     @EnvironmentObject private var dragState: DragState
+    @Environment(\.gvClient) private var gv
     @State private var isTargeted = false
 
+    // Validity depends on what is being dragged, so it is checked at drag time:
+    // no-op (dropping next to itself) here, cycles via a read-once query.
     private func isValidDrop(entryId: String) -> Bool {
-        entryId != predId && entryId != succId &&
-        !forestVM.wouldCreateCycle(entryId: entryId, proposedParentId: position.parentId)
+        guard entryId != predId && entryId != succId else { return false }
+        let cycle: GvKey<Bool> = .wouldCreateCycle(entryId: entryId, under: position.parentId)
+        return !(gv?.read(cycle) ?? false)
     }
 
     func validateDrop(info: DropInfo) -> Bool {
