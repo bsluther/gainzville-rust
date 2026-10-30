@@ -53,6 +53,94 @@ section wins.
      overlapping "forest for an interval" queries into one forest and knows when a traversal walks off
      the loaded edge.
 4. **Writes are intents.** Unchanged from the earlier lean.
+5. **Pure, screen-shaped computations move to Rust, in a UI-shaped layer separate from the core.**
+   Structure goes in Rust and formatting stays in Swift. Rust decides *where* things go and what is
+   allowed. Swift decides *how* it looks, including locale-dependent text such as "7:30 – 8:15". See
+   the worked example below.
+
+### Screen-shaped computations in Rust: drop slots
+
+**Inspiration: Matrix's date dividers.** In matrix-rust-sdk, Rust decides where day dividers go in a
+timeline.
+
+- **The logic.** `DateDividerAdjuster` (`crates/matrix-sdk-ui/src/timeline/date_dividers.rs`, about
+  700 lines) inserts or removes divider items whenever messages are added, including older history
+  loaded at the top.
+- **Invariants.** It checks its own invariants (never two dividers in a row, never one at the end),
+  and tests panic if they break.
+- **What Swift sees.** Dividers reach Swift as ordinary list items:
+
+```rust
+pub enum VirtualTimelineItem {
+    DateDivider(MilliSecondsSinceUnixEpoch),  // a day, in local time
+    ReadMarker,
+    TimelineStart,
+}
+```
+
+Element X just maps the case to a view and formats the date:
+
+```swift
+case .dateDivider(let timestamp):
+    let date = Date(timeIntervalSince1970: TimeInterval(timestamp / 1000))
+    return SeparatorRoomTimelineItem(id: .virtual(uniqueID: uniqueID), timestamp: date)
+```
+
+**Organization.** Matrix keeps this out of its core. `matrix-sdk` is the client (protocol, storage,
+sync) and has no UI concepts. `matrix-sdk-ui` holds the screen-shaped but platform-independent logic
+(timeline, date dividers, read markers, the room list service). `matrix-sdk-ffi` exposes both. GV
+would add a parallel layer:
+
+- a `gv-ui` crate, or a module in `gv-client`, of pure functions over the forest, with no storage and
+  no platform code;
+- its results returned through ordinary queries;
+- `gv-core` staying domain-only, so drop slots never leak into the domain model.
+
+The logic stays pure Rust, so it is property- and simulation-testable, and a future Android or
+desktop frontend could reuse it.
+
+**The GV case: drop slots between children.** Today `ChildrenSection` (`EntryView.swift:291`) builds
+"drop target, child, drop target, child, drop target" itself:
+
+- it calls `positionBetween` for every gap to get a fractional position;
+- it invents slot ids so SwiftUI keeps the right identity after a drop;
+- it does both on every render.
+
+That's structural logic about fractional indices, living in a view. In Rust, a query would return the
+slots already laid out:
+
+```rust
+enum ChildSlot {
+    Drop { id: SlotId, position: Position },  // gap between two siblings
+    Entry(EntryJoin),
+}
+// query: .childSlots(of: parent)
+```
+
+```swift
+ForEach(slots) { slot in
+    switch slot {
+    case .drop(let id, let position): DropTarget(position: position)
+    case .entry(let join): EntryView(join: join)
+    }
+}
+```
+
+That gives three things:
+
+- positions computed once per version, not once per gap per render;
+- invariants tested in Rust (slots alternate, and each position sits strictly between its
+  neighbors);
+- slot identity supplied by Rust, so Swift never handles fractional indices.
+
+**What stays in Swift.** Whether a slot is valid *for the item being dragged* depends on UI state:
+the dragged item, and whether the drop would cycle. That stays a read-once query at drag time
+(`gv.read(.wouldCreateCycle(...))`). The slot list itself is plain data, the same way Matrix's
+dividers don't depend on what the user is doing.
+
+**Other candidates for the same pattern:** day grouping, set numbering, and affordance flags on
+records (Matrix's `is_editable` and `can_be_replied_to`; for GV, "can add child" and "can clear this
+temporal field").
 
 ### Reference point: Convex's Rust client, not its Swift SDK
 

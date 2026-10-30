@@ -107,3 +107,20 @@ interface MobileConvexClient {
   FFI callback, so the cross-query consistency the Rust client offers is lost on the Swift side.
 - The base client also has `OptimisticQueryResults` for patching results while a mutation is in
   flight.
+
+## Matrix date dividers and crate layering (`matrix-rust-sdk` @ `8ab40bd`, `element-x-ios` @ `f6a75aa`, read 2026-10-30)
+
+- `crates/matrix-sdk-ui/src/timeline/virtual_item.rs` defines
+  `VirtualTimelineItem::{DateDivider(MilliSecondsSinceUnixEpoch), ReadMarker, TimelineStart}`.
+- `crates/matrix-sdk-ui/src/timeline/date_dividers.rs`: `DateDividerAdjuster::run` "ensures that date
+  separators are properly inserted/removed when needs be" after each batch of item changes, then runs
+  `check_invariants`. On violation it logs an error and panics. `DateDividerMode` is `Daily` or
+  `Monthly`, and dates are computed in local time.
+- The Element X Swift side
+  (`ElementX/Sources/Services/Timeline/TimelineController/TimelineController.swift`) maps
+  `.dateDivider(timestamp)` to a `SeparatorRoomTimelineItem` and formats the date itself.
+- Crate layering: `matrix-sdk` (client: protocol, storage, sync), `matrix-sdk-ui`
+  (platform-independent, screen-shaped logic: timeline, dividers, room list service),
+  `bindings/matrix-sdk-ffi` (exposes both over UniFFI).
+- From the discussion: the GV analog is drop slots in `ChildrenSection`. Drop slots are UI-ish rather
+  than a core concern, so they belong in a UI-shaped Rust layer, not `gv-core`.
