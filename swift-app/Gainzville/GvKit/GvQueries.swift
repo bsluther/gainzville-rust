@@ -3,9 +3,12 @@
 //  GvKit
 //
 //  The questions views can ask, as typed keys for `@GvQuery` and
-//  `GvClient.read`. Nothing here says how a question is answered: child
-//  slots and cycle checks come from Rust's in-memory forest, day roots and
-//  entry joins from SQL, and Rust may change that without touching Swift.
+//  `GvClient.read`. Each key names one member of the client set
+//  (`ClientQuery`, generated from `gv_client::queries`) and picks its answer
+//  out of the matching `ClientQueryResponse` case. Nothing here says how a
+//  question is answered: child slots and cycle checks come from Rust's
+//  in-memory forest, day roots and entry joins from SQL, and Rust may change
+//  that without touching Swift.
 //
 
 import Foundation
@@ -13,8 +16,8 @@ import Foundation
 extension GvKey where Value == [ChildSlot] {
     /// A sequence's children laid out for display: drop, child, drop, …, drop.
     static func childSlots(of parentId: String) -> GvKey<[ChildSlot]> {
-        GvKey(query: .childSlots(parentId: parentId), defaultValue: []) { value in
-            if case .childSlots(let slots) = value { return slots }
+        GvKey(query: .childSlots(ChildSlots(parentId: parentId)), defaultValue: []) { response in
+            if case .childSlots(let slots) = response { return slots }
             return nil
         }
     }
@@ -24,8 +27,8 @@ extension GvKey where Value == [Entry] {
     /// Log roots on a local day, sorted by time.
     static func dayRoots(_ day: LogDay) -> GvKey<[Entry]> {
         let query = RootEntriesInInterval(from: day.fromMs, to: day.toMs)
-        return GvKey(query: .domain(.rootEntriesInInterval(query)), defaultValue: []) { value in
-            if case .domain(.rootEntriesInInterval(let roots)) = value { return roots }
+        return GvKey(query: .rootEntriesInInterval(query), defaultValue: []) { response in
+            if case .rootEntriesInInterval(let roots) = response { return roots }
             return nil
         }
     }
@@ -34,9 +37,9 @@ extension GvKey where Value == [Entry] {
 extension GvKey where Value == EntryJoin? {
     /// An entry with its activity and attributes. `nil` id = inactive.
     static func entryJoin(_ entryId: String?) -> GvKey<EntryJoin?> {
-        let query = entryId.map { LiveQuery.domain(.findEntryJoinById(FindEntryJoinById(entryId: $0))) }
-        return GvKey(query: query, defaultValue: nil) { value in
-            if case .domain(.findEntryJoinById(let join)) = value { return .some(join) }
+        let query = entryId.map { ClientQuery.findEntryJoinById(FindEntryJoinById(entryId: $0)) }
+        return GvKey(query: query, defaultValue: nil) { response in
+            if case .findEntryJoinById(let join) = response { return .some(join) }
             return nil
         }
     }
@@ -47,10 +50,10 @@ extension GvKey where Value == Bool {
     /// once at drag time.
     static func wouldCreateCycle(entryId: String, under proposedParentId: String) -> GvKey<Bool> {
         GvKey(
-            query: .wouldCreateCycle(entryId: entryId, proposedParentId: proposedParentId),
+            query: .wouldCreateCycle(WouldCreateCycle(entryId: entryId, proposedParentId: proposedParentId)),
             defaultValue: false
-        ) { value in
-            if case .wouldCreateCycle(let cycle) = value { return cycle }
+        ) { response in
+            if case .wouldCreateCycle(let cycle) = response { return cycle }
             return nil
         }
     }

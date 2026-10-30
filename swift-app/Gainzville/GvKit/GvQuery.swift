@@ -25,14 +25,15 @@ import Foundation
 import Observation
 import SwiftUI
 
-/// A typed live query: what to ask, what to show before an answer, and how to
-/// read the answer. Define keys in `GvQueries.swift`.
+/// A typed live query: what to ask (a member of the client set), what to show
+/// before an answer, and how to read the answer. Define keys in
+/// `GvQueries.swift`.
 struct GvKey<Value> {
     /// `nil` makes the hook inactive: no subscription, value is `defaultValue`.
-    let query: LiveQuery?
+    let query: ClientQuery?
     let defaultValue: Value
-    /// `nil` if the value isn't this key's shape (never expected).
-    let decode: (LiveValue) -> Value?
+    /// `nil` if the answer isn't this key's shape (never expected).
+    let decode: (ClientQueryResponse) -> Value?
 }
 
 enum GvQueryError: Error {
@@ -92,10 +93,10 @@ final class GvQueryBox<Value>: GvSubscriber {
 
     @ObservationIgnored private var storage: Value
     @ObservationIgnored private var storedError: (any Error)?
-    @ObservationIgnored private var decode: ((LiveValue) -> Value?)?
+    @ObservationIgnored private var decode: ((ClientQueryResponse) -> Value?)?
     @ObservationIgnored private var hasDeclared = false
-    @ObservationIgnored private var declaredQuery: LiveQuery?
-    @ObservationIgnored private var activeQuery: LiveQuery?
+    @ObservationIgnored private var declaredQuery: ClientQuery?
+    @ObservationIgnored private var activeQuery: ClientQuery?
     @ObservationIgnored private var handle: LiveSubscriptionHandle?
     @ObservationIgnored private var subscriptionId: UInt64?
     @ObservationIgnored private var version: UInt64 = 0
@@ -172,13 +173,16 @@ final class GvQueryBox<Value>: GvSubscriber {
     }
 
     private func accept(_ value: LiveValue, fallback: Value?) {
-        if case .failed(let message) = value {
+        switch value {
+        case .failed(let message):
             // Keep the last good value; surface the failure on the side channel.
             storedError = GvQueryError.failed(message)
             if let fallback { storage = fallback }
-        } else if let decoded = decode?(value) {
-            storage = decoded
-            storedError = nil
+        case .answer(let response):
+            if let decoded = decode?(response) {
+                storage = decoded
+                storedError = nil
+            }
         }
     }
 }

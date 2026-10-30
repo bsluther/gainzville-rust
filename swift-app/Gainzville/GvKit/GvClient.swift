@@ -74,7 +74,7 @@ final class GvClient {
     /// Subscribe and route this subscription's future updates to `subscriber`.
     /// Returns the first value; the caller keeps `handle` alive for as long as
     /// it wants updates (releasing it unsubscribes).
-    func subscribe(_ query: LiveQuery, for subscriber: any GvSubscriber) throws -> LiveSubscribed {
+    func subscribe(_ query: ClientQuery, for subscriber: any GvSubscriber) throws -> LiveSubscribed {
         let subscribed = try core.liveSubscribe(query: query)
         routes[subscribed.subscriptionId, default: []].append(WeakSubscriber(subscriber: subscriber))
         subscribesSincePrune += 1
@@ -86,10 +86,7 @@ final class GvClient {
     /// imperative checks such as drag-time validation. Returns the key's
     /// default if the query is inactive or fails.
     func read<Value>(_ key: GvKey<Value>) -> Value {
-        guard let query = key.query, let value = try? core.liveRead(query: query) else {
-            return key.defaultValue
-        }
-        return key.decode(value) ?? key.defaultValue
+        core.read(key)
     }
 
     /// Apply one batch in one main-actor step.
@@ -113,6 +110,21 @@ final class GvClient {
             let live = entries.filter { $0.subscriber != nil }
             return live.isEmpty ? nil : live
         }
+    }
+}
+
+// MARK: - Read once outside views
+
+extension GainzvilleCore {
+    /// `GvClient.read` for code that holds the core but no `GvClient` (e.g.
+    /// `ForestViewModel`). Same semantics: latest version, no subscription,
+    /// the key's default if the query is inactive or fails.
+    func read<Value>(_ key: GvKey<Value>) -> Value {
+        guard let query = key.query,
+              case .answer(let response)? = try? liveRead(query: query) else {
+            return key.defaultValue
+        }
+        return key.decode(response) ?? key.defaultValue
     }
 }
 
