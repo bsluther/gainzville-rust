@@ -451,7 +451,7 @@ mod tests {
         },
         queries::{FindAncestors, FindDescendants, FindEntryJoinById, RootEntriesInInterval},
     };
-    use gv_ui::{ChildSlot, ChildSlots, WouldCreateCycle, child_slots};
+    use gv_ui::{ChildSlot, ChildSlots, SuggestedRootInsertionTime, WouldCreateCycle, child_slots};
     use tokio::sync::mpsc;
     use uuid::Uuid;
 
@@ -699,6 +699,45 @@ mod tests {
             LiveValue::Answer(ClientQueryResponse::WouldCreateCycle(false))
         );
         assert_eq!(store.subscription_count(), 1, "read does not subscribe");
+    }
+
+    /// `SuggestedRootInsertionTime` (the spike's measured "new question"): forest-backed, read
+    /// once. On a past day it lands one minute after the day's last root.
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+    async fn suggested_root_insertion_time_reads_from_the_forest(pool: SqlitePool) {
+        let (client, _rx) = client(pool).await;
+        let store = client.live();
+        let past_day = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
+        let suggested = || async {
+            match store
+                .read(
+                    SuggestedRootInsertionTime {
+                        day_start: past_day,
+                    }
+                    .into(),
+                )
+                .await
+                .unwrap()
+            {
+                LiveValue::Answer(ClientQueryResponse::SuggestedRootInsertionTime(t)) => t,
+                other => panic!("unexpected value {other:?}"),
+            }
+        };
+        assert_eq!(
+            suggested().await,
+            past_day + Duration::hours(12),
+            "empty day: noon"
+        );
+        let mut root = entry(None, at(0), false);
+        root.temporal = Temporal::Start {
+            start: past_day + Duration::hours(9),
+        };
+        create(&client, &root).await;
+        store.sync().await;
+        assert_eq!(
+            suggested().await,
+            past_day + Duration::hours(9) + Duration::minutes(1)
+        );
     }
 
     /// A query that errors is delivered as `Failed` instead of stalling the version for others.

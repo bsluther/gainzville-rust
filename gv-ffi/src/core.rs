@@ -288,18 +288,8 @@ impl GainzvilleCore {
             .and_then(|f| f.position_between(parent_id, pred_id, succ_id))
     }
 
-    /// Suggested start time for a new root-level entry on the given day.
-    /// Returns now if today, one minute after the last existing root entry
-    /// otherwise, or noon as a fallback.
-    pub fn forest_suggested_root_day_insertion_time(
-        &self,
-        day_start: DateTime<Utc>,
-    ) -> DateTime<Utc> {
-        let forest = self
-            .forest_snapshot()
-            .unwrap_or_else(|| Forest::from(vec![]));
-        forest.suggested_root_day_insertion_time(day_start)
-    }
+    // (Suggested root insertion time moved to the client set:
+    // `ClientQuery::SuggestedRootInsertionTime`, read once via `live_read`.)
 
     // -------------------------------------------------------------------------
     // Dev / debug utilities

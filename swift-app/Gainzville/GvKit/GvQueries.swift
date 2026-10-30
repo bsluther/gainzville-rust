@@ -6,9 +6,9 @@
 //  `GvClient.read`. Each key names one member of the client set
 //  (`ClientQuery`, generated from `gv_client::queries`) and picks its answer
 //  out of the matching `ClientQueryResponse` case. Nothing here says how a
-//  question is answered: child slots and cycle checks come from Rust's
-//  in-memory forest, day roots and entry joins from SQL, and Rust may change
-//  that without touching Swift.
+//  question is answered: child slots, cycle checks and insertion times come
+//  from Rust's in-memory forest, day roots and entry joins from SQL, and Rust
+//  may change that without touching Swift.
 //
 
 import Foundation
@@ -54,6 +54,22 @@ extension GvKey where Value == Bool {
             defaultValue: false
         ) { response in
             if case .wouldCreateCycle(let cycle) = response { return cycle }
+            return nil
+        }
+    }
+}
+
+extension GvKey where Value == UtcDateTime {
+    /// When a new log root on `day` should start (Unix ms): now if `day` is
+    /// today, else just after its last root, else noon. Depends on the clock,
+    /// so read it once at the moment of use; don't subscribe.
+    static func suggestedRootInsertionTime(on day: LogDay) -> GvKey<UtcDateTime> {
+        let noon = day.fromMs + 12 * 3_600_000
+        return GvKey(
+            query: .suggestedRootInsertionTime(SuggestedRootInsertionTime(dayStart: day.fromMs)),
+            defaultValue: noon
+        ) { response in
+            if case .suggestedRootInsertionTime(let ms) = response { return ms }
             return nil
         }
     }

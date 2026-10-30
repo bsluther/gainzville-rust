@@ -2028,6 +2028,7 @@ dependencies = [
 name = "gv-ui"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "fractional_index",
  "gv-core",
  "proptest",

@@ -937,13 +937,6 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     func forestRootsIn(from: UtcDateTime, to: UtcDateTime)  -> [Entry]
     
     /**
-     * Suggested start time for a new root-level entry on the given day.
-     * Returns now if today, one minute after the last existing root entry
-     * otherwise, or noon as a fallback.
-     */
-    func forestSuggestedRootDayInsertionTime(dayStart: UtcDateTime)  -> UtcDateTime
-    
-    /**
      * Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
      */
     func forestWouldCreateCycle(entryId: Uuid, proposedParentId: Uuid)  -> Bool
@@ -1203,20 +1196,6 @@ open func forestRootsIn(from: UtcDateTime, to: UtcDateTime) -> [Entry]  {
             self.uniffiCloneHandle(),
         FfiConverterTypeUtcDateTime_lower(from),
         FfiConverterTypeUtcDateTime_lower(to),$0
-    )
-})
-}
-    
-    /**
-     * Suggested start time for a new root-level entry on the given day.
-     * Returns now if today, one minute after the last existing root entry
-     * otherwise, or noon as a fallback.
-     */
-open func forestSuggestedRootDayInsertionTime(dayStart: UtcDateTime) -> UtcDateTime  {
-    return try!  FfiConverterTypeUtcDateTime_lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_suggested_root_day_insertion_time(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUtcDateTime_lower(dayStart),$0
     )
 })
 }
@@ -4834,6 +4813,63 @@ public func FfiConverterTypeSelectConfig_lower(_ value: SelectConfig) -> RustBuf
 }
 
 
+/**
+ * When a new log root on the day starting at `day_start` should be placed: now if the
+ * day is today, else just after the day's last root, else noon.
+ *
+ * Depends on the current time, which no data version captures: read it once at the
+ * moment of use; a subscription would go stale between writes.
+ */
+public struct SuggestedRootInsertionTime: Equatable, Hashable {
+    public var dayStart: UtcDateTime
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(dayStart: UtcDateTime) {
+        self.dayStart = dayStart
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SuggestedRootInsertionTime: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSuggestedRootInsertionTime: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SuggestedRootInsertionTime {
+        return
+            try SuggestedRootInsertionTime(
+                dayStart: FfiConverterTypeUtcDateTime.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SuggestedRootInsertionTime, into buf: inout [UInt8]) {
+        FfiConverterTypeUtcDateTime.write(value.dayStart, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSuggestedRootInsertionTime_lift(_ buf: RustBuffer) throws -> SuggestedRootInsertionTime {
+    return try FfiConverterTypeSuggestedRootInsertionTime.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSuggestedRootInsertionTime_lower(_ value: SuggestedRootInsertionTime) -> RustBuffer {
+    return FfiConverterTypeSuggestedRootInsertionTime.lower(value)
+}
+
+
 public struct TextAttributePair: Equatable, Hashable {
     public var attrId: Uuid
     public var entryId: Uuid
@@ -6154,6 +6190,8 @@ public enum ClientQuery: Equatable, Hashable {
     )
     case wouldCreateCycle(WouldCreateCycle
     )
+    case suggestedRootInsertionTime(SuggestedRootInsertionTime
+    )
     case rootEntriesInInterval(RootEntriesInInterval
     )
     case findEntryById(FindEntryById
@@ -6207,43 +6245,46 @@ public struct FfiConverterTypeClientQuery: FfiConverterRustBuffer {
         case 2: return .wouldCreateCycle(try FfiConverterTypeWouldCreateCycle.read(from: &buf)
         )
         
-        case 3: return .rootEntriesInInterval(try FfiConverterTypeRootEntriesInInterval.read(from: &buf)
+        case 3: return .suggestedRootInsertionTime(try FfiConverterTypeSuggestedRootInsertionTime.read(from: &buf)
         )
         
-        case 4: return .findEntryById(try FfiConverterTypeFindEntryById.read(from: &buf)
+        case 4: return .rootEntriesInInterval(try FfiConverterTypeRootEntriesInInterval.read(from: &buf)
         )
         
-        case 5: return .findEntryJoinById(try FfiConverterTypeFindEntryJoinById.read(from: &buf)
+        case 5: return .findEntryById(try FfiConverterTypeFindEntryById.read(from: &buf)
         )
         
-        case 6: return .findAncestors(try FfiConverterTypeFindAncestors.read(from: &buf)
+        case 6: return .findEntryJoinById(try FfiConverterTypeFindEntryJoinById.read(from: &buf)
         )
         
-        case 7: return .findDescendants(try FfiConverterTypeFindDescendants.read(from: &buf)
+        case 7: return .findAncestors(try FfiConverterTypeFindAncestors.read(from: &buf)
         )
         
-        case 8: return .findActivityById(try FfiConverterTypeFindActivityById.read(from: &buf)
+        case 8: return .findDescendants(try FfiConverterTypeFindDescendants.read(from: &buf)
         )
         
-        case 9: return .allActivities(try FfiConverterTypeAllActivities.read(from: &buf)
+        case 9: return .findActivityById(try FfiConverterTypeFindActivityById.read(from: &buf)
         )
         
-        case 10: return .findActivityTemplateRoot(try FfiConverterTypeFindActivityTemplateRoot.read(from: &buf)
+        case 10: return .allActivities(try FfiConverterTypeAllActivities.read(from: &buf)
         )
         
-        case 11: return .findAttributeById(try FfiConverterTypeFindAttributeById.read(from: &buf)
+        case 11: return .findActivityTemplateRoot(try FfiConverterTypeFindActivityTemplateRoot.read(from: &buf)
         )
         
-        case 12: return .allAttributes(try FfiConverterTypeAllAttributes.read(from: &buf)
+        case 12: return .findAttributeById(try FfiConverterTypeFindAttributeById.read(from: &buf)
         )
         
-        case 13: return .findAttributesByOwner(try FfiConverterTypeFindAttributesByOwner.read(from: &buf)
+        case 13: return .allAttributes(try FfiConverterTypeAllAttributes.read(from: &buf)
         )
         
-        case 14: return .findAttributePairsForEntry(try FfiConverterTypeFindAttributePairsForEntry.read(from: &buf)
+        case 14: return .findAttributesByOwner(try FfiConverterTypeFindAttributesByOwner.read(from: &buf)
         )
         
-        case 15: return .distinctTextValuesForAttribute(try FfiConverterTypeDistinctTextValuesForAttribute.read(from: &buf)
+        case 15: return .findAttributePairsForEntry(try FfiConverterTypeFindAttributePairsForEntry.read(from: &buf)
+        )
+        
+        case 16: return .distinctTextValuesForAttribute(try FfiConverterTypeDistinctTextValuesForAttribute.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6264,68 +6305,73 @@ public struct FfiConverterTypeClientQuery: FfiConverterRustBuffer {
             FfiConverterTypeWouldCreateCycle.write(v1, into: &buf)
             
         
-        case let .rootEntriesInInterval(v1):
+        case let .suggestedRootInsertionTime(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeSuggestedRootInsertionTime.write(v1, into: &buf)
+            
+        
+        case let .rootEntriesInInterval(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterTypeRootEntriesInInterval.write(v1, into: &buf)
             
         
         case let .findEntryById(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeFindEntryById.write(v1, into: &buf)
             
         
         case let .findEntryJoinById(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeFindEntryJoinById.write(v1, into: &buf)
             
         
         case let .findAncestors(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeFindAncestors.write(v1, into: &buf)
             
         
         case let .findDescendants(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeFindDescendants.write(v1, into: &buf)
             
         
         case let .findActivityById(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeFindActivityById.write(v1, into: &buf)
             
         
         case let .allActivities(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeAllActivities.write(v1, into: &buf)
             
         
         case let .findActivityTemplateRoot(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeFindActivityTemplateRoot.write(v1, into: &buf)
             
         
         case let .findAttributeById(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeFindAttributeById.write(v1, into: &buf)
             
         
         case let .allAttributes(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeAllAttributes.write(v1, into: &buf)
             
         
         case let .findAttributesByOwner(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeFindAttributesByOwner.write(v1, into: &buf)
             
         
         case let .findAttributePairsForEntry(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
             FfiConverterTypeFindAttributePairsForEntry.write(v1, into: &buf)
             
         
         case let .distinctTextValuesForAttribute(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(16))
             FfiConverterTypeDistinctTextValuesForAttribute.write(v1, into: &buf)
             
         }
@@ -6356,6 +6402,8 @@ public enum ClientQueryResponse: Equatable, Hashable {
     case childSlots([ChildSlot]
     )
     case wouldCreateCycle(Bool
+    )
+    case suggestedRootInsertionTime(UtcDateTime
     )
     case rootEntriesInInterval([Entry]
     )
@@ -6410,43 +6458,46 @@ public struct FfiConverterTypeClientQueryResponse: FfiConverterRustBuffer {
         case 2: return .wouldCreateCycle(try FfiConverterBool.read(from: &buf)
         )
         
-        case 3: return .rootEntriesInInterval(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        case 3: return .suggestedRootInsertionTime(try FfiConverterTypeUtcDateTime.read(from: &buf)
         )
         
-        case 4: return .findEntryById(try FfiConverterOptionTypeEntry.read(from: &buf)
+        case 4: return .rootEntriesInInterval(try FfiConverterSequenceTypeEntry.read(from: &buf)
         )
         
-        case 5: return .findEntryJoinById(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
+        case 5: return .findEntryById(try FfiConverterOptionTypeEntry.read(from: &buf)
         )
         
-        case 6: return .findAncestors(try FfiConverterSequenceTypeUuid.read(from: &buf)
+        case 6: return .findEntryJoinById(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
         )
         
-        case 7: return .findDescendants(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        case 7: return .findAncestors(try FfiConverterSequenceTypeUuid.read(from: &buf)
         )
         
-        case 8: return .findActivityById(try FfiConverterOptionTypeActivity.read(from: &buf)
+        case 8: return .findDescendants(try FfiConverterSequenceTypeEntry.read(from: &buf)
         )
         
-        case 9: return .allActivities(try FfiConverterSequenceTypeActivity.read(from: &buf)
+        case 9: return .findActivityById(try FfiConverterOptionTypeActivity.read(from: &buf)
         )
         
-        case 10: return .findActivityTemplateRoot(try FfiConverterOptionTypeEntry.read(from: &buf)
+        case 10: return .allActivities(try FfiConverterSequenceTypeActivity.read(from: &buf)
         )
         
-        case 11: return .findAttributeById(try FfiConverterOptionTypeAttribute.read(from: &buf)
+        case 11: return .findActivityTemplateRoot(try FfiConverterOptionTypeEntry.read(from: &buf)
         )
         
-        case 12: return .allAttributes(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        case 12: return .findAttributeById(try FfiConverterOptionTypeAttribute.read(from: &buf)
         )
         
-        case 13: return .findAttributesByOwner(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        case 13: return .allAttributes(try FfiConverterSequenceTypeAttribute.read(from: &buf)
         )
         
-        case 14: return .findAttributePairsForEntry(try FfiConverterSequenceTypeAttributePair.read(from: &buf)
+        case 14: return .findAttributesByOwner(try FfiConverterSequenceTypeAttribute.read(from: &buf)
         )
         
-        case 15: return .distinctTextValuesForAttribute(try FfiConverterSequenceString.read(from: &buf)
+        case 15: return .findAttributePairsForEntry(try FfiConverterSequenceTypeAttributePair.read(from: &buf)
+        )
+        
+        case 16: return .distinctTextValuesForAttribute(try FfiConverterSequenceString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6467,68 +6518,73 @@ public struct FfiConverterTypeClientQueryResponse: FfiConverterRustBuffer {
             FfiConverterBool.write(v1, into: &buf)
             
         
-        case let .rootEntriesInInterval(v1):
+        case let .suggestedRootInsertionTime(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeUtcDateTime.write(v1, into: &buf)
+            
+        
+        case let .rootEntriesInInterval(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterSequenceTypeEntry.write(v1, into: &buf)
             
         
         case let .findEntryById(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterOptionTypeEntry.write(v1, into: &buf)
             
         
         case let .findEntryJoinById(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterOptionTypeEntryJoin.write(v1, into: &buf)
             
         
         case let .findAncestors(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterSequenceTypeUuid.write(v1, into: &buf)
             
         
         case let .findDescendants(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterSequenceTypeEntry.write(v1, into: &buf)
             
         
         case let .findActivityById(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterOptionTypeActivity.write(v1, into: &buf)
             
         
         case let .allActivities(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterSequenceTypeActivity.write(v1, into: &buf)
             
         
         case let .findActivityTemplateRoot(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterOptionTypeEntry.write(v1, into: &buf)
             
         
         case let .findAttributeById(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
             FfiConverterOptionTypeAttribute.write(v1, into: &buf)
             
         
         case let .allAttributes(v1):
-            writeInt(&buf, Int32(12))
-            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
-            
-        
-        case let .findAttributesByOwner(v1):
             writeInt(&buf, Int32(13))
             FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
             
         
-        case let .findAttributePairsForEntry(v1):
+        case let .findAttributesByOwner(v1):
             writeInt(&buf, Int32(14))
+            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
+            
+        
+        case let .findAttributePairsForEntry(v1):
+            writeInt(&buf, Int32(15))
             FfiConverterSequenceTypeAttributePair.write(v1, into: &buf)
             
         
         case let .distinctTextValuesForAttribute(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(16))
             FfiConverterSequenceString.write(v1, into: &buf)
             
         }
@@ -9273,9 +9329,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots_in() != 17182) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_suggested_root_day_insertion_time() != 47778) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_would_create_cycle() != 50699) {

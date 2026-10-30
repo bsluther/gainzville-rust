@@ -5,6 +5,7 @@
 //! answer them from the forest, live in `gv_client::queries`. Each question's answer is a
 //! `ForestQuery` impl: a pure function of the forest.
 
+use chrono::{DateTime, Utc};
 use gv_core::{forest::Forest, query_executor::ForestQuery};
 use uuid::Uuid;
 
@@ -23,6 +24,12 @@ macro_rules! ui_questions {
             pub entry_id: Uuid,
             pub proposed_parent_id: Uuid,
         } => bool;
+        /// When a new log root on the day starting at `day_start` should be placed: now if the
+        /// day is today, else just after the day's last root, else noon.
+        ///
+        /// Depends on the current time, which no data version captures: read it once at the
+        /// moment of use; a subscription would go stale between writes.
+        pub struct SuggestedRootInsertionTime { pub day_start: DateTime<Utc> } => DateTime<Utc>;
     } };
 }
 
@@ -37,5 +44,11 @@ impl ForestQuery for ChildSlots {
 impl ForestQuery for WouldCreateCycle {
     fn answer(&self, forest: &Forest) -> bool {
         forest.would_create_cycle(self.entry_id, self.proposed_parent_id)
+    }
+}
+
+impl ForestQuery for SuggestedRootInsertionTime {
+    fn answer(&self, forest: &Forest) -> DateTime<Utc> {
+        forest.suggested_root_day_insertion_time(self.day_start)
     }
 }

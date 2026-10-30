@@ -22,6 +22,7 @@ macro_rules! client_query_set {
             forest {
                 ChildSlots,
                 WouldCreateCycle,
+                SuggestedRootInsertionTime,
             }
             executor ClientSqlExecutor {
                 // Client-only (SQLite)

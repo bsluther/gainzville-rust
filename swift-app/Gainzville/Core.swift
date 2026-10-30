@@ -175,10 +175,10 @@ class ForestViewModel: ObservableObject {
     }
 
     /// Suggested initial time for placing a root entry on `day`.
-    /// Wraps the same FFI helper used by `createRootEntry`.
+    /// Reads the same client-set question as `createRootEntry`.
     func suggestedRootInsertionTime(for day: LogDay) -> Date? {
         guard let core else { return nil }
-        let ms = core.forestSuggestedRootDayInsertionTime(dayStart: day.fromMs)
+        let ms: UtcDateTime = core.read(.suggestedRootInsertionTime(on: day))
         return Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
     }
 
@@ -221,7 +221,7 @@ class ForestViewModel: ObservableObject {
 
     func createRootEntry(activityId: String?, name: String?, isSequence: Bool, for logDay: LogDay) {
         guard let core else { return }
-        let suggestedMs = core.forestSuggestedRootDayInsertionTime(dayStart: logDay.fromMs)
+        let suggestedMs: UtcDateTime = core.read(.suggestedRootInsertionTime(on: logDay))
         // With an activity, instantiate its template (structure + default values);
         // the sheet's name/sequence are ignored since the template defines them.
         if let activityId {
