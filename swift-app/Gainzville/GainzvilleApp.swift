@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct GainzvilleApp: App {
     let core: GainzvilleCore
+    let gvClient: GvClient
     let coreEnv: CoreEnv
     let dataChange: DataChange
     let activitiesVM: ActivitiesViewModel
@@ -23,6 +24,10 @@ struct GainzvilleApp: App {
     init() {
         let listener = AppListener()
         let c = try! makeCore(listener: listener)
+        // Live queries (GvKit). Registers the batch listener, so it must exist
+        // before any @GvQuery subscribes. Views migrated to hooks use this;
+        // the view models below are the old ping-and-pull path.
+        let gv = GvClient(core: c)
 
         let avm = ActivitiesViewModel()
         avm.subscribe(to: c)
@@ -54,6 +59,7 @@ struct GainzvilleApp: App {
         // Debug: uncomment to auto-create an activity every 10 s for testing.
         // c.startBackgroundTicker()
         core = c
+        gvClient = gv
         coreEnv = CoreEnv(core: c)
         dataChange = dc
         activitiesVM = avm
@@ -68,6 +74,7 @@ struct GainzvilleApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environment(\.gvClient, gvClient)
                 .environmentObject(coreEnv)
                 .environmentObject(dataChange)
                 .environmentObject(activitiesVM)
