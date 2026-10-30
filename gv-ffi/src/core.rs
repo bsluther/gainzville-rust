@@ -391,3 +391,114 @@ impl GainzvilleCore {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gv_core::{DEFAULT_USER_ID, models::entry::Temporal};
+    use gv_ui::ChildSlot;
+    use std::sync::Mutex;
+
+    struct NoopListener;
+    impl CoreListener for NoopListener {
+        fn on_data_changed(&self) {}
+    }
+
+    #[derive(Default)]
+    struct CollectBatches(Mutex<Vec<LiveBatch>>);
+    impl LiveListener for CollectBatches {
+        fn on_batch(&self, batch: LiveBatch) {
+            self.0.lock().unwrap().push(batch);
+        }
+    }
+
+    fn entry(position: Option<Position>, is_sequence: bool) -> Entry {
+        let temporal = if position.is_none() {
+            Temporal::Start { start: Utc::now() }
+        } else {
+            Temporal::None
+        };
+        Entry {
+            id: Uuid::new_v4(),
+            activity_id: None,
+            owner_id: DEFAULT_USER_ID,
+            name: None,
+            position,
+            is_template: false,
+            display_as_sets: false,
+            is_sequence,
+            is_complete: false,
+            temporal,
+        }
+    }
+
+    /// The exported surface end to end, as Swift drives it: register the listener, subscribe
+    /// (first value synchronously), write, receive one batch, release the handle.
+    #[test]
+    fn live_queries_round_trip_through_the_ffi_object() {
+        let path = std::env::temp_dir().join(format!("gv-ffi-live-{}.sqlite", Uuid::new_v4()));
+        let core = GainzvilleCore::new(
+            format!("sqlite://{}?mode=rwc", path.display()),
+            DEFAULT_USER_ID,
+            Arc::new(NoopListener),
+        )
+        .unwrap();
+        let listener = Arc::new(CollectBatches::default());
+        core.set_live_listener(listener.clone());
+
+        let parent = entry(None, true);
+        core.run_action(CreateEntry::from(parent.clone()).into())
+            .unwrap();
+        // Versions trail commits; wait for one that includes the parent.
+        RUNTIME.block_on(core.client.live().sync());
+
+        let sub = core
+            .live_subscribe(LiveQuery::ChildSlots {
+                parent_id: parent.id,
+            })
+            .unwrap();
+        let LiveValue::ChildSlots(slots) = &sub.value else {
+            panic!("expected child slots")
+        };
+        let ChildSlot::Drop { position, .. } = slots[0].clone() else {
+            panic!("expected a drop slot")
+        };
+
+        let child = entry(Some(position), false);
+        core.run_action(CreateEntry::from(child.clone()).into())
+            .unwrap();
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let batch = loop {
+            if let Some(batch) = listener.0.lock().unwrap().iter().find(|b| {
+                b.updates
+                    .iter()
+                    .any(|u| u.subscription_id == sub.subscription_id)
+            }) {
+                break batch.clone();
+            }
+            assert!(std::time::Instant::now() < deadline, "no batch");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        assert!(batch.version > sub.version);
+        let LiveValue::ChildSlots(after) = &batch.updates[0].value else {
+            panic!("expected child slots")
+        };
+        assert!(matches!(&after[1], ChildSlot::Entry { entry } if entry.id == child.id));
+
+        // Read once: moving the parent under its child would be a cycle.
+        assert_eq!(
+            core.live_read(LiveQuery::WouldCreateCycle {
+                entry_id: parent.id,
+                proposed_parent_id: child.id,
+            })
+            .unwrap(),
+            LiveValue::WouldCreateCycle(true)
+        );
+
+        // Releasing the handle (Swift dropping its reference) unsubscribes.
+        drop(sub);
+        assert_eq!(core.client.live().subscription_count(), 0);
+        let _ = std::fs::remove_file(&path);
+    }
+}

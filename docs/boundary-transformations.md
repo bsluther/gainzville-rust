@@ -106,9 +106,10 @@ than conventional. Dependency graph:
 gv-core        — pure domain; no sqlx, no uniffi
 generation  -> gv-core
 gv-sql      -> gv-core, sqlx        (features: sqlite, postgres)
-gv-client   -> gv-core, gv-sql      (sqlite)
+gv-ui       -> gv-core              (pure; no storage, no FFI)
+gv-client   -> gv-core, gv-ui, gv-sql (sqlite)
 gv-server   -> gv-core, gv-sql      (postgres)
-gv-ffi      -> gv-core, gv-client   (no gv-sql)
+gv-ffi      -> gv-core, gv-ui, gv-client (no gv-sql)
 ivm         -> gv-core
 ```
 
