@@ -23,6 +23,60 @@ section wins.
   GvKit, and the raw FFI types stay internal to it. It changes when the boundary changes, not when
   screens change.
 
+### First principles
+
+This section stays at the level of concepts. The sections after it describe mechanisms, and each
+principle names the mechanism that carries it out. Some of it is stated as a hypothesis
+([voice note, 2026-10-30](./source-2026-10-30-voice-note.md)).
+
+**The consumer's job.** A frontend renders domain data and expresses what the user wants to do. It
+should say what it needs and what it intends, in domain language, and nothing more.
+
+1. **The boundary is a set of domain questions and domain intents.** Swift asks questions: what is
+   this entry's parent, what are its attributes, which entries fall on this day, what is this
+   activity's profile. Swift states intents: move this entry here, log this set. Swift doesn't query
+   the database or keep a model of its own to walk. It receives answers.
+   *Mechanisms:* everything is a query; writes are intents.
+2. **How a question is answered is Rust's choice, and Swift can't see it.** Today there are two
+   ways: a synchronous database query, or a walk of the in-memory forest (parents, drop slots and
+   so on). Later there could be others, including asynchronous or lazily loaded data, possibly kept
+   separately. This is what lets optimization and virtualization happen without changing the API.
+   *Mechanism:* the backing is chosen per kind of query.
+3. **Every answer a view sees comes from one version of the data.** A screen never mixes two moments.
+   *Mechanism:* batched, versioned push (modeled on `watch_all`).
+4. **Answers arrive as values; views don't fetch them.** A view holds its answers and re-renders only
+   when one of them changes. It never calls into Rust while rendering.
+   *Mechanism:* push into per-subscription boxes; `subscribe` returns the first value.
+5. **Structure and rules live in Rust; presentation lives in Swift.** Rust decides where things go
+   and what is allowed. Swift decides how it looks.
+   *Mechanism:* screen-shaped computations in a UI-shaped Rust layer (the drop-slots example below).
+6. **The SDK packages the protocol, once.** Subscribing, receiving, consistency and lifetime are
+   handled in one place that the core side owns, so app code never repeats the plumbing.
+   *Mechanisms:* GvKit and its query hook.
+7. **The design leans toward async without depending on it.** An answer that arrives later appears
+   as a loading state on the hook. Views and the API stay the same. Async is a direction to keep
+   open, not a first priority, and it isn't proven yet.
+   *Mechanism:* side-channel loading and error state on the hook (see SQLiteData below).
+
+**Hypothesis: a hook, not a view model, is the natural Swift form of a query boundary.** In Swift a
+hook is a property wrapper that is also a SwiftUI `DynamicProperty`. SwiftUI keeps its storage alive
+across view rebuilds and calls its `update()` before each render. That is the moment to subscribe,
+and new data then triggers a re-render. `@State`, `@Environment`, SwiftData's `@Query` and
+SQLiteData's `@FetchAll` all work this way. Outside views, in `@Observable` models, the wrapper has
+to handle observation itself.
+
+**Why GV has view models today.** The core was designed around a query API, but the Swift half of
+that design was never built: an SDK that packages each query into a hook a view can declare. View
+models grew to fill the gap. Each one is effectively a hand-written hook (subscribe, hold the token,
+listen, re-read, unwrap).
+
+**Rule of thumb: hooks or view models.**
+
+- **Getting data uses a hook.** A class that mostly subscribes, reads and republishes should become
+  a hook. That covers most of today's view models.
+- **View models remain for real UI logic.** For example, multi-step edit state, or coordinating
+  several parts of a screen. They consume hooks rather than wiring up subscriptions themselves.
+
 ### Shape
 
 1. **Everything is a query, used two ways.**
