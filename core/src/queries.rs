@@ -53,6 +53,7 @@ pub enum AnyQuery {
     // Entry
     AllEntries(AllEntries),
     EntriesRootedInTimeInterval(EntriesRootedInTimeInterval),
+    RootEntriesInInterval(RootEntriesInInterval),
     FindAncestors(FindAncestors),
     FindEntryById(FindEntryById),
     FindEntryJoinById(FindEntryJoinById),
@@ -83,6 +84,7 @@ pub enum AnyQueryResponse {
     // Entry
     AllEntries(Vec<Entry>),
     EntriesRootedInTimeInterval(Vec<Entry>),
+    RootEntriesInInterval(Vec<Entry>),
     FindAncestors(Vec<Uuid>),
     FindEntryById(Option<Entry>),
     FindEntryJoinById(Option<EntryJoin>),
@@ -150,6 +152,12 @@ impl From<AllEntries> for AnyQuery {
 impl From<EntriesRootedInTimeInterval> for AnyQuery {
     fn from(value: EntriesRootedInTimeInterval) -> Self {
         AnyQuery::EntriesRootedInTimeInterval(value)
+    }
+}
+
+impl From<RootEntriesInInterval> for AnyQuery {
+    fn from(value: RootEntriesInInterval) -> Self {
+        AnyQuery::RootEntriesInInterval(value)
     }
 }
 
@@ -270,6 +278,49 @@ define_query! {
         pub from: DateTime<Utc>,
         pub to: DateTime<Utc>,
     } => Vec<Entry>
+}
+
+define_query! {
+    /// Log roots (parentless, non-template entries) whose canonical instant falls in the half-open
+    /// interval `[from, to)`, sorted by canonical instant (ties by id). Same semantics as
+    /// `Forest::roots_in`, but answered by the database: this is what a log day shows.
+    ///
+    /// Unlike `EntriesRootedInTimeInterval` it returns roots only (no descendants), is half-open
+    /// (an entry at the next day's midnight is not on this day), and places end-anchored entries
+    /// (`End`, `DurationAndEnd`) by their canonical instant rather than by the `start_time` column.
+    /// Executors pre-filter in SQL with [`ROOT_INTERVAL_END_ANCHOR_SLACK_MS`] and apply the exact
+    /// predicate with [`log_roots_in_interval`], so both backends agree.
+    pub struct RootEntriesInInterval {
+        pub from: DateTime<Utc>,
+        pub to: DateTime<Utc>,
+    } => Vec<Entry>
+}
+
+/// For an end-anchored root (no `start_time` column), the canonical instant is `end - duration`,
+/// with `duration <= u32::MAX` ms. So `canonical < to` implies `end < to + u32::MAX ms`: executors
+/// use this as the SQL pre-filter's upper bound on `end_time` for start-less rows.
+pub const ROOT_INTERVAL_END_ANCHOR_SLACK_MS: i64 = u32::MAX as i64;
+
+/// The exact predicate and order behind `RootEntriesInInterval`: parentless, non-template entries
+/// whose canonical instant is in `[from, to)`, sorted by (canonical instant, id). Shared by the
+/// SQLite and Postgres executors (which only pre-filter in SQL) so the two cannot drift.
+pub fn log_roots_in_interval(
+    entries: impl IntoIterator<Item = Entry>,
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+) -> Vec<Entry> {
+    let mut roots: Vec<Entry> = entries
+        .into_iter()
+        .filter(|e| {
+            e.parent_id().is_none()
+                && !e.is_template
+                && e.temporal
+                    .canonical_instant()
+                    .is_some_and(|t| from <= t && t < to)
+        })
+        .collect();
+    roots.sort_by_key(|e| (e.temporal.canonical_instant(), e.id));
+    roots
 }
 
 define_query! {
@@ -406,6 +457,93 @@ mod tests {
                 "Movement".to_string(),
                 "Stone Age".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn log_roots_in_interval_matches_forest_roots_in() {
+        use crate::forest::Forest;
+        use crate::models::entry::{Entry, Position, Temporal};
+        use chrono::{Duration, TimeZone};
+
+        let day = Utc.with_ymd_and_hms(2026, 10, 30, 0, 0, 0).unwrap();
+        let next = day + Duration::days(1);
+        let root = |temporal: Temporal, is_template: bool| Entry {
+            id: Uuid::new_v4(),
+            activity_id: None,
+            owner_id: Uuid::nil(),
+            name: None,
+            position: None,
+            is_template,
+            display_as_sets: false,
+            is_sequence: true,
+            is_complete: false,
+            temporal,
+        };
+        let in_day = root(
+            Temporal::Start {
+                start: day + Duration::hours(9),
+            },
+            false,
+        );
+        let at_start = root(Temporal::Start { start: day }, false);
+        let at_next_midnight = root(Temporal::Start { start: next }, false); // half-open: excluded
+        // End-anchored: starts 23:00 (in day), ends 01:00 next day.
+        let crosses_midnight = root(
+            Temporal::DurationAndEnd {
+                duration_ms: 2 * 3_600_000,
+                end: next + Duration::hours(1),
+            },
+            false,
+        );
+        let end_only = root(
+            Temporal::End {
+                end: day + Duration::hours(7),
+            },
+            false,
+        );
+        let template = root(
+            Temporal::Start {
+                start: day + Duration::hours(10),
+            },
+            true,
+        );
+        let undated = root(Temporal::None, false);
+        let mut child = root(
+            Temporal::Start {
+                start: day + Duration::hours(11),
+            },
+            false,
+        );
+        child.position = Some(Position {
+            parent_id: in_day.id,
+            frac_index: Default::default(),
+        });
+
+        let all = vec![
+            in_day.clone(),
+            at_start.clone(),
+            at_next_midnight,
+            crosses_midnight.clone(),
+            end_only.clone(),
+            template,
+            undated,
+            child,
+        ];
+        let got: Vec<Uuid> = log_roots_in_interval(all.clone(), day, next)
+            .into_iter()
+            .map(|e| e.id)
+            .collect();
+        let forest = Forest::from(all);
+        let expected: Vec<Uuid> = forest
+            .roots_in(day..next)
+            .into_iter()
+            .map(|e| e.id)
+            .collect();
+        assert_eq!(got, expected);
+        assert_eq!(
+            got,
+            vec![at_start.id, end_only.id, in_day.id, crosses_midnight.id]
         );
     }
 

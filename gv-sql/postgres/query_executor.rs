@@ -153,6 +153,39 @@ impl QueryExecutor<EntriesRootedInTimeInterval> for PostgresQueryExecutor<'_> {
     }
 }
 
+impl QueryExecutor<RootEntriesInInterval> for PostgresQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: RootEntriesInInterval,
+    ) -> Result<<RootEntriesInInterval as Query>::Response> {
+        // See the SQLite executor: SQL pre-filters, `log_roots_in_interval` is exact.
+        let end_anchor_to =
+            query.to + chrono::Duration::milliseconds(ROOT_INTERVAL_END_ANCHOR_SLACK_MS);
+        let rows = sqlx::query_as::<sqlx::Postgres, crate::rows::EntryRow>(
+            r#"
+            SELECT * FROM entries
+            WHERE parent_id IS NULL
+              AND is_template = false
+              AND (
+                (start_time IS NOT NULL AND start_time >= $1 AND start_time < $2)
+                OR (start_time IS NULL AND end_time >= $1 AND end_time < $3)
+              )
+            "#,
+        )
+        .bind(crate::columns::DateTimeColumn(query.from))
+        .bind(crate::columns::DateTimeColumn(query.to))
+        .bind(crate::columns::DateTimeColumn(end_anchor_to))
+        .fetch_all(&mut *self.conn)
+        .await
+        .db_err()?;
+        let entries = rows
+            .into_iter()
+            .map(|r| r.to_entry())
+            .collect::<Result<Vec<_>>>()?;
+        Ok(log_roots_in_interval(entries, query.from, query.to))
+    }
+}
+
 impl QueryExecutor<FindAncestors> for PostgresQueryExecutor<'_> {
     async fn execute(
         &mut self,

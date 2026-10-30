@@ -5,7 +5,7 @@ use crate::{
         EntriesRootedInTimeInterval, FindActivityById, FindActivityTemplateRoot, FindAncestors,
         FindAttributeById, FindAttributePairsForEntry, FindAttributesByOwner, FindDescendants,
         FindEntryById, FindEntryJoinById, FindUserById, FindUserByUsername, FindValueByKey,
-        FindValuesForEntries, FindValuesForEntry, IsEmailRegistered, Query,
+        FindValuesForEntries, FindValuesForEntry, IsEmailRegistered, Query, RootEntriesInInterval,
     },
 };
 
@@ -30,6 +30,7 @@ pub trait AnyQueryExecutor:
     + QueryExecutor<FindActivityTemplateRoot>
     + QueryExecutor<AllEntries>
     + QueryExecutor<EntriesRootedInTimeInterval>
+    + QueryExecutor<RootEntriesInInterval>
     + QueryExecutor<FindAncestors>
     + QueryExecutor<FindEntryById>
     + QueryExecutor<FindEntryJoinById>
@@ -55,6 +56,7 @@ impl<T> AnyQueryExecutor for T where
         + QueryExecutor<FindActivityTemplateRoot>
         + QueryExecutor<AllEntries>
         + QueryExecutor<EntriesRootedInTimeInterval>
+        + QueryExecutor<RootEntriesInInterval>
         + QueryExecutor<FindAncestors>
         + QueryExecutor<FindEntryById>
         + QueryExecutor<FindEntryJoinById>

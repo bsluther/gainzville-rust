@@ -151,6 +151,41 @@ impl QueryExecutor<EntriesRootedInTimeInterval> for SqliteQueryExecutor<'_> {
     }
 }
 
+impl QueryExecutor<RootEntriesInInterval> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: RootEntriesInInterval,
+    ) -> Result<<RootEntriesInInterval as Query>::Response> {
+        // SQL narrows to candidate log roots; `log_roots_in_interval` applies the exact
+        // canonical-instant predicate and order (end-anchored rows need `end - duration`).
+        let end_anchor_to =
+            query.to + chrono::Duration::milliseconds(ROOT_INTERVAL_END_ANCHOR_SLACK_MS);
+        let rows = sqlx::query_as::<sqlx::Sqlite, crate::rows::EntryRow>(
+            r#"
+            SELECT * FROM entries
+            WHERE parent_id IS NULL
+              AND is_template = 0
+              AND (
+                (start_time IS NOT NULL AND start_time >= ? AND start_time < ?)
+                OR (start_time IS NULL AND end_time >= ? AND end_time < ?)
+              )
+            "#,
+        )
+        .bind(crate::columns::DateTimeColumn(query.from))
+        .bind(crate::columns::DateTimeColumn(query.to))
+        .bind(crate::columns::DateTimeColumn(query.from))
+        .bind(crate::columns::DateTimeColumn(end_anchor_to))
+        .fetch_all(&mut *self.conn)
+        .await
+        .db_err()?;
+        let entries = rows
+            .into_iter()
+            .map(|r| r.to_entry())
+            .collect::<Result<Vec<_>>>()?;
+        Ok(log_roots_in_interval(entries, query.from, query.to))
+    }
+}
+
 impl QueryExecutor<FindAncestors> for SqliteQueryExecutor<'_> {
     async fn execute(
         &mut self,

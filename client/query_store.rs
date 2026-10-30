@@ -48,7 +48,9 @@ impl QueryStore {
         let mut rx = change_transmitter.subscribe();
         let thread_store = store.clone();
         let _ = tokio::spawn(async move {
-            while let Ok(()) = rx.recv().await {
+            // `next_change` treats `Lagged` as "changed" (coalesced) rather than exiting; the old
+            // `while let Ok(()) = rx.recv().await` silently stopped refreshing after a burst.
+            while next_change(&mut rx).await {
                 let _ = thread_store.refresh_subscribed_queries().await;
                 on_cache_ready();
             }
@@ -67,72 +69,8 @@ impl QueryStore {
 
     /// Type-erased version of run_query.
     pub async fn run_any_query(&self, query: AnyQuery) -> Result<AnyQueryResponse> {
-        match query {
-            // Auth
-            AnyQuery::IsEmailRegistered(q) => Ok(AnyQueryResponse::IsEmailRegistered(
-                self.run_query(q).await?,
-            )),
-            AnyQuery::FindUserById(q) => {
-                Ok(AnyQueryResponse::FindUserById(self.run_query(q).await?))
-            }
-            AnyQuery::FindUserByUsername(q) => Ok(AnyQueryResponse::FindUserByUsername(
-                self.run_query(q).await?,
-            )),
-            AnyQuery::AllActorIds(q) => Ok(AnyQueryResponse::AllActorIds(self.run_query(q).await?)),
-            // Activity
-            AnyQuery::FindActivityById(q) => {
-                Ok(AnyQueryResponse::FindActivityById(self.run_query(q).await?))
-            }
-            AnyQuery::AllActivities(q) => {
-                Ok(AnyQueryResponse::AllActivities(self.run_query(q).await?))
-            }
-            AnyQuery::FindActivityTemplateRoot(q) => Ok(
-                AnyQueryResponse::FindActivityTemplateRoot(self.run_query(q).await?),
-            ),
-            // Entry
-            AnyQuery::AllEntries(q) => Ok(AnyQueryResponse::AllEntries(self.run_query(q).await?)),
-            AnyQuery::EntriesRootedInTimeInterval(q) => Ok(
-                AnyQueryResponse::EntriesRootedInTimeInterval(self.run_query(q).await?),
-            ),
-            AnyQuery::FindAncestors(q) => {
-                Ok(AnyQueryResponse::FindAncestors(self.run_query(q).await?))
-            }
-            AnyQuery::FindEntryById(q) => {
-                Ok(AnyQueryResponse::FindEntryById(self.run_query(q).await?))
-            }
-            AnyQuery::FindEntryJoinById(q) => Ok(AnyQueryResponse::FindEntryJoinById(
-                self.run_query(q).await?,
-            )),
-            AnyQuery::FindDescendants(q) => {
-                Ok(AnyQueryResponse::FindDescendants(self.run_query(q).await?))
-            }
-            // Attribute
-            AnyQuery::FindAttributeById(q) => Ok(AnyQueryResponse::FindAttributeById(
-                self.run_query(q).await?,
-            )),
-            AnyQuery::AllAttributes(q) => {
-                Ok(AnyQueryResponse::AllAttributes(self.run_query(q).await?))
-            }
-            AnyQuery::FindAttributesByOwner(q) => Ok(AnyQueryResponse::FindAttributesByOwner(
-                self.run_query(q).await?,
-            )),
-            // Value
-            AnyQuery::FindValueByKey(q) => {
-                Ok(AnyQueryResponse::FindValueByKey(self.run_query(q).await?))
-            }
-            AnyQuery::FindValuesForEntry(q) => Ok(AnyQueryResponse::FindValuesForEntry(
-                self.run_query(q).await?,
-            )),
-            AnyQuery::FindValuesForEntries(q) => Ok(AnyQueryResponse::FindValuesForEntries(
-                self.run_query(q).await?,
-            )),
-            AnyQuery::FindAttributePairsForEntry(q) => Ok(
-                AnyQueryResponse::FindAttributePairsForEntry(self.run_query(q).await?),
-            ),
-            AnyQuery::DistinctTextValuesForAttribute(q) => Ok(
-                AnyQueryResponse::DistinctTextValuesForAttribute(self.run_query(q).await?),
-            ),
-        }
+        let mut conn = self.pool.acquire().await.db_err()?;
+        execute_any(&mut SqliteQueryExecutor::new(&mut conn), query).await
     }
 
     /// Subscribe to a query. Runs the initial query immediately, populates the
@@ -197,5 +135,118 @@ impl Drop for QuerySubscription {
                 }
             }
         }
+    }
+}
+
+/// Run any query on an executor. Takes the executor (not a pool) so a caller can run many
+/// queries inside one read transaction — `LiveStore` builds each version this way.
+pub async fn execute_any(
+    exec: &mut SqliteQueryExecutor<'_>,
+    query: AnyQuery,
+) -> Result<AnyQueryResponse> {
+    match query {
+        // Auth
+        AnyQuery::IsEmailRegistered(q) => {
+            Ok(AnyQueryResponse::IsEmailRegistered(exec.execute(q).await?))
+        }
+        AnyQuery::FindUserById(q) => Ok(AnyQueryResponse::FindUserById(exec.execute(q).await?)),
+        AnyQuery::FindUserByUsername(q) => {
+            Ok(AnyQueryResponse::FindUserByUsername(exec.execute(q).await?))
+        }
+        AnyQuery::AllActorIds(q) => Ok(AnyQueryResponse::AllActorIds(exec.execute(q).await?)),
+        // Activity
+        AnyQuery::FindActivityById(q) => {
+            Ok(AnyQueryResponse::FindActivityById(exec.execute(q).await?))
+        }
+        AnyQuery::AllActivities(q) => Ok(AnyQueryResponse::AllActivities(exec.execute(q).await?)),
+        AnyQuery::FindActivityTemplateRoot(q) => Ok(AnyQueryResponse::FindActivityTemplateRoot(
+            exec.execute(q).await?,
+        )),
+        // Entry
+        AnyQuery::AllEntries(q) => Ok(AnyQueryResponse::AllEntries(exec.execute(q).await?)),
+        AnyQuery::EntriesRootedInTimeInterval(q) => Ok(
+            AnyQueryResponse::EntriesRootedInTimeInterval(exec.execute(q).await?),
+        ),
+        AnyQuery::RootEntriesInInterval(q) => Ok(AnyQueryResponse::RootEntriesInInterval(
+            exec.execute(q).await?,
+        )),
+        AnyQuery::FindAncestors(q) => Ok(AnyQueryResponse::FindAncestors(exec.execute(q).await?)),
+        AnyQuery::FindEntryById(q) => Ok(AnyQueryResponse::FindEntryById(exec.execute(q).await?)),
+        AnyQuery::FindEntryJoinById(q) => {
+            Ok(AnyQueryResponse::FindEntryJoinById(exec.execute(q).await?))
+        }
+        AnyQuery::FindDescendants(q) => {
+            Ok(AnyQueryResponse::FindDescendants(exec.execute(q).await?))
+        }
+        // Attribute
+        AnyQuery::FindAttributeById(q) => {
+            Ok(AnyQueryResponse::FindAttributeById(exec.execute(q).await?))
+        }
+        AnyQuery::AllAttributes(q) => Ok(AnyQueryResponse::AllAttributes(exec.execute(q).await?)),
+        AnyQuery::FindAttributesByOwner(q) => Ok(AnyQueryResponse::FindAttributesByOwner(
+            exec.execute(q).await?,
+        )),
+        // Value
+        AnyQuery::FindValueByKey(q) => Ok(AnyQueryResponse::FindValueByKey(exec.execute(q).await?)),
+        AnyQuery::FindValuesForEntry(q) => {
+            Ok(AnyQueryResponse::FindValuesForEntry(exec.execute(q).await?))
+        }
+        AnyQuery::FindValuesForEntries(q) => Ok(AnyQueryResponse::FindValuesForEntries(
+            exec.execute(q).await?,
+        )),
+        AnyQuery::FindAttributePairsForEntry(q) => Ok(
+            AnyQueryResponse::FindAttributePairsForEntry(exec.execute(q).await?),
+        ),
+        AnyQuery::DistinctTextValuesForAttribute(q) => Ok(
+            AnyQueryResponse::DistinctTextValuesForAttribute(exec.execute(q).await?),
+        ),
+    }
+}
+
+/// Wait for the next change notification on a broadcast channel. Returns `false` only when the
+/// channel is closed.
+///
+/// `Lagged` means the receiver fell behind and missed notifications; for a "something changed"
+/// signal that is still a change, so it returns `true` instead of ending the caller's loop (the
+/// previous `while let Ok(()) = rx.recv().await` exited on `Lagged` and silently stopped
+/// refreshing). Any further notifications already queued are drained, so a burst coalesces into
+/// one refresh. Modeled on convex-rs, which skips lagged messages on purpose.
+pub async fn next_change(rx: &mut broadcast::Receiver<()>) -> bool {
+    match rx.recv().await {
+        Ok(()) | Err(broadcast::error::RecvError::Lagged(_)) => {}
+        Err(broadcast::error::RecvError::Closed) => return false,
+    }
+    loop {
+        match rx.try_recv() {
+            Ok(()) | Err(broadcast::error::TryRecvError::Lagged(_)) => continue,
+            Err(broadcast::error::TryRecvError::Empty) => return true,
+            // Closed after delivering a change: report the change; the next call returns false.
+            Err(broadcast::error::TryRecvError::Closed) => return true,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn next_change_survives_lag_and_coalesces() {
+        let (tx, mut rx) = broadcast::channel::<()>(2);
+        // Overflow the channel so the receiver is lagged.
+        for _ in 0..10 {
+            tx.send(()).unwrap();
+        }
+        assert!(next_change(&mut rx).await, "Lagged must read as a change");
+        // The burst was drained into that one wake-up.
+        assert!(matches!(
+            rx.try_recv(),
+            Err(broadcast::error::TryRecvError::Empty)
+        ));
+        // Still listening after the lag.
+        tx.send(()).unwrap();
+        assert!(next_change(&mut rx).await);
+        drop(tx);
+        assert!(!next_change(&mut rx).await, "Closed ends the loop");
     }
 }
