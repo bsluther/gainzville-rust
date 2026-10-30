@@ -116,8 +116,10 @@ The lean changes four things:
 ### Shape
 
 1. **Everything is a query, used two ways.**
-   - *Subscribe*, declared in a view or an `@Observable` model:
-     `@GvQuery(.children(of: parent.id)) var children`.
+   - *Subscribe*, declared in a view: `@GvQuery(.children(of: parent.id)) var children`. A
+     `DynamicProperty` only works inside views, so `@Observable` models need a public observable box
+     that they hold directly, with `@GvQuery` as a thin view adapter over it
+     ([platform comment](./comment-2026-10-30-platform.md)).
    - *Read once*, for imperative checks such as drag-time validation:
      `gv.read(.wouldCreateCycle(entry, under: target))`.
 
@@ -147,6 +149,50 @@ The lean changes four things:
    Structure goes in Rust and formatting stays in Swift. Rust decides *where* things go and what is
    allowed. Swift decides *how* it looks, including locale-dependent text such as "7:30 – 8:15". See
    the worked example below.
+
+### Queries: a question with an answer, grouped by who can answer it
+
+**Why queries were reified in the first place.**
+[design.md](../../swift-architecture/design.md) gives three reasons:
+
+- **Subscription.** A query is a value that can be registered, compared and used as a cache key.
+  This was the main motivation.
+- **Authorization.** A query carries the actor asking it.
+- **Simulation testing.** Sequences of actions and queries are the unit of a deterministic test.
+
+None of these is about SQL.
+
+**The abstraction is a question with a typed answer.** That's all the `Query` trait says. The tie to
+SQL comes from one place: a single `AnyQuery` enum that everything uses, which forces every query to
+be implemented by every executor. [actions_and_queries.md](../../actions_and_queries.md) (decision 3)
+already intended per-executor subsets. The shared enum is what defeats that intention, and it's why
+the spike's client-only `RootEntriesInInterval` needed a Postgres implementation the server never
+calls ([architecture comment](./comment-2026-10-30-architecture.md)).
+
+**Group queries by who can answer them, not by what they are.** Each context declares the set of
+questions it accepts:
+
+- **The server's set** must be answerable by Postgres, plus SQLite for local mutators.
+- **The client's set** can be answered from the forest, from SQLite, or any other way.
+
+This gives clarity about where a question can run, no dead Postgres implementations, and a compile
+error only where an implementation is actually required. Swift sees only the client's set.
+
+**Membership, not nesting.** This is the guard against "a UI auth query inside a core query inside
+an any query":
+
+- **Each question is defined once,** as its own struct.
+- **A context's set lists the questions it accepts, directly.** A question both contexts need, such
+  as an entry with its attributes, appears in both sets as a plain variant. No set ever wraps
+  another set.
+- **There is always exactly one level.** A macro generates each set from tags on the question's
+  definition.
+
+**Evidence from analysis.** On the `analysis` branch, a user's analysis is a `QuerySpec` run by an
+in-memory interpreter over the forest and values (`docs/analysis/README.md`). "The result of this
+analysis" is exactly a client question: answered in memory, with no SQL, and worth subscribing to so
+a chart updates live. One naming caution: "query" now means both system questions and user analyses.
+The analysis docs already say `QuerySpec` and `SavedQuery`; keep the names deliberately distinct.
 
 ### Screen-shaped computations in Rust: drop slots
 
@@ -333,12 +379,40 @@ architectural win. Copying the design looks like a few hundred lines.
   latest version), and intents are validated in Rust anyway.
 - **Performance work is deferred.** That covers an indexed forest, `Arc` snapshots and finer-grained
   invalidation. The boundary only has to not rule them out.
+- **Timing: build it now** (2026-10-30, in response to the
+  [skeptic comment](./comment-2026-10-30-skeptic.md), which argued for parking it until after
+  dogfooding). This is treated as a foundation for building the UI well, and as necessary cleanup
+  rather than a detour from dogfooding. With a few agents and a settled shape, the refactor isn't a
+  huge lift.
+
+### Spike (2026-10-30)
+
+A vertical slice of this lean is on branch `spike/gvkit-query-hooks`:
+
+- versioned batch delivery (`client/live.rs`);
+- `gv-ui` drop slots;
+- a SQL-backed day-roots query;
+- a GvKit hook, migrated onto in `ChildrenSection`, `LogView` and `EntryView`.
+
+The Rust tests pass. The Swift hasn't been compiled yet. Reviews:
+[architecture](./comment-2026-10-30-architecture.md),
+[skeptic](./comment-2026-10-30-skeptic.md),
+[platform](./comment-2026-10-30-platform.md).
+
+What changed in the lean as a result:
+
+- **Queries are grouped by who can answer them,** with flat membership (above). This came from the
+  architecture comment.
+- **`@Observable` models need a public box,** because the hook only works in views (platform).
+- **Still to decide.** Take the version from each write's commit (a sequence number), so writes can
+  return it and read-your-writes follows (architecture). Avoid synchronous SQL and the cold forest
+  load inside SwiftUI's update pass (platform). Retire `QueryStore` per screen, not per component,
+  to avoid two pipelines and mixed versions (all three).
 
 ### Open
 
-- **A macro for query plumbing.** Adding one query touches about six Rust files plus binding
-  regeneration. If everything is a query, that cost is the real tax, and a macro is the likely
-  answer.
+- **A macro for query plumbing.** One query touched about seven Rust files plus the bindings in the
+  spike. Split the query sets first, then use a macro for the boilerplate that remains.
 - **A loading state in the hook.** Design it now for data that loads lazily: other users' data (for
   example coaching), activity library content such as workout videos, and later virtualization.
 - **Compare against the research in depth.**
