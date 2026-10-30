@@ -124,3 +124,21 @@ interface MobileConvexClient {
   `bindings/matrix-sdk-ffi` (exposes both over UniFFI).
 - From the discussion: the GV analog is drop slots in `ChildrenSection`. Drop slots are UI-ish rather
   than a core concern, so they belong in a UI-shaped Rust layer, not `gv-core`.
+
+## SQLiteData (`pointfreeco/sqlite-data` @ `37c461a`, read 2026-10-30)
+
+- `Sources/SQLiteData/FetchAll.swift`: `@propertyWrapper public struct FetchAll<Element>`.
+  - `wrappedValue` comes from a Sharing `SharedReader<[Element]>`.
+  - `projectedValue` (`$items`) exposes `isLoading`, `loadError`, `load()`, `load(newQuery)` and a
+    Combine `publisher`.
+  - It conforms to SwiftUI `DynamicProperty`, and its `update()` subscribes.
+- `Internal/FetchKey.swift`: a query is a Sharing `SharedReaderKey`, and its `load` and `subscribe`
+  wrap GRDB `ValueObservation`. The default `ImmediateScheduler` delivers the first value
+  synchronously. The key's ID is hashable (database + request + scheduler), so identical wrappers
+  share one subscription.
+- `FetchSubscription.swift` ties a subscription's lifetime to a `Task` (`.task { try await
+  $items.load(q).task }`).
+- From the discussion: good inspiration and design space, not settled as the shape. The side-channel
+  loading and error state reads like a hook version of a result type. Lean against taking the
+  Point-Free dependency unless writing our own is a heavy lift or the dependency is a big
+  architectural win.

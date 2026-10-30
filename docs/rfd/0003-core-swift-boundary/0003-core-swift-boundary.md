@@ -165,6 +165,35 @@ GV's shape is closer to `convex-rs` than to `convex-swift`. GV still differs in 
 - **No optimistic-update layer yet.** Local mutators make a local write the truth. That changes once
   sync exists.
 
+### Reference point: SQLiteData for the hook
+
+Point-Free's SQLiteData (`@FetchAll`, `@FetchOne`, `@Fetch`, built on GRDB) is good inspiration and
+a good design space for `@GvQuery`. It isn't settled as the shape, but it raises the right questions.
+What it does:
+
+- **Where it's used.** The wrapper is declared in a SwiftUI view or in an `@Observable` model.
+- **Lifecycle.** It is a property wrapper and a SwiftUI `DynamicProperty`: it subscribes when SwiftUI
+  sets the view up and cancels when the view goes away.
+- **First value.** It arrives immediately, so there is no empty first frame.
+- **Swapping queries.** The query can change at runtime (`$items.load(newQuery)`).
+- **Sharing.** Identical queries share one subscription, like GV's refcount.
+- **Loading and errors are side channels** (`$items.isLoading`, `$items.loadError`). The value is
+  always present: the default first, then the last known value. In effect it's a hook-shaped result
+  type. Views render what they have, and only the ones that care check loading or error. That suits
+  lazy data (other users' data, activity library media) better than forcing every view to switch on
+  an enum. A per-record status enum, like WordPress's fresh/stale/failed, is still the right tool for
+  sync status.
+
+Where GV's shape goes further: each SQLiteData observation runs in its own transaction, so hooks are
+consistent with each other only when reads are bundled into one `FetchKeyRequest`. GV's versioned
+batch makes every hook consistent. `FetchKeyRequest`-style grouping may still be handy, but GV
+doesn't need it for correctness.
+
+**Dependency.** SQLiteData is built on Point-Free's Sharing library. GvKit could implement Sharing's
+key type and get the wrapper, loading state and sharing for free. **Lean: avoid the Point-Free
+dependency** unless writing our own turns out to be a heavy lift or the dependency brings a big
+architectural win. Copying the design looks like a few hundred lines.
+
 ### Settled for now
 
 - **Read-once sees the latest version.** It could disagree with what the hooks are showing. That's
