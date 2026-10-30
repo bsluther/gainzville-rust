@@ -1932,10 +1932,12 @@ name = "gv-client"
 version = "0.1.0"
 dependencies = [
  "async-stream",
+ "chrono",
  "dotenvy",
  "futures-core",
  "gv-core",
  "gv-sql",
+ "gv-ui",
  "itertools 0.14.0",
  "sqlx",
  "tokio",
@@ -2018,6 +2020,16 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "gv-ui"
+version = "0.1.0"
+dependencies = [
+ "fractional_index",
+ "gv-core",
+ "proptest",
  "uuid",
 ]
 

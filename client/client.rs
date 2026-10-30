@@ -24,6 +24,7 @@ use uuid::Uuid;
 
 use gv_sql::sqlite::{SqliteDeltaExecutor, SqliteQueryExecutor};
 
+use crate::live::LiveStore;
 use crate::query_store::{QueryStore, QuerySubscription};
 
 #[derive(Debug, Clone)]
@@ -32,6 +33,7 @@ pub struct SqliteClient {
     change_transmitter: broadcast::Sender<()>,
     cache_ready_transmitter: broadcast::Sender<()>,
     query_store: QueryStore,
+    live: LiveStore,
     io: Arc<dyn Io>,
 }
 
@@ -128,11 +130,13 @@ impl SqliteClient {
                 let _ = cache_ready_tx.send(());
             }),
         );
+        let live = LiveStore::new(pool.clone(), change_transmitter.subscribe());
         SqliteClient {
             pool,
             change_transmitter,
             cache_ready_transmitter,
             query_store,
+            live,
             io,
         }
     }
@@ -261,6 +265,12 @@ impl SqliteClient {
         self.query_store.read_cached_query(query)
     }
 
+    /// Live queries: subscriptions with ids and one consistent batch per data version. The
+    /// successor to `subscribe_query` + `subscribe_cache_ready` (which stay for unmigrated UI).
+    pub fn live(&self) -> &LiveStore {
+        &self.live
+    }
+
     /// Subscribe to cache-ready notifications. Fires after each database change
     /// has been propagated through all subscribed queries.
     ///
@@ -362,5 +372,97 @@ pub mod tests {
         assert_eq!(first.activities.len(), second.activities.len());
         assert_eq!(first.entries.len(), second.entries.len());
         assert_eq!(first.values.len(), second.values.len());
+    }
+
+    #[cfg(test)]
+    fn lag_test_entry() -> gv_core::models::entry::Entry {
+        gv_core::models::entry::Entry {
+            id: Uuid::new_v4(),
+            activity_id: None,
+            owner_id: gv_core::DEFAULT_USER_ID,
+            name: None,
+            position: None,
+            is_template: false,
+            display_as_sets: false,
+            is_sequence: false,
+            is_complete: false,
+            temporal: gv_core::models::entry::Temporal::None,
+        }
+    }
+
+    /// Overflow the change broadcast (capacity 16) so every listener is `Lagged`.
+    #[cfg(test)]
+    fn flood_change_channel(client: &SqliteClient) {
+        for _ in 0..100 {
+            let _ = client.change_transmitter.send(());
+        }
+    }
+
+    /// Regression: the refresh loop was `while let Ok(()) = rx.recv().await`, which exits on
+    /// `Err(Lagged)` — after a burst of writes the cache silently stopped refreshing until restart.
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+    async fn test_query_store_survives_lagged_change_channel(pool: SqlitePool) {
+        let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
+        client.seed_default_user().await.unwrap();
+        let entry = lag_test_entry();
+        let query = AnyQuery::FindEntryById(gv_core::queries::FindEntryById { entry_id: entry.id });
+        let _sub = client.subscribe_query(query.clone()).await.unwrap();
+
+        flood_change_channel(&client);
+        client
+            .run_action(gv_core::actions::CreateEntry::from(entry.clone()).into())
+            .await
+            .unwrap();
+
+        let refreshed = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Some(AnyQueryResponse::FindEntryById(Some(_))) =
+                    client.read_cached_query(query.clone())
+                {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await;
+        assert!(refreshed.is_ok(), "cache must keep refreshing after Lagged");
+    }
+
+    /// Same regression for the live store's refresh loop.
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+    async fn test_live_store_survives_lagged_change_channel(pool: SqlitePool) {
+        use crate::live::{LiveQuery, LiveValue};
+        let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
+        client.seed_default_user().await.unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        client.live().set_batch_sink(Arc::new(move |batch| {
+            let _ = tx.send(batch);
+        }));
+        let entry = lag_test_entry();
+        let sub = client
+            .live()
+            .subscribe(LiveQuery::Domain(AnyQuery::FindEntryById(
+                gv_core::queries::FindEntryById { entry_id: entry.id },
+            )))
+            .await
+            .unwrap();
+        // Settle: no pending rebuild request may mask the lag (subscribe can request one).
+        client.live().sync().await;
+
+        flood_change_channel(&client);
+        client
+            .run_action(gv_core::actions::CreateEntry::from(entry.clone()).into())
+            .await
+            .unwrap();
+
+        let batch = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("live store must keep publishing after Lagged")
+            .unwrap();
+        assert_eq!(batch.updates[0].subscription_id, sub.subscription_id);
+        assert!(matches!(
+            &batch.updates[0].value,
+            LiveValue::Domain(AnyQueryResponse::FindEntryById(Some(e))) if e.id == entry.id
+        ));
     }
 }
