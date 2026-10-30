@@ -7,7 +7,8 @@
 //! Per version, the store opens ONE read transaction, builds ONE in-memory `Forest` from it,
 //! answers every subscribed query (forest-backed ones from the forest, SQL-backed ones in the same
 //! transaction), then swaps the results in under one lock and emits one `LiveBatch`. Which backing
-//! answers a query is decided here, per kind of query, and is invisible to the consumer.
+//! answers a query is declared per question in the client set (`crate::queries::ClientQuery`) and
+//! is invisible to the consumer.
 //!
 //! This sits beside `QueryStore` (the older ping-and-pull cache) during migration; both listen to
 //! the same change broadcast.
@@ -20,41 +21,24 @@ use std::{
 use gv_core::{
     error::{DbErr, Result},
     forest::Forest,
-    queries::{AllEntries, AnyQuery, AnyQueryResponse},
+    queries::AllEntries,
     query_executor::QueryExecutor,
 };
 use gv_sql::sqlite::SqliteQueryExecutor;
-use gv_ui::{ChildSlot, child_slots};
 use sqlx::{SqliteConnection, SqlitePool};
 use tokio::sync::{Notify, broadcast, watch};
 use tracing::warn;
-use uuid::Uuid;
 
-use crate::query_store::{execute_any, next_change};
+use crate::queries::{ClientQuery, ClientQueryResponse};
+use crate::query_store::next_change;
 
 pub type SubscriptionId = u64;
 pub type Version = u64;
 
-/// A question the UI can subscribe to or read once. The variant says *what* is asked, never how
-/// it is answered.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum LiveQuery {
-    /// Drop slots and child entries of a sequence (`gv_ui::child_slots`).
-    ChildSlots { parent_id: Uuid },
-    /// Would moving `entry_id` under `proposed_parent_id` create a cycle? (Drag-time check.)
-    WouldCreateCycle {
-        entry_id: Uuid,
-        proposed_parent_id: Uuid,
-    },
-    /// Any existing domain query. Lets the rest of the app migrate one query at a time.
-    Domain(AnyQuery),
-}
-
+/// What a subscription holds: the answer, or why there isn't one.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiveValue {
-    ChildSlots(Vec<ChildSlot>),
-    WouldCreateCycle(bool),
-    Domain(AnyQueryResponse),
+    Answer(ClientQueryResponse),
     /// The query itself failed (e.g. a lookup of an entry that no longer exists). Delivered like
     /// a value so one failing query can't stall the version for everyone; consumers keep their
     /// last good value and surface this on a side channel.
@@ -90,45 +74,36 @@ pub struct Subscribed {
 
 // --- Backing ---------------------------------------------------------------------------------
 
-/// Rust picks the backing per kind of query. This function is the whole decision.
-fn is_forest_backed(query: &LiveQuery) -> bool {
-    match query {
-        LiveQuery::ChildSlots { .. } | LiveQuery::WouldCreateCycle { .. } => true,
-        LiveQuery::Domain(_) => false,
-    }
-}
+// Which backing answers a query is declared in `ClientQuery` (`is_forest_backed`); these adapt
+// the generated dispatch to `LiveValue`.
 
-fn answer_from_forest(query: &LiveQuery, forest: &Forest) -> LiveValue {
-    match query {
-        LiveQuery::ChildSlots { parent_id } => {
-            LiveValue::ChildSlots(child_slots(forest, *parent_id))
-        }
-        LiveQuery::WouldCreateCycle {
-            entry_id,
-            proposed_parent_id,
-        } => LiveValue::WouldCreateCycle(forest.would_create_cycle(*entry_id, *proposed_parent_id)),
-        LiveQuery::Domain(_) => LiveValue::Failed {
-            message: "domain queries are answered from SQL".to_string(),
+fn answer_from_forest(query: &ClientQuery, forest: &Forest) -> LiveValue {
+    match query.answer_from_forest(forest) {
+        Some(response) => LiveValue::Answer(response),
+        None => LiveValue::Failed {
+            message: "not a forest-backed query".to_string(),
         },
     }
 }
 
-async fn answer_from_sql(query: &LiveQuery, conn: &mut SqliteConnection) -> LiveValue {
-    let LiveQuery::Domain(query) = query else {
-        return LiveValue::Failed {
-            message: "only domain queries are answered from SQL".to_string(),
-        };
-    };
-    match execute_any(&mut SqliteQueryExecutor::new(conn), query.clone()).await {
-        Ok(response) => LiveValue::Domain(response),
-        Err(e) => LiveValue::Failed {
+async fn answer_from_sql(query: &ClientQuery, conn: &mut SqliteConnection) -> LiveValue {
+    match query
+        .clone()
+        .execute(&mut SqliteQueryExecutor::new(conn))
+        .await
+    {
+        Some(Ok(response)) => LiveValue::Answer(response),
+        Some(Err(e)) => LiveValue::Failed {
             message: e.to_string(),
         },
+        None => LiveValue::Failed {
+            message: "not a SQL-backed query".to_string(),
+        },
     }
 }
 
-async fn answer(query: &LiveQuery, forest: &Forest, conn: &mut SqliteConnection) -> LiveValue {
-    if is_forest_backed(query) {
+async fn answer(query: &ClientQuery, forest: &Forest, conn: &mut SqliteConnection) -> LiveValue {
+    if query.is_forest_backed() {
         answer_from_forest(query, forest)
     } else {
         answer_from_sql(query, conn).await
@@ -149,7 +124,7 @@ struct State {
     version: Version,
     /// The forest of the latest version; `None` until first needed.
     forest: Option<Arc<Forest>>,
-    subs: HashMap<LiveQuery, Sub>,
+    subs: HashMap<ClientQuery, Sub>,
     next_id: SubscriptionId,
     /// A version is being built (its key set is already fixed).
     building: bool,
@@ -255,7 +230,7 @@ impl LiveStore {
     /// reflect a write whose version hasn't been published yet — one hook can briefly be a
     /// version ahead of the others until the next batch. If the read may instead be *behind*
     /// (a version was building or was published while it ran), another version is requested.
-    pub async fn subscribe(&self, query: LiveQuery) -> Result<Subscribed> {
+    pub async fn subscribe(&self, query: ClientQuery) -> Result<Subscribed> {
         let seen_version = {
             let mut st = self.lock();
             if let Some(subscribed) = self.join_existing(&mut st, &query) {
@@ -264,7 +239,7 @@ impl LiveStore {
             st.version
         };
 
-        let sql_value = if is_forest_backed(&query) {
+        let sql_value = if query.is_forest_backed() {
             self.ensure_forest().await?;
             None
         } else {
@@ -313,7 +288,7 @@ impl LiveStore {
         })
     }
 
-    fn join_existing(&self, st: &mut State, query: &LiveQuery) -> Option<Subscribed> {
+    fn join_existing(&self, st: &mut State, query: &ClientQuery) -> Option<Subscribed> {
         let sub = st.subs.get_mut(query)?;
         sub.refcount += 1;
         Some(Subscribed {
@@ -330,8 +305,8 @@ impl LiveStore {
 
     /// Answer a query once against the latest version, without subscribing. Forest-backed
     /// queries use the latest published forest; SQL-backed ones read the database now.
-    pub async fn read(&self, query: LiveQuery) -> Result<LiveValue> {
-        if is_forest_backed(&query) {
+    pub async fn read(&self, query: ClientQuery) -> Result<LiveValue> {
+        if query.is_forest_backed() {
             let forest = self.ensure_forest().await?;
             Ok(answer_from_forest(&query, &forest))
         } else {
@@ -354,7 +329,7 @@ impl LiveStore {
 
     /// Build the next version from one read transaction and publish what changed.
     async fn publish_next_version(&self) -> Result<()> {
-        let keys: Vec<LiveQuery> = {
+        let keys: Vec<ClientQuery> = {
             let mut st = self.lock();
             st.building = true;
             st.subs.keys().cloned().collect()
@@ -388,9 +363,9 @@ impl LiveStore {
             }
             // Forest-backed subscriptions added mid-build were answered from the previous forest;
             // answer them from this one so the whole batch belongs to this version.
-            let built_keys: HashSet<&LiveQuery> = keys.iter().collect();
+            let built_keys: HashSet<&ClientQuery> = keys.iter().collect();
             for (query, sub) in st.subs.iter_mut() {
-                if built_keys.contains(query) || !is_forest_backed(query) {
+                if built_keys.contains(query) || !query.is_forest_backed() {
                     continue;
                 }
                 let value = answer_from_forest(query, &forest);
@@ -420,8 +395,8 @@ impl LiveStore {
 
     async fn build(
         &self,
-        keys: &[LiveQuery],
-    ) -> Result<(Arc<Forest>, Vec<(LiveQuery, LiveValue)>)> {
+        keys: &[ClientQuery],
+    ) -> Result<(Arc<Forest>, Vec<(ClientQuery, LiveValue)>)> {
         // One read transaction: the forest and every SQL-backed answer see the same snapshot.
         let mut tx = self.inner.pool.begin().await.db_err()?;
         let entries = SqliteQueryExecutor::new(&mut *tx)
@@ -441,7 +416,7 @@ impl LiveStore {
 /// id) is removed when the last handle for that query drops.
 pub struct LiveSubscription {
     inner: Arc<Inner>,
-    query: LiveQuery,
+    query: ClientQuery,
     id: SubscriptionId,
 }
 
@@ -476,7 +451,9 @@ mod tests {
         },
         queries::{FindAncestors, FindDescendants, FindEntryJoinById, RootEntriesInInterval},
     };
+    use gv_ui::{ChildSlot, ChildSlots, WouldCreateCycle, child_slots};
     use tokio::sync::mpsc;
+    use uuid::Uuid;
 
     fn day() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 10, 30, 0, 0, 0).unwrap()
@@ -530,16 +507,28 @@ mod tests {
             .expect("sink dropped")
     }
 
-    fn day_roots() -> LiveQuery {
-        LiveQuery::Domain(AnyQuery::RootEntriesInInterval(RootEntriesInInterval {
+    fn day_roots() -> ClientQuery {
+        RootEntriesInInterval {
             from: day(),
             to: day() + Duration::days(1),
-        }))
+        }
+        .into()
+    }
+
+    fn child_slots_of(parent_id: Uuid) -> ClientQuery {
+        ChildSlots { parent_id }.into()
+    }
+
+    fn slots(value: &LiveValue) -> &[ChildSlot] {
+        match value {
+            LiveValue::Answer(ClientQueryResponse::ChildSlots(slots)) => slots,
+            other => panic!("expected child slots, got {other:?}"),
+        }
     }
 
     fn root_ids(value: &LiveValue) -> Vec<Uuid> {
         match value {
-            LiveValue::Domain(AnyQueryResponse::RootEntriesInInterval(es)) => {
+            LiveValue::Answer(ClientQueryResponse::RootEntriesInInterval(es)) => {
                 es.iter().map(|e| e.id).collect()
             }
             other => panic!("unexpected value {other:?}"),
@@ -547,10 +536,7 @@ mod tests {
     }
 
     fn first_drop_position(value: &LiveValue) -> Position {
-        let LiveValue::ChildSlots(slots) = value else {
-            panic!("expected child slots, got {value:?}")
-        };
-        match &slots[0] {
+        match &slots(value)[0] {
             ChildSlot::Drop { position, .. } => position.clone(),
             other => panic!("expected a drop slot, got {other:?}"),
         }
@@ -570,32 +556,27 @@ mod tests {
         store.sync().await;
 
         // First values, synchronously. Forest-backed:
-        let slots = store
-            .subscribe(LiveQuery::ChildSlots {
-                parent_id: parent.id,
-            })
-            .await
-            .unwrap();
-        let LiveValue::ChildSlots(first) = &slots.value else {
-            panic!()
-        };
-        assert_eq!(first.len(), 1, "empty sequence: one drop slot");
-        let position = first_drop_position(&slots.value);
+        let slots_sub = store.subscribe(child_slots_of(parent.id)).await.unwrap();
+        assert_eq!(
+            slots(&slots_sub.value).len(),
+            1,
+            "empty sequence: one drop slot"
+        );
+        let position = first_drop_position(&slots_sub.value);
         // SQL-backed:
         let roots = store.subscribe(day_roots()).await.unwrap();
         assert_eq!(root_ids(&roots.value), vec![other.id, parent.id]);
         let descendants = store
-            .subscribe(LiveQuery::Domain(AnyQuery::FindDescendants(
+            .subscribe(
                 FindDescendants {
                     entry_id: parent.id,
-                },
-            )))
+                }
+                .into(),
+            )
             .await
             .unwrap();
         let _unrelated = store
-            .subscribe(LiveQuery::Domain(AnyQuery::FindEntryJoinById(
-                FindEntryJoinById { entry_id: other.id },
-            )))
+            .subscribe(FindEntryJoinById { entry_id: other.id }.into())
             .await
             .unwrap();
 
@@ -613,17 +594,15 @@ mod tests {
         let changed: HashSet<_> = batch.updates.iter().map(|u| u.subscription_id).collect();
         assert_eq!(
             changed,
-            HashSet::from([slots.subscription_id, descendants.subscription_id])
+            HashSet::from([slots_sub.subscription_id, descendants.subscription_id])
         );
         let slots_value = &batch
             .updates
             .iter()
-            .find(|u| u.subscription_id == slots.subscription_id)
+            .find(|u| u.subscription_id == slots_sub.subscription_id)
             .unwrap()
             .value;
-        let LiveValue::ChildSlots(after) = slots_value else {
-            panic!()
-        };
+        let after = slots(slots_value);
         assert_eq!(after.len(), 3);
         assert!(matches!(&after[1], ChildSlot::Entry { entry } if entry.id == child.id));
 
@@ -696,31 +675,28 @@ mod tests {
         // Forest-backed answers come from the latest *published* version, which trails a commit
         // until the refresh task builds it.
         store.sync().await;
-        let slots = store
-            .subscribe(LiveQuery::ChildSlots {
-                parent_id: parent.id,
-            })
-            .await
-            .unwrap();
+        let slots_sub = store.subscribe(child_slots_of(parent.id)).await.unwrap();
         let child = entry(
-            Some(first_drop_position(&slots.value)),
+            Some(first_drop_position(&slots_sub.value)),
             Temporal::None,
             true,
         );
         create(&client, &child).await;
         store.sync().await;
 
-        let cycle = |entry_id, proposed_parent_id| LiveQuery::WouldCreateCycle {
-            entry_id,
-            proposed_parent_id,
+        let cycle = |entry_id, proposed_parent_id| {
+            ClientQuery::from(WouldCreateCycle {
+                entry_id,
+                proposed_parent_id,
+            })
         };
         assert_eq!(
             store.read(cycle(parent.id, child.id)).await.unwrap(),
-            LiveValue::WouldCreateCycle(true)
+            LiveValue::Answer(ClientQueryResponse::WouldCreateCycle(true))
         );
         assert_eq!(
             store.read(cycle(child.id, parent.id)).await.unwrap(),
-            LiveValue::WouldCreateCycle(false)
+            LiveValue::Answer(ClientQueryResponse::WouldCreateCycle(false))
         );
         assert_eq!(store.subscription_count(), 1, "read does not subscribe");
     }
@@ -732,9 +708,12 @@ mod tests {
         let store = client.live();
         // FindAncestors errors (NotFound) for a missing entry.
         let failing = store
-            .subscribe(LiveQuery::Domain(AnyQuery::FindAncestors(FindAncestors {
-                entry_id: Uuid::new_v4(),
-            })))
+            .subscribe(
+                FindAncestors {
+                    entry_id: Uuid::new_v4(),
+                }
+                .into(),
+            )
             .await
             .unwrap();
         assert!(matches!(failing.value, LiveValue::Failed { .. }));
@@ -792,10 +771,12 @@ mod tests {
         }
         // A child of an in-day root must not appear as a root.
         let fresh = Forest::from(client.run_query(AllEntries).await.unwrap());
-        let slots = LiveValue::ChildSlots(child_slots(&fresh, parent.id));
+        let fresh_slots = LiveValue::Answer(ClientQueryResponse::ChildSlots(child_slots(
+            &fresh, parent.id,
+        )));
         create(
             &client,
-            &entry(Some(first_drop_position(&slots)), at(1), false),
+            &entry(Some(first_drop_position(&fresh_slots)), at(1), false),
         )
         .await;
 

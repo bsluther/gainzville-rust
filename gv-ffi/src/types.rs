@@ -1,5 +1,9 @@
 use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
+use gv_client::{
+    live::{LiveBatch, LiveUpdate, LiveValue},
+    queries::{ClientQuery, ClientQueryResponse},
+};
 use gv_core::{
     actions::{
         Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
@@ -24,18 +28,10 @@ use gv_core::{
         entry_join::EntryJoin,
         user::User,
     },
-    queries::{
-        AllActivities, AllActorIds, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse,
-        DistinctTextValuesForAttribute, EntriesRootedInTimeInterval, FindActivityById,
-        FindActivityTemplateRoot, FindAncestors, FindAttributeById, FindAttributePairsForEntry,
-        FindAttributesByOwner, FindDescendants, FindEntryById, FindEntryJoinById, FindUserById,
-        FindUserByUsername, FindValueByKey, FindValuesForEntries, FindValuesForEntry,
-        IsEmailRegistered, RootEntriesInInterval,
-    },
+    queries::*,
     validation::{Email, Username},
 };
-use gv_client::live::{LiveBatch, LiveQuery, LiveUpdate, LiveValue};
-use gv_ui::ChildSlot;
+use gv_ui::{ChildSlot, queries::*};
 use uuid::Uuid;
 
 // --- Errors ---
@@ -421,180 +417,64 @@ pub struct EntryJoin {
     pub display_name: String,
 }
 
-// --- Queries ---
-
-#[uniffi::remote(Record)]
-pub struct IsEmailRegistered {
-    pub email: Email,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindUserById {
-    pub actor_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindUserByUsername {
-    pub username: Username,
-}
-
-#[uniffi::remote(Record)]
-pub struct AllActorIds;
-
-#[uniffi::remote(Record)]
-pub struct FindActivityById {
-    pub id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindActivityTemplateRoot {
-    pub activity_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct AllActivities;
-
-#[uniffi::remote(Record)]
-pub struct AllEntries;
-
-#[uniffi::remote(Record)]
-pub struct EntriesRootedInTimeInterval {
-    pub from: DateTime<Utc>,
-    pub to: DateTime<Utc>,
-}
-
-#[uniffi::remote(Record)]
-pub struct RootEntriesInInterval {
-    pub from: DateTime<Utc>,
-    pub to: DateTime<Utc>,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindAncestors {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindEntryById {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindEntryJoinById {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindDescendants {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindAttributeById {
-    pub attribute_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct AllAttributes;
-
-#[uniffi::remote(Record)]
-pub struct FindAttributesByOwner {
-    pub owner_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindValueByKey {
-    pub entry_id: Uuid,
-    pub attribute_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindValuesForEntry {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindValuesForEntries {
-    pub entry_ids: Vec<Uuid>,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindAttributePairsForEntry {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct DistinctTextValuesForAttribute {
-    pub attribute_id: Uuid,
-}
-
-#[uniffi::remote(Enum)]
-pub enum AnyQuery {
-    // Auth
-    IsEmailRegistered(IsEmailRegistered),
-    FindUserById(FindUserById),
-    FindUserByUsername(FindUserByUsername),
-    AllActorIds(AllActorIds),
-    // Activity
-    FindActivityById(FindActivityById),
-    AllActivities(AllActivities),
-    FindActivityTemplateRoot(FindActivityTemplateRoot),
-    // Entry
-    AllEntries(AllEntries),
-    EntriesRootedInTimeInterval(EntriesRootedInTimeInterval),
-    RootEntriesInInterval(RootEntriesInInterval),
-    FindAncestors(FindAncestors),
-    FindEntryById(FindEntryById),
-    FindEntryJoinById(FindEntryJoinById),
-    FindDescendants(FindDescendants),
-    // Attribute
-    FindAttributeById(FindAttributeById),
-    AllAttributes(AllAttributes),
-    FindAttributesByOwner(FindAttributesByOwner),
-    // Value
-    FindValueByKey(FindValueByKey),
-    FindValuesForEntry(FindValuesForEntry),
-    FindValuesForEntries(FindValuesForEntries),
-    FindAttributePairsForEntry(FindAttributePairsForEntry),
-    DistinctTextValuesForAttribute(DistinctTextValuesForAttribute),
-}
-
-#[uniffi::remote(Enum)]
-pub enum AnyQueryResponse {
-    // Auth
-    IsEmailRegistered(bool),
-    FindUserById(Option<User>),
-    FindUserByUsername(Option<User>),
-    AllActorIds(Vec<Uuid>),
-    // Activity
-    FindActivityById(Option<Activity>),
-    FindActivityTemplateRoot(Option<Entry>),
-    AllActivities(Vec<Activity>),
-    // Entry
-    AllEntries(Vec<Entry>),
-    EntriesRootedInTimeInterval(Vec<Entry>),
-    RootEntriesInInterval(Vec<Entry>),
-    FindAncestors(Vec<Uuid>),
-    FindEntryById(Option<Entry>),
-    FindEntryJoinById(Option<EntryJoin>),
-    FindDescendants(Vec<Entry>),
-    // Attribute
-    FindAttributeById(Option<Attribute>),
-    AllAttributes(Vec<Attribute>),
-    FindAttributesByOwner(Vec<Attribute>),
-    // Value
-    FindValueByKey(Option<Value>),
-    FindValuesForEntry(Vec<Value>),
-    FindValuesForEntries(Vec<Value>),
-    FindAttributePairsForEntry(Vec<AttributePair>),
-    DistinctTextValuesForAttribute(Vec<String>),
-}
-
-// --- Live queries (gv-ui / gv-client) ---
+// --- Questions and query sets (generated) ---
 //
-// The live-query surface: what Swift can ask (`LiveQuery`) and what comes back (`LiveValue`,
-// delivered in `LiveBatch`es). Nothing here says how a query is answered; that is decided in
-// `gv_client::live`.
+// Generated from the same lists that define the Rust types, via the x-macros the defining crates
+// export: `core_questions!`/`ui_questions!` (one remote Record per question) and
+// `domain_query_set!`/`client_query_set!` (each set and its response enum as remote Enums). Adding
+// a question or changing a set's membership needs no edit here. What stays hand-written: the
+// answer types (domain records above, `ChildSlot` below) and the live envelope (`LiveValue`,
+// `LiveUpdate`, `LiveBatch`). Question field types are resolved in this module, so they must be
+// in scope here (an unknown one is a compile error at the x-macro call).
+
+/// Callback for `core_questions!`/`ui_questions!`: one remote Record per question.
+macro_rules! ffi_question_records {
+    ($(
+        $(#[$meta:meta])*
+        $vis:vis struct $name:ident $body:tt => $response:ty;
+    )*) => {$(
+        #[uniffi::remote(Record)]
+        $(#[$meta])*
+        $vis struct $name $body
+    )*};
+}
+
+/// Callback for `domain_query_set!`/`client_query_set!`: the set and its response enum as remote
+/// Enums, variants in declaration order (forest members first). The backing groups are erased:
+/// Swift sees one flat enum.
+macro_rules! ffi_query_set {
+    (
+        $(#[$meta:meta])*
+        $vis:vis enum $set:ident -> $response:ident {
+            $(forest { $($f:ident),+ $(,)? })?
+            executor $exec:ident { $($q:ident),+ $(,)? }
+        }
+    ) => {
+        #[uniffi::remote(Enum)]
+        $(#[$meta])*
+        $vis enum $set {
+            $($($f($f),)+)?
+            $($q($q),)+
+        }
+
+        #[uniffi::remote(Enum)]
+        $vis enum $response {
+            $($($f(<$f as Query>::Response),)+)?
+            $($q(<$q as Query>::Response),)+
+        }
+    };
+}
+
+gv_core::core_questions!(ffi_question_records);
+gv_ui::ui_questions!(ffi_question_records);
+gv_core::domain_query_set!(ffi_query_set);
+gv_client::client_query_set!(ffi_query_set);
+
+// --- Live queries (gv-client) ---
+//
+// The live envelope around `ClientQuery`/`ClientQueryResponse`: what comes back per subscription
+// (`LiveValue`), delivered in `LiveBatch`es. Nothing here says how a query is answered; that is
+// declared in `gv_client::queries`.
 
 #[uniffi::remote(Enum)]
 pub enum ChildSlot {
@@ -610,22 +490,8 @@ pub enum ChildSlot {
 }
 
 #[uniffi::remote(Enum)]
-pub enum LiveQuery {
-    ChildSlots {
-        parent_id: Uuid,
-    },
-    WouldCreateCycle {
-        entry_id: Uuid,
-        proposed_parent_id: Uuid,
-    },
-    Domain(AnyQuery),
-}
-
-#[uniffi::remote(Enum)]
 pub enum LiveValue {
-    ChildSlots(Vec<ChildSlot>),
-    WouldCreateCycle(bool),
-    Domain(AnyQueryResponse),
+    Answer(ClientQueryResponse),
     Failed { message: String },
 }
 

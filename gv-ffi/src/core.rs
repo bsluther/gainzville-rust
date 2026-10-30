@@ -4,14 +4,15 @@ use chrono::{DateTime, Utc};
 use generation::{Arbitrary, Opts, SimulationContext};
 use gv_client::{
     client::SqliteClient,
-    live::{LiveBatch, LiveQuery, LiveSubscription, LiveValue},
+    live::{LiveBatch, LiveSubscription, LiveValue},
+    queries::ClientQuery,
     query_store::{QuerySubscription, next_change},
 };
 use gv_core::{
     actions::{Action, CreateAttribute, CreateEntry, CreateValue},
     forest::Forest,
     models::entry::{Entry, Position},
-    queries::{AllEntries, AnyQuery, AnyQueryResponse, SnapshotAll},
+    queries::{AllEntries, DomainQuery, DomainQueryResponse, SnapshotAll},
     std_lib::StandardLibrary,
 };
 use tokio::runtime::Runtime;
@@ -130,7 +131,13 @@ impl GainzvilleCore {
     /// Subscribe to a query. Runs the initial query immediately, populates the
     /// cache, and returns a `FfiQuerySubscription` handle. Dropping the handle
     /// (Swift releasing the reference) auto-removes the query from the cache.
-    pub fn subscribe_query(&self, query: AnyQuery) -> Result<Arc<FfiQuerySubscription>, FfiError> {
+    ///
+    /// Legacy (ping-and-pull) path, keyed by the domain set; superseded by
+    /// `live_subscribe` over the client set and retired screen by screen.
+    pub fn subscribe_query(
+        &self,
+        query: DomainQuery,
+    ) -> Result<Arc<FfiQuerySubscription>, FfiError> {
         let subscription = RUNTIME
             .block_on(self.client.subscribe_query(query))
             .map_err(FfiError::from)?;
@@ -140,7 +147,7 @@ impl GainzvilleCore {
     /// Read the current cached result for a query. Returns `None` if the query
     /// is not subscribed. Swift calls this synchronously from the main thread
     /// after receiving `on_data_changed()`.
-    pub fn read_query(&self, query: AnyQuery) -> Option<AnyQueryResponse> {
+    pub fn read_query(&self, query: DomainQuery) -> Option<DomainQueryResponse> {
         self.client.read_cached_query(query)
     }
 
@@ -150,8 +157,9 @@ impl GainzvilleCore {
     // The successor to subscribe_query/read_query/forest_*/on_data_changed for
     // migrated views. Swift registers one LiveListener, subscribes per view
     // (first value returned synchronously), and receives one batch per data
-    // version with only the changed subscriptions. How each query is answered
-    // (in-memory forest or SQL) is decided in gv_client::live.
+    // version with only the changed subscriptions. Queries come from the client
+    // set; how each is answered (in-memory forest or SQL) is declared in
+    // gv_client::queries.
     // -------------------------------------------------------------------------
 
     /// Register the batch listener. Call once, before the first `live_subscribe`: batches are
@@ -163,7 +171,7 @@ impl GainzvilleCore {
     }
 
     /// Subscribe to a live query. Returns the first value immediately.
-    pub fn live_subscribe(&self, query: LiveQuery) -> Result<LiveSubscribed, FfiError> {
+    pub fn live_subscribe(&self, query: ClientQuery) -> Result<LiveSubscribed, FfiError> {
         let subscribed = RUNTIME
             .block_on(self.client.live().subscribe(query))
             .map_err(FfiError::from)?;
@@ -176,7 +184,7 @@ impl GainzvilleCore {
     }
 
     /// Answer a live query once against the latest version, without subscribing.
-    pub fn live_read(&self, query: LiveQuery) -> Result<LiveValue, FfiError> {
+    pub fn live_read(&self, query: ClientQuery) -> Result<LiveValue, FfiError> {
         RUNTIME
             .block_on(self.client.live().read(query))
             .map_err(FfiError::from)
@@ -208,7 +216,7 @@ impl GainzvilleCore {
         let subscription = RUNTIME
             .block_on(
                 self.client
-                    .subscribe_query(AnyQuery::AllEntries(AllEntries {})),
+                    .subscribe_query(DomainQuery::AllEntries(AllEntries {})),
             )
             .map_err(FfiError::from)?;
         Ok(Arc::new(FfiQuerySubscription(subscription)))
@@ -384,9 +392,9 @@ impl GainzvilleCore {
     fn forest_snapshot(&self) -> Option<Forest> {
         match self
             .client
-            .read_cached_query(AnyQuery::AllEntries(AllEntries {}))?
+            .read_cached_query(DomainQuery::AllEntries(AllEntries {}))?
         {
-            AnyQueryResponse::AllEntries(entries) => Some(Forest::from(entries)),
+            DomainQueryResponse::AllEntries(entries) => Some(Forest::from(entries)),
             _ => None,
         }
     }
@@ -395,8 +403,9 @@ impl GainzvilleCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gv_client::queries::ClientQueryResponse;
     use gv_core::{DEFAULT_USER_ID, models::entry::Temporal};
-    use gv_ui::ChildSlot;
+    use gv_ui::{ChildSlot, ChildSlots, WouldCreateCycle};
     use std::sync::Mutex;
 
     struct NoopListener;
@@ -453,11 +462,14 @@ mod tests {
         RUNTIME.block_on(core.client.live().sync());
 
         let sub = core
-            .live_subscribe(LiveQuery::ChildSlots {
-                parent_id: parent.id,
-            })
+            .live_subscribe(
+                ChildSlots {
+                    parent_id: parent.id,
+                }
+                .into(),
+            )
             .unwrap();
-        let LiveValue::ChildSlots(slots) = &sub.value else {
+        let LiveValue::Answer(ClientQueryResponse::ChildSlots(slots)) = &sub.value else {
             panic!("expected child slots")
         };
         let ChildSlot::Drop { position, .. } = slots[0].clone() else {
@@ -481,19 +493,23 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         };
         assert!(batch.version > sub.version);
-        let LiveValue::ChildSlots(after) = &batch.updates[0].value else {
+        let LiveValue::Answer(ClientQueryResponse::ChildSlots(after)) = &batch.updates[0].value
+        else {
             panic!("expected child slots")
         };
         assert!(matches!(&after[1], ChildSlot::Entry { entry } if entry.id == child.id));
 
         // Read once: moving the parent under its child would be a cycle.
         assert_eq!(
-            core.live_read(LiveQuery::WouldCreateCycle {
-                entry_id: parent.id,
-                proposed_parent_id: child.id,
-            })
+            core.live_read(
+                WouldCreateCycle {
+                    entry_id: parent.id,
+                    proposed_parent_id: child.id,
+                }
+                .into()
+            )
             .unwrap(),
-            LiveValue::WouldCreateCycle(true)
+            LiveValue::Answer(ClientQueryResponse::WouldCreateCycle(true))
         );
 
         // Releasing the handle (Swift dropping its reference) unsubscribes.

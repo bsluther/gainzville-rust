@@ -11,7 +11,7 @@ use gv_core::{
     },
     mutators,
     queries::{
-        AnyQuery, AnyQueryResponse, FindActivityById, FindAttributeById, FindUserById, Query,
+        DomainQuery, DomainQueryResponse, FindActivityById, FindAttributeById, FindUserById, Query,
     },
     query_executor::QueryExecutor,
     std_lib::StandardLibrary,
@@ -253,15 +253,15 @@ impl SqliteClient {
         self.query_store.run_query(query).await
     }
 
-    pub async fn run_any_query(&self, query: AnyQuery) -> Result<AnyQueryResponse> {
-        self.query_store.run_any_query(query).await
+    pub async fn run_domain_query(&self, query: DomainQuery) -> Result<DomainQueryResponse> {
+        self.query_store.run_domain_query(query).await
     }
 
-    pub async fn subscribe_query(&self, query: AnyQuery) -> Result<Arc<QuerySubscription>> {
+    pub async fn subscribe_query(&self, query: DomainQuery) -> Result<Arc<QuerySubscription>> {
         self.query_store.subscribe_query(query).await
     }
 
-    pub fn read_cached_query(&self, query: AnyQuery) -> Option<AnyQueryResponse> {
+    pub fn read_cached_query(&self, query: DomainQuery) -> Option<DomainQueryResponse> {
         self.query_store.read_cached_query(query)
     }
 
@@ -313,7 +313,7 @@ impl SqliteClient {
 pub mod tests {
     pub use super::*;
     pub use gv_core::SYSTEM_ACTOR_ID;
-    pub use gv_core::queries::{AnyQuery, FindActivityById, FindEntryJoinById, SnapshotAll};
+    pub use gv_core::queries::{DomainQuery, FindActivityById, FindEntryJoinById, SnapshotAll};
     pub use uuid::Uuid;
 
     /// Two subscriptions to the same query key share one cache entry; the entry
@@ -323,7 +323,7 @@ pub mod tests {
     #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
     fn test_query_subscription_refcount(pool: SqlitePool) {
         let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
-        let query = AnyQuery::FindEntryJoinById(FindEntryJoinById {
+        let query = DomainQuery::FindEntryJoinById(FindEntryJoinById {
             entry_id: Uuid::new_v4(),
         });
 
@@ -405,7 +405,8 @@ pub mod tests {
         let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
         client.seed_default_user().await.unwrap();
         let entry = lag_test_entry();
-        let query = AnyQuery::FindEntryById(gv_core::queries::FindEntryById { entry_id: entry.id });
+        let query =
+            DomainQuery::FindEntryById(gv_core::queries::FindEntryById { entry_id: entry.id });
         let _sub = client.subscribe_query(query.clone()).await.unwrap();
 
         flood_change_channel(&client);
@@ -416,7 +417,7 @@ pub mod tests {
 
         let refreshed = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
-                if let Some(AnyQueryResponse::FindEntryById(Some(_))) =
+                if let Some(DomainQueryResponse::FindEntryById(Some(_))) =
                     client.read_cached_query(query.clone())
                 {
                     return;
@@ -431,7 +432,8 @@ pub mod tests {
     /// Same regression for the live store's refresh loop.
     #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
     async fn test_live_store_survives_lagged_change_channel(pool: SqlitePool) {
-        use crate::live::{LiveQuery, LiveValue};
+        use crate::live::LiveValue;
+        use crate::queries::ClientQueryResponse;
         let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
         client.seed_default_user().await.unwrap();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -441,9 +443,7 @@ pub mod tests {
         let entry = lag_test_entry();
         let sub = client
             .live()
-            .subscribe(LiveQuery::Domain(AnyQuery::FindEntryById(
-                gv_core::queries::FindEntryById { entry_id: entry.id },
-            )))
+            .subscribe(gv_core::queries::FindEntryById { entry_id: entry.id }.into())
             .await
             .unwrap();
         // Settle: no pending rebuild request may mask the lag (subscribe can request one).
@@ -462,7 +462,7 @@ pub mod tests {
         assert_eq!(batch.updates[0].subscription_id, sub.subscription_id);
         assert!(matches!(
             &batch.updates[0].value,
-            LiveValue::Domain(AnyQueryResponse::FindEntryById(Some(e))) if e.id == entry.id
+            LiveValue::Answer(ClientQueryResponse::FindEntryById(Some(e))) if e.id == entry.id
         ));
     }
 }

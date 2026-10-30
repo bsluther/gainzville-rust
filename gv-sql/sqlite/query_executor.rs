@@ -156,6 +156,7 @@ impl QueryExecutor<RootEntriesInInterval> for SqliteQueryExecutor<'_> {
         &mut self,
         query: RootEntriesInInterval,
     ) -> Result<<RootEntriesInInterval as Query>::Response> {
+        // Client-only (in `ClientQuery`, not the domain set), so there is no Postgres impl.
         // SQL narrows to candidate log roots; `log_roots_in_interval` applies the exact
         // canonical-instant predicate and order (end-anchored rows need `end - duration`).
         let end_anchor_to =
