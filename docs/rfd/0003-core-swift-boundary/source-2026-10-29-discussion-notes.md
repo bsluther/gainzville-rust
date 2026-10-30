@@ -142,3 +142,21 @@ interface MobileConvexClient {
   loading and error state reads like a hook version of a result type. Lean against taking the
   Point-Free dependency unless writing our own is a heavy lift or the dependency is a big
   architectural win.
+
+## Crux, Delta Chat, Realm, WordPress sync status (discussed 2026-10-30)
+
+- **Crux** is a framework (Red Badger), not an app. The research read the framework and its examples
+  (counter, counter over HTTP, weather, notes). Seen as the outer marker of "Rust decides": even
+  focus/selection state lives in Rust. Lesson kept: a core that emits I/O requests rather than
+  performing I/O, applied to the future sync engine for deterministic simulation testing.
+- **Delta Chat** seemed a good reference to keep for implementation details, because it's a long-lived
+  app with a similar approach (Rust core owns SQLite and sync, native app on top). Mostly confirms
+  the direction. Its notable details are scope hints on change events, core-inserted day markers,
+  and loading an id list first and then rows lazily.
+- **Realm** is the mobile database MongoDB acquired (2019) and built its device sync on, since
+  deprecated. Its core is C++. Recorded as one sentence of evidence for immutable, versioned
+  snapshots: live thread-confined objects later needed frozen copies.
+- **WordPress per-item sync status** (missing / fetching / fresh / stale / failed, with "with data"
+  variants). This is distinct from the hook's loading state: per question versus per record. Not
+  needed for local data now. Fits remote or lazy data and future sync state. Keep record types open
+  to a status field.

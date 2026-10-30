@@ -284,6 +284,48 @@ key type and get the wrapper, loading state and sharing for free. **Lean: avoid 
 dependency** unless writing our own turns out to be a heavy lift or the dependency brings a big
 architectural win. Copying the design looks like a few hundred lines.
 
+### Other references
+
+- **Crux (redbadger/crux): the outer marker for how far "Rust decides" can go.** Crux is a framework
+  for apps whose behavior lives in a shared Rust core with thin native shells. The core has four
+  parts:
+  - *events*, which are intents;
+  - *a model*, the state;
+  - *a view model*, exactly what the screen shows;
+  - *effects*, requests for I/O, which the shell performs and answers.
+
+  Even selection state, such as which activity is focused, lives in Rust. The whole view model is
+  re-sent on every update. It agrees with GV on intent writes and rules in Rust. It differs in three
+  ways: Rust builds whole screens, the shell owns I/O including storage, and re-sending everything
+  wouldn't scale to a large forest. **GV stops earlier:** Rust answers questions and Swift composes
+  screens. **The lesson to keep is for sync, not the boundary.** The core never performs I/O; it
+  emits requests and receives results, so a test can play the shell and control every response,
+  failure and delay. Build the future sync engine the same way to make it simulation-testable.
+  Convex's base client is shaped like this too.
+- **Delta Chat (chatmail/core + deltachat-ios): confirmation, and a useful reference for
+  implementation details.** It's an email-based messenger whose Rust core owns SQLite, IMAP/SMTP sync
+  and encryption, under a native iOS app, and it has been in production for about six years. Its
+  boundary is ping-and-pull with *scope hints*: a "messages changed" event names the affected chat
+  and message, or zero for anything. Screens filter on the hints and re-fetch. GV's batch of changed
+  subscriptions is a stronger version of this. Two details are worth remembering:
+  - The core inserts day markers into message lists, a second precedent after Matrix for Rust-built
+    display structure.
+  - It loads the id list first and each message as it scrolls into view. That's a simple
+    virtualization pattern; GV's versioning would cover rows disappearing between the two reads.
+- **Realm (MongoDB): more evidence for immutable, versioned snapshots.** Realm began with live,
+  thread-confined objects that read the current database state, and later had to add frozen,
+  immutable copies, which became the recommended form for SwiftUI.
+- **WordPress (wordpress-rs): per-record status, for later.** Each cached item carries a status:
+  missing, fetching, fresh, stale or failed, with "with data" variants that keep the last good copy
+  visible. This answers a different question from the hook's loading state. The hook says whether
+  the *question* is answered; a record's status says how complete or current that *record* is. It
+  isn't needed for the user's own local data, which is the source of truth. It fits two future
+  cases:
+  - remote or lazily loaded data (activity library content, workout videos, other users' data);
+  - sync state (pending, synced, conflicted), like Matrix's per-message send state.
+
+  **Lean:** don't build it now, but keep record types open to gaining a status field.
+
 ### Settled for now
 
 - **Read-once sees the latest version.** It could disagree with what the hooks are showing. That's
