@@ -32,15 +32,23 @@ principle names the mechanism that carries it out. Some of it is stated as a hyp
 **The consumer's job.** A frontend renders domain data and expresses what the user wants to do. It
 should say what it needs and what it intends, in domain language, and nothing more.
 
+**The objective: a clear architecture, then the infrastructure to support it.** Commit to one model
+of the boundary on both sides, and build the machinery that model needs once, in the SDK. Today
+consumers do that work ad hoc: each view model is its own small piece of infrastructure.
+
 1. **The boundary is a set of domain questions and domain intents.** Swift asks questions: what is
    this entry's parent, what are its attributes, which entries fall on this day, what is this
    activity's profile. Swift states intents: move this entry here, log this set. Swift doesn't query
    the database or keep a model of its own to walk. It receives answers.
    *Mechanisms:* everything is a query; writes are intents.
-2. **How a question is answered is Rust's choice, and Swift can't see it.** Today there are two
-   ways: a synchronous database query, or a walk of the in-memory forest (parents, drop slots and
-   so on). Later there could be others, including asynchronous or lazily loaded data, possibly kept
-   separately. This is what lets optimization and virtualization happen without changing the API.
+2. **The API abstracts over the access pattern. This is a strong motivation for the whole lean.**
+   An answer can come from data held in memory, from a synchronous database query, or later over the
+   network or asynchronously. Today that means a walk of the in-memory forest (parents, drop slots and
+   so on) or a synchronous database query. Later it could include lazily loaded or remote data,
+   possibly kept separately. Which pattern answers a question is Rust's choice, and Swift can't see
+   it. The tension between in-memory, database and async access is real and unresolved, and this
+   principle means it doesn't have to be resolved now: Rust can change its mind, optimize or
+   virtualize without changing the API.
    *Mechanism:* the backing is chosen per kind of query.
 3. **Every answer a view sees comes from one version of the data.** A screen never mixes two moments.
    *Mechanism:* batched, versioned push (modeled on `watch_all`).
@@ -65,17 +73,45 @@ and new data then triggers a re-render. `@State`, `@Environment`, SwiftData's `@
 SQLiteData's `@FetchAll` all work this way. Outside views, in `@Observable` models, the wrapper has
 to handle observation itself.
 
-**Why GV has view models today.** The core was designed around a query API, but the Swift half of
-that design was never built: an SDK that packages each query into a hook a view can declare. View
-models grew to fill the gap. Each one is effectively a hand-written hook (subscribe, hold the token,
-listen, re-read, unwrap).
-
 **Rule of thumb: hooks or view models.**
 
 - **Getting data uses a hook.** A class that mostly subscribes, reads and republishes should become
   a hook. That covers most of today's view models.
 - **View models remain for real UI logic.** For example, multi-step edit state, or coordinating
   several parts of a screen. They consume hooks rather than wiring up subscriptions themselves.
+
+### What's actually different from today
+
+Structurally, not much. The core already speaks in domain queries and actions, and questions and
+answers were the intent all along. What was missing was commitment to that model on the Swift side,
+and the infrastructure to support it.
+
+The forest is where the design split. It seemed to need an in-memory model, but shipping the whole
+forest across the boundary was unattractive, so its traversals became a second API of method calls
+beside the queries. Neither API got Swift machinery. View models grew to fill the gap, each one a
+hand-written hook: subscribe, hold the token, listen, re-read, unwrap.
+
+The lean changes four things:
+
+1. **One API instead of two.** Today there are queries plus a separate set of forest methods, with
+   view models as an ad hoc third layer. The lean has one model: everything is a question, asked
+   once or subscribed to. Forest traversals are just queries that Rust answers from its in-memory
+   forest. That dissolves the split instead of choosing a side.
+2. **Swift stops depending on how answers are produced.** This is the most important difference.
+   Today Swift code knows the mechanism:
+   - forest methods work only while someone holds the `AllEntries` subscription;
+   - views re-read after a ping;
+   - views compute positions themselves.
+
+   Committing to the API means Swift can't know these things, and that is what keeps the access
+   pattern (principle 2) free to change.
+3. **The machinery is built once.** Today every view model is its own piece of infrastructure. With
+   GvKit, subscription, delivery, consistency and lifetimes live in one place, and views declare their
+   questions. GvKit is real Swift work with its own design, not something to minimize. It is part of
+   the boundary.
+4. **Pure computations become answers.** Once questions are the API, results like drop slots,
+   day grouping and affordance flags can be answered by Rust as well. That's how domain rules move
+   out of Swift (principle 5).
 
 ### Shape
 
