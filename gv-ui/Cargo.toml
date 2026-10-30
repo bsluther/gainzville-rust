@@ -1,0 +1,13 @@
+[package]
+name = "gv-ui"
+version = "0.1.0"
+edition = "2024"
+description = "Screen-shaped, platform-independent computations over the domain (no storage, no FFI)."
+
+[dependencies]
+gv-core          = { path = "../core" }
+uuid             = { workspace = true }
+fractional_index = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
