@@ -409,10 +409,53 @@ What changed in the lean as a result:
   load inside SwiftUI's update pass (platform). Retire `QueryStore` per screen, not per component,
   to avoid two pipelines and mixed versions (all three).
 
+**Query sets and the macro (spike commits a03ac3f..35ae273).**
+
+- *Two flat sets.* `AnyQuery` became `DomainQuery`, used by mutators and the server, answerable by
+  SQLite and Postgres. `ClientQuery` is the only set Swift sees. Shared questions are listed as plain
+  variants, and no set wraps another; there was no pressure to nest.
+- *The backing decision is now a list.* The client set has two groups, `forest` and `executor` (SQL),
+  so moving a question between backings means moving one line.
+- *Generated plumbing.* `define_query_set!` generates each set's enum, response enum, `From` impls,
+  executor bound and dispatch from one declarative list per set. Tags on each question didn't work,
+  because questions live in several crates and `macro_rules!` can't collect tags across crates. Each
+  list is also exported as an x-macro, so `gv-ffi` generates its UniFFI declarations from the same
+  source, and `gv-core` stays free of UniFFI.
+- *The dead Postgres implementation of `RootEntriesInInterval` is gone.*
+- *Cost per question.* Adding `SuggestedRootInsertionTime` (forest-backed) took 2 Rust files plus
+  the Swift key; a SQL-backed client question would take 3. Before, it took 6 to 7 Rust files plus
+  bindings.
+
+Findings:
+
+- *`Query` is unsealed.* Forest-backed questions return UI types, so they live in `gv-ui`, outside
+  the core. Any crate can now define a question, so review moves to set membership.
+- *The crate graph sees the backing, even though Swift doesn't.* A question defined in `gv-ui` can't
+  get a SQL answer unless `gv-sql` depends on `gv-ui`.
+- *Clock-dependent questions don't fit versions.* An answer can change with no data change (for
+  example the suggested insertion time for today), so for now these are read-once only.
+
+**Verified on a Mac (2026-10-31).**
+
+- *Builds.* Both the iOS and macOS targets built with no changes, so the Swift written without a
+  compiler compiled first try. There were no concurrency warnings, but the project is in Swift 5
+  mode, so the main-actor assumptions are only checked at runtime.
+- *Runtime checks all passed:*
+  - cold launch;
+  - switching days;
+  - drag reorder, including refusal of self and cycle drops, with a stable highlight;
+  - an attribute edit updating only its card;
+  - sets select, add and remove;
+  - deleting an expanded entry;
+  - a burst of 20+ seeded entries (the `Lagged` fix);
+  - no state-during-update warnings.
+- *Separate from the spike.* The linker warns that the Rust static library targets a newer OS than
+  the app's deployment target, and the build machine's simulator is out of date.
+
 ### Open
 
-- **A macro for query plumbing.** One query touched about seven Rust files plus the bindings in the
-  spike. Split the query sets first, then use a macro for the boilerplate that remains.
+- **The query macro is done in the spike** (above). What's left is ergonomics: the macro bodies
+  aren't formatted by rustfmt, and question field types must be in scope in `gv-ffi`.
 - **A loading state in the hook.** Design it now for data that loads lazily: other users' data (for
   example coaching), activity library content such as workout videos, and later virtualization.
 - **Compare against the research in depth.**
