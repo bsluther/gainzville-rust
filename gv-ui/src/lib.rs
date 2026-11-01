@@ -12,5 +12,5 @@
 pub mod child_slots;
 pub mod queries;
 
-pub use child_slots::{ChildSlot, child_slots};
+pub use child_slots::{ChildSlot, child_slots, sets_members};
 pub use queries::*;

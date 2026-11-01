@@ -23,7 +23,31 @@ extension GvKey where Value == [ChildSlot] {
     }
 }
 
+extension GvKey where Value == Position? {
+    /// Where a new last child of `parentId` goes: the position of the final
+    /// drop slot. Asks the same question as `.childSlots(of:)`, so the two share
+    /// one subscription and always agree.
+    static func appendPosition(in parentId: String) -> GvKey<Position?> {
+        GvKey(query: .childSlots(ChildSlots(parentId: parentId)), defaultValue: nil) { response in
+            guard case .childSlots(let slots) = response else { return nil }
+            for slot in slots.reversed() {
+                if case .drop(_, let position, _, _) = slot { return .some(position) }
+            }
+            return .some(nil)
+        }
+    }
+}
+
 extension GvKey where Value == [Entry] {
+    /// A sets sequence's members, in order. `nil` id = inactive.
+    static func setsMembers(of sequenceId: String?) -> GvKey<[Entry]> {
+        let query = sequenceId.map { ClientQuery.setsMembers(SetsMembers(sequenceId: $0)) }
+        return GvKey(query: query, defaultValue: []) { response in
+            if case .setsMembers(let members) = response { return members }
+            return nil
+        }
+    }
+
     /// Log roots on a local day, sorted by time.
     static func dayRoots(_ day: LogDay) -> GvKey<[Entry]> {
         let query = RootEntriesInInterval(from: day.fromMs, to: day.toMs)
@@ -40,6 +64,78 @@ extension GvKey where Value == EntryJoin? {
         let query = entryId.map { ClientQuery.findEntryJoinById(FindEntryJoinById(entryId: $0)) }
         return GvKey(query: query, defaultValue: nil) { response in
             if case .findEntryJoinById(let join) = response { return .some(join) }
+            return nil
+        }
+    }
+}
+
+extension GvKey where Value == EntryJoin? {
+    /// An activity's template root with its activity and attributes.
+    /// `nil` id = inactive.
+    static func activityTemplateJoin(_ activityId: String?) -> GvKey<EntryJoin?> {
+        let query = activityId.map { ClientQuery.activityTemplateJoin(ActivityTemplateJoin(activityId: $0)) }
+        return GvKey(query: query, defaultValue: nil) { response in
+            if case .activityTemplateJoin(let join) = response { return .some(join) }
+            return nil
+        }
+    }
+}
+
+extension GvKey where Value == Entry? {
+    /// An activity's template root.
+    static func activityTemplateRoot(_ activityId: String) -> GvKey<Entry?> {
+        GvKey(
+            query: .findActivityTemplateRoot(FindActivityTemplateRoot(activityId: activityId)),
+            defaultValue: nil
+        ) { response in
+            if case .findActivityTemplateRoot(let root) = response { return .some(root) }
+            return nil
+        }
+    }
+}
+
+extension GvKey where Value == [Activity] {
+    static var allActivities: GvKey<[Activity]> {
+        GvKey(query: .allActivities(AllActivities()), defaultValue: []) { response in
+            if case .allActivities(let activities) = response { return activities }
+            return nil
+        }
+    }
+}
+
+extension GvKey where Value == [Attribute] {
+    static var allAttributes: GvKey<[Attribute]> {
+        GvKey(query: .allAttributes(AllAttributes()), defaultValue: []) { response in
+            if case .allAttributes(let attributes) = response { return attributes }
+            return nil
+        }
+    }
+
+    static func attributesOwned(by ownerId: String) -> GvKey<[Attribute]> {
+        GvKey(query: .findAttributesByOwner(FindAttributesByOwner(ownerId: ownerId)), defaultValue: []) { response in
+            if case .findAttributesByOwner(let attributes) = response { return attributes }
+            return nil
+        }
+    }
+}
+
+extension GvKey where Value == Attribute? {
+    static func attribute(_ attributeId: String) -> GvKey<Attribute?> {
+        GvKey(query: .findAttributeById(FindAttributeById(attributeId: attributeId)), defaultValue: nil) { response in
+            if case .findAttributeById(let attribute) = response { return .some(attribute) }
+            return nil
+        }
+    }
+}
+
+extension GvKey where Value == [String] {
+    /// Text previously entered for an attribute, for autocomplete.
+    static func distinctTextValues(_ attributeId: String) -> GvKey<[String]> {
+        GvKey(
+            query: .distinctTextValuesForAttribute(DistinctTextValuesForAttribute(attributeId: attributeId)),
+            defaultValue: []
+        ) { response in
+            if case .distinctTextValuesForAttribute(let values) = response { return values }
             return nil
         }
     }

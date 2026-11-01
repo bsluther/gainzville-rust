@@ -1935,6 +1935,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "futures-core",
+ "futures-util",
  "gv-core",
  "gv-sql",
  "gv-ui",

@@ -125,6 +125,12 @@ define_query! {
 }
 
 define_query! {
+    /// An activity's template root with its activity and attributes. Client-only (SQLite): not in
+    /// the domain set, so Postgres needn't answer it.
+    pub struct ActivityTemplateJoin { pub activity_id: Uuid } => Option<EntryJoin>
+}
+
+define_query! {
     /// Where e is the entry with id == `entry_id`, this query returns a list of all the
     /// ancestor of e, including e. The result is sorted in ascending order so that e is first
     /// and the root is last, e.g. [e, ..., root_ancestor].

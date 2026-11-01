@@ -340,11 +340,6 @@ void uniffi_gv_ffi_fn_method_gainzvillecore_dev_seed_std_lib(uint64_t ptr, RustC
 RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_forest_activity_template_root(uint64_t ptr, RustBuffer activity_id, RustCallStatus *_Nonnull out_status
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_ANCESTORS
-#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_ANCESTORS
-RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_forest_ancestors(uint64_t ptr, RustBuffer entry_id, RustCallStatus *_Nonnull out_status
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_CHILDREN
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_CHILDREN
 RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_forest_children(uint64_t ptr, RustBuffer parent_id, RustCallStatus *_Nonnull out_status
@@ -355,24 +350,9 @@ RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_forest_children(uint64_t ptr, 
 RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_forest_position_after_children(uint64_t ptr, RustBuffer parent_id, RustCallStatus *_Nonnull out_status
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_POSITION_BETWEEN
-#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_POSITION_BETWEEN
-RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_forest_position_between(uint64_t ptr, RustBuffer parent_id, RustBuffer pred_id, RustBuffer succ_id, RustCallStatus *_Nonnull out_status
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_ROOTS
 RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_forest_roots(uint64_t ptr, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_ROOTS_IN
-#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_ROOTS_IN
-RustBuffer uniffi_gv_ffi_fn_method_gainzvillecore_forest_roots_in(uint64_t ptr, int64_t from, int64_t to, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_WOULD_CREATE_CYCLE
-#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_FOREST_WOULD_CREATE_CYCLE
-int8_t uniffi_gv_ffi_fn_method_gainzvillecore_forest_would_create_cycle(uint64_t ptr, RustBuffer entry_id, RustBuffer proposed_parent_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_FN_METHOD_GAINZVILLECORE_LIVE_READ
@@ -757,12 +737,6 @@ uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_forest_activity_template_r
     
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_ANCESTORS
-#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_ANCESTORS
-uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_forest_ancestors(void
-    
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_CHILDREN
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_CHILDREN
 uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_forest_children(void
@@ -775,27 +749,9 @@ uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_after_chil
     
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_POSITION_BETWEEN
-#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_POSITION_BETWEEN
-uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_between(void
-    
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_ROOTS
 #define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_ROOTS
 uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_ROOTS_IN
-#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_ROOTS_IN
-uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots_in(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_WOULD_CREATE_CYCLE
-#define UNIFFI_FFIDEF_UNIFFI_GV_FFI_CHECKSUM_METHOD_GAINZVILLECORE_FOREST_WOULD_CREATE_CYCLE
-uint16_t uniffi_gv_ffi_checksum_method_gainzvillecore_forest_would_create_cycle(void
     
 );
 #endif

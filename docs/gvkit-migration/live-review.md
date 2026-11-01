@@ -16,6 +16,30 @@ asserts `PRAGMA journal_mode == "delete"` under those defaults. This decides whi
 live today: **#1 is live now, and #2 becomes live as soon as #1 is fixed the obvious way (by turning on
 WAL).** Fix them together.
 
+## Outcome (S0, 2026-11-01)
+
+Fixed in S0: findings 1, 2, 3, 4, 6, 10, 11. Known and left alone: 5, 7, 8, 9.
+
+The fixes differ from what this review proposed in three ways:
+
+- **Finding 2 doesn't use the backing (owner's decision).** The review's fix, and the first version
+  of the handoff, treated SQL-backed and forest-backed first values differently, which would have
+  made `LiveStore` know each question's backing. Instead, a build never overwrites a first value read
+  during it. If its answer differs, it asks for one more build, whose snapshot is newer than every
+  such first value. A forest-backed first value that's behind therefore catches up one build later,
+  not in the same batch.
+- **Finding 2's epoch is taken when the read starts, not at insert.** Stamping at insert loses an
+  update. A value read before write W, then inserted during W's build, would be left alone, and W's
+  notification has already been used. A read that straddles a build's start is now read again.
+- **Finding 1 also needs `BEGIN IMMEDIATE` on writes.** Under WAL, a deferred transaction that reads
+  before it writes fails at once with `SQLITE_BUSY_SNAPSHOT` (517) if another writer committed in
+  between, without waiting for the busy timeout. `concurrent_writers_all_succeed` fails without it.
+
+Finding 4 needed no `appliedVersion` in `GvClient`. Rust hands batch v to the sink under the state
+lock, so a `subscribe` that returns v only has to apply what's queued up to v.
+
+## Findings
+
 | # | Severity | Status | One line |
 |---|----------|--------|----------|
 | 1 | High | CONFIRMED | A build's read transaction blocks every writer's commit for the whole build. A build longer than 5 s turns a write into "database is locked", and Swift drops that error with `try?`. |

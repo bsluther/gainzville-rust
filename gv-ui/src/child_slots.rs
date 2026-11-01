@@ -167,6 +167,15 @@ pub fn check_child_slots(
     Ok(())
 }
 
+/// The members a sets card shows: `sequence_id`'s children in order, or nothing if it doesn't
+/// display as sets. The same children, in the same order, as its `child_slots` entry slots.
+pub fn sets_members(forest: &Forest, sequence_id: Uuid) -> Vec<Entry> {
+    if !forest.entry(sequence_id).is_some_and(|e| e.display_as_sets) {
+        return Vec::new();
+    }
+    forest.children(sequence_id).into_iter().cloned().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,6 +205,39 @@ mod tests {
             }),
             false,
         )
+    }
+
+    #[test]
+    fn sets_members_are_the_entry_slots_of_a_sets_parent() {
+        let mut parent = entry(None, true);
+        parent.display_as_sets = true;
+        let first = FractionalIndex::default();
+        let second = FractionalIndex::new_after(&first);
+        let (a, b) = (child_of(parent.id, first), child_of(parent.id, second));
+        let forest = Forest::from(vec![parent.clone(), b.clone(), a.clone()]);
+
+        let members: Vec<Uuid> = sets_members(&forest, parent.id)
+            .iter()
+            .map(|e| e.id)
+            .collect();
+        let entry_slots: Vec<Uuid> = child_slots(&forest, parent.id)
+            .iter()
+            .filter_map(|slot| match slot {
+                ChildSlot::Entry { entry } => Some(entry.id),
+                ChildSlot::Drop { .. } => None,
+            })
+            .collect();
+        assert_eq!(members, vec![a.id, b.id]);
+        assert_eq!(members, entry_slots);
+    }
+
+    #[test]
+    fn sets_members_are_empty_unless_displayed_as_sets() {
+        let parent = entry(None, true);
+        let child = child_of(parent.id, FractionalIndex::default());
+        let forest = Forest::from(vec![parent.clone(), child]);
+        assert!(sets_members(&forest, parent.id).is_empty());
+        assert!(sets_members(&forest, Uuid::new_v4()).is_empty());
     }
 
     /// Strictly increasing fractional indices built by random insertions, the way the app

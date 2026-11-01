@@ -13,16 +13,24 @@
 //! Every answer is assumed to be local and fast: a query that needed the network wouldn't be in
 //! the snapshot and would hold up the whole version.
 //!
+//! First values are the one thing read outside a build, so they can be briefly out of step with
+//! the version they're tagged with, in either direction. The rule, which needs no knowledge of the
+//! backing: a first value never moves backwards, and a later build is already guaranteed to bring
+//! it in line. See `subscribe` and `swap_in`.
+//!
 //! This sits beside `QueryStore` (the older ping-and-pull cache) during migration; both listen to
 //! the same change broadcast.
 
 use std::{
     collections::HashMap,
+    future::Future,
+    panic::AssertUnwindSafe,
     sync::{Arc, Mutex, MutexGuard},
 };
 
+use futures_util::FutureExt;
 use gv_core::{
-    error::{DbErr, Result},
+    error::{DbErr, DomainError, Result},
     forest::Forest,
     queries::AllEntries,
     query_executor::{ForestExecutor, QueryExecutor},
@@ -39,6 +47,7 @@ use crate::query_store::next_change;
 
 pub type SubscriptionId = u64;
 pub type Version = u64;
+type BuildId = u64;
 
 /// What a subscription holds: the query's response, or why there isn't one. An enum rather than
 /// `Result` because uniffi can't carry a `Result` in a field.
@@ -90,13 +99,37 @@ pub struct Subscribed {
 }
 
 async fn answer(query: ClientQuery, forest: &Forest, conn: &mut SqliteConnection) -> LiveResult {
-    query
-        .execute(
-            &mut ForestExecutor::new(forest),
-            &mut SqliteQueryExecutor::new(conn),
-        )
-        .await
-        .into()
+    catching_panics(async {
+        query
+            .execute(
+                &mut ForestExecutor::new(forest),
+                &mut SqliteQueryExecutor::new(conn),
+            )
+            .await
+    })
+    .await
+}
+
+/// A question that panics (a broken forest invariant, say) fails like any other question: it
+/// must not take the version, or the refresh loop, down with it.
+async fn catching_panics(
+    answering: impl Future<Output = Result<ClientQueryResponse>>,
+) -> LiveResult {
+    match AssertUnwindSafe(answering).catch_unwind().await {
+        Ok(result) => result.into(),
+        Err(panic) => LiveResult::Failed {
+            message: panic_message(panic.as_ref()),
+        },
+    }
+}
+
+fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
+    let detail = panic
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("no message");
+    format!("panicked: {detail}")
 }
 
 // --- Store -----------------------------------------------------------------------------------
@@ -105,6 +138,9 @@ struct Sub {
     id: SubscriptionId,
     refcount: usize,
     value: LiveResult,
+    /// The build this subscription's first value was read during, if any. That build must not
+    /// overwrite it (see `swap_in`).
+    read_during: Option<BuildId>,
 }
 
 struct State {
@@ -115,8 +151,17 @@ struct State {
     forest: Option<Arc<Forest>>,
     subs: HashMap<ClientQuery, Sub>,
     next_id: SubscriptionId,
-    /// A version is being built.
-    building: bool,
+    /// The build in flight.
+    building: Option<BuildId>,
+    next_build: BuildId,
+}
+
+/// How builds have turned out, for `sync`.
+#[derive(Default)]
+struct BuildLog {
+    finished: u64,
+    /// Why the latest finished build failed, if it did.
+    last_error: Option<String>,
 }
 
 struct Inner {
@@ -125,18 +170,43 @@ struct Inner {
     sink: Mutex<Option<BatchSink>>,
     /// Asks the refresh loop for another version without a data change (see `sync`).
     rebuild: Notify,
-    /// The latest published version, for `sync`.
-    published: watch::Sender<Version>,
-    /// Lets a test subscribe at a known point in a build (see `pause_next_build`).
+    builds: watch::Sender<BuildLog>,
+    /// Lets a test act at a known point in a build (see `pause_build_seeing`).
     #[cfg(test)]
-    build_pause: Mutex<Option<BuildPause>>,
+    build_pause: Mutex<Option<(Uuid, Pause)>>,
+    /// Lets a test act between a first value's read and its insert.
+    #[cfg(test)]
+    subscribe_pause: Mutex<Option<Pause>>,
+    #[cfg(test)]
+    panic_next_build: std::sync::atomic::AtomicBool,
 }
 
 #[cfg(test)]
-struct BuildPause {
-    entry_id: Uuid,
+struct Pause {
     reached: tokio::sync::oneshot::Sender<()>,
     resume: tokio::sync::oneshot::Receiver<()>,
+}
+
+#[cfg(test)]
+impl Pause {
+    fn new() -> (
+        Self,
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (reached_tx, reached_rx) = tokio::sync::oneshot::channel();
+        let (resume_tx, resume_rx) = tokio::sync::oneshot::channel();
+        let pause = Pause {
+            reached: reached_tx,
+            resume: resume_rx,
+        };
+        (pause, reached_rx, resume_tx)
+    }
+
+    async fn wait(self) {
+        let _ = self.reached.send(());
+        let _ = self.resume.await;
+    }
 }
 
 #[derive(Clone)]
@@ -161,13 +231,18 @@ impl LiveStore {
                     forest: None,
                     subs: HashMap::new(),
                     next_id: 1,
-                    building: false,
+                    building: None,
+                    next_build: 1,
                 }),
                 sink: Mutex::new(None),
                 rebuild: Notify::new(),
-                published: watch::channel(0).0,
+                builds: watch::channel(BuildLog::default()).0,
                 #[cfg(test)]
                 build_pause: Mutex::new(None),
+                #[cfg(test)]
+                subscribe_pause: Mutex::new(None),
+                #[cfg(test)]
+                panic_next_build: std::sync::atomic::AtomicBool::new(false),
             }),
         };
         let loop_store = store.clone();
@@ -178,9 +253,7 @@ impl LiveStore {
                     alive = next_change(&mut changes) => if !alive { break },
                     _ = loop_store.inner.rebuild.notified() => {}
                 }
-                if let Err(e) = loop_store.publish_next_version().await {
-                    warn!(error = %e, "live: building a version failed; retrying on next change");
-                }
+                loop_store.publish_next_version().await;
             }
         });
         store
@@ -190,8 +263,10 @@ impl LiveStore {
         self.inner.state.lock().unwrap()
     }
 
-    /// Where batches go. Called on the refresh task, in version order, one call per version that
-    /// changed anything a subscriber holds.
+    /// Where batches go. Called in version order, one call per version that changed anything a
+    /// subscriber holds, and inside the step that publishes the version: no `subscribe` can report
+    /// a version before its batch has reached the sink. So the sink must only enqueue. It must not
+    /// block or call back into this store.
     pub fn set_batch_sink(&self, sink: BatchSink) {
         *self.inner.sink.lock().unwrap() = Some(sink);
     }
@@ -204,21 +279,35 @@ impl LiveStore {
         self.lock().subs.len()
     }
 
-    /// Wait until a version is published whose build started after this call, so it reflects
-    /// every write committed before the call (read-your-writes for forest-backed answers).
+    /// Load the forest now, so the first forest-backed `subscribe` doesn't. Meant to be spawned at
+    /// startup, off the thread that will subscribe.
+    pub async fn warm(&self) -> Result<()> {
+        self.latest_forest().await.map(|_| ())
+    }
+
+    /// Wait for a build that started after this call to finish, so a version it publishes reflects
+    /// every write committed before the call (read-your-writes for forest-backed answers). Fails
+    /// if that build failed.
     ///
     /// Not called on the write path today: `run_action` returns at commit and versions trail it.
     /// Calling this from `run_action` would give read-your-writes at the cost of making every
     /// write wait for a full rebuild.
-    pub async fn sync(&self) {
+    pub async fn sync(&self) -> Result<()> {
         let target = {
             let st = self.lock();
             // A build in flight may have read the database before the caller's write.
-            st.version + if st.building { 2 } else { 1 }
+            self.inner.builds.borrow().finished + if st.building.is_some() { 2 } else { 1 }
         };
         self.inner.rebuild.notify_one();
-        let mut rx = self.inner.published.subscribe();
-        let _ = rx.wait_for(|v| *v >= target).await;
+        let mut rx = self.inner.builds.subscribe();
+        let log = rx
+            .wait_for(|log| log.finished >= target)
+            .await
+            .map_err(|e| DomainError::Database(Box::new(e)))?;
+        match &log.last_error {
+            Some(error) => Err(DomainError::Database(error.clone().into())),
+            None => Ok(()),
+        }
     }
 
     /// Subscribe to a query and get its first value now.
@@ -226,13 +315,15 @@ impl LiveStore {
     /// Identical queries share one subscription id (refcounted, like `QueryStore`); the id is
     /// never reused after the last handle drops.
     ///
-    /// Coherence: the first value is answered against the latest published forest, and inserted
-    /// only if that version is still the latest (otherwise it's answered again), so it can't be
-    /// behind the returned version; a build in flight picks up the new subscription before
-    /// publishing (`build_and_swap`). A forest-backed first value belongs exactly to the returned
-    /// version. A SQL-backed one is read fresh and may already reflect a write whose version
-    /// hasn't been published yet, so one hook can briefly be a version ahead of the others until
-    /// the next batch.
+    /// Coherence: the first value is inserted only if it can be placed cleanly against builds,
+    /// otherwise it's read again. Either no build is in flight, so every later build's snapshot is
+    /// newer than this read; or the whole read happened during the build in flight, which then
+    /// leaves it alone (`swap_in`). A read that straddled a build's start would fit neither: it
+    /// might be older than the snapshot, or newer.
+    ///
+    /// So a first value can be briefly out of step with the returned version. Read "now" (SQL), it
+    /// can be ahead; read from the published forest, it can be behind a build in flight. It never
+    /// moves backwards, and it converges on the next build.
     pub async fn subscribe(&self, query: ClientQuery) -> Result<Subscribed> {
         {
             let mut st = self.lock();
@@ -243,14 +334,18 @@ impl LiveStore {
 
         let mut conn = self.inner.pool.acquire().await.db_err()?;
         loop {
+            let read_during = self.lock().building;
             let (forest, seen_version) = self.latest_forest().await?;
             let value = answer(query.clone(), &forest, &mut conn).await;
+            #[cfg(test)]
+            self.wait_at_subscribe_pause().await;
 
             let mut st = self.lock();
             if let Some(subscribed) = self.join_existing(&mut st, &query) {
                 return Ok(subscribed);
             }
-            if st.version != seen_version {
+            let straddled_a_build = st.building.is_some() && st.building != read_during;
+            if st.version != seen_version || straddled_a_build {
                 continue;
             }
             let id = st.next_id;
@@ -261,6 +356,7 @@ impl LiveStore {
                     id,
                     refcount: 1,
                     value: value.clone(),
+                    read_during,
                 },
             );
             return Ok(Subscribed {
@@ -305,7 +401,8 @@ impl LiveStore {
     }
 
     /// The latest published forest and the version it belongs to, loading it if nothing has been
-    /// published yet.
+    /// published yet. A forest loaded while a build is in flight is used but not published: it may
+    /// be newer than that build, and the build's result must win.
     async fn latest_forest(&self) -> Result<(Arc<Forest>, Version)> {
         {
             let st = self.lock();
@@ -319,42 +416,53 @@ impl LiveStore {
             .await?;
         let forest = Arc::new(Forest::from(entries));
         let mut st = self.lock();
+        if st.building.is_some() {
+            return Ok((forest, st.version));
+        }
         let forest = Arc::clone(st.forest.get_or_insert(forest));
         Ok((forest, st.version))
     }
 
-    /// Build the next version from one read transaction and publish what changed.
-    async fn publish_next_version(&self) -> Result<()> {
-        self.lock().building = true;
-        let batch = match self.build_and_swap().await {
-            Ok(batch) => batch,
-            Err(e) => {
-                self.lock().building = false;
-                return Err(e);
-            }
+    /// Build the next version from one read transaction and publish what changed. A failed or
+    /// panicking build publishes nothing; the next change (or `sync`) tries again.
+    async fn publish_next_version(&self) {
+        let build = {
+            let mut st = self.lock();
+            let build = st.next_build;
+            st.next_build += 1;
+            st.building = Some(build);
+            build
         };
-
-        if !batch.updates.is_empty() {
-            let sink = self.inner.sink.lock().unwrap().clone();
-            if let Some(sink) = sink {
-                sink(batch);
-            }
-        }
-        Ok(())
+        let error = match AssertUnwindSafe(self.build_and_swap(build))
+            .catch_unwind()
+            .await
+        {
+            Ok(Ok(())) => return,
+            Ok(Err(e)) => e.to_string(),
+            Err(panic) => panic_message(panic.as_ref()),
+        };
+        warn!(%error, "live: building a version failed; retrying on next change");
+        let mut st = self.lock();
+        st.building = None;
+        self.inner.builds.send_modify(|log| {
+            log.finished += 1;
+            log.last_error = Some(error);
+        });
     }
 
     /// Answer every subscription in one read transaction, so the forest and every SQL-backed
     /// answer see the same snapshot, then swap the results in. A subscription added while this
-    /// runs is answered too, so the whole batch belongs to the new version: the swap happens only
-    /// under a lock that finds nothing left to answer.
-    async fn build_and_swap(&self) -> Result<LiveBatch> {
+    /// runs is answered too: the swap happens only under a lock that finds nothing left to answer.
+    async fn build_and_swap(&self, build: BuildId) -> Result<()> {
         let mut tx = self.inner.pool.begin().await.db_err()?;
         let entries = SqliteQueryExecutor::new(&mut *tx)
             .execute(AllEntries)
             .await?;
         let forest = Arc::new(Forest::from(entries));
+        #[cfg(test)]
+        self.wait_at_build_pause(&forest).await;
         let mut values: HashMap<ClientQuery, LiveResult> = HashMap::new();
-        let batch = loop {
+        loop {
             let missing: Vec<ClientQuery> = {
                 let mut st = self.lock();
                 let missing: Vec<ClientQuery> = st
@@ -364,7 +472,8 @@ impl LiveStore {
                     .cloned()
                     .collect();
                 if missing.is_empty() {
-                    break self.swap_in(&mut st, forest, values);
+                    self.swap_in(&mut st, build, forest, values);
+                    break;
                 }
                 missing
             };
@@ -372,51 +481,72 @@ impl LiveStore {
                 let value = answer(query.clone(), &forest, &mut *tx).await;
                 values.insert(query, value);
             }
-            #[cfg(test)]
-            self.wait_at_build_pause(&forest).await;
-        };
+        }
         // Read-only, and the version is already published: nothing here can undo it.
         if let Err(e) = tx.rollback().await {
             warn!(error = %e, "live: ending a build's read transaction failed");
         }
-        Ok(batch)
+        Ok(())
     }
 
-    /// Publish a built version. Clears `building` in the same step as the version bump: `sync`
-    /// reads the two together.
+    /// Publish a built version and hand its batch to the sink, in one step. Marks the build
+    /// finished in that step too: `sync` reads the two together.
+    ///
+    /// A first value read during this build is left alone, because this build can't tell which is
+    /// newer: a SQL read may have seen a write after this build's snapshot, while a forest read
+    /// may be behind it. If they disagree it asks for one more build, whose snapshot is newer than
+    /// every such first value. Asking is sometimes redundant (the write behind a newer SQL read
+    /// has its own notification on the way) but it's only ever one build.
     fn swap_in(
         &self,
         st: &mut State,
+        build: BuildId,
         forest: Arc<Forest>,
         values: HashMap<ClientQuery, LiveResult>,
-    ) -> LiveBatch {
-        st.building = false;
+    ) {
+        st.building = None;
         st.version += 1;
         st.forest = Some(forest);
         let mut updates = Vec::new();
+        let mut reconcile = false;
         for (query, value) in values {
             // Skip keys whose last subscriber dropped while building.
-            if let Some(sub) = st.subs.get_mut(&query) {
-                if sub.value != value {
-                    sub.value = value.clone();
-                    updates.push(LiveUpdate {
-                        subscription_id: sub.id,
-                        value,
-                    });
-                }
+            let Some(sub) = st.subs.get_mut(&query) else {
+                continue;
+            };
+            if sub.value == value {
+                continue;
             }
+            if sub.read_during == Some(build) {
+                reconcile = true;
+                continue;
+            }
+            sub.value = value.clone();
+            updates.push(LiveUpdate {
+                subscription_id: sub.id,
+                value,
+            });
         }
-        self.inner.published.send_replace(st.version);
-        LiveBatch {
-            version: st.version,
-            updates,
+        if reconcile {
+            self.inner.rebuild.notify_one();
+        }
+        self.inner.builds.send_modify(|log| {
+            log.finished += 1;
+            log.last_error = None;
+        });
+        if !updates.is_empty() {
+            if let Some(sink) = self.inner.sink.lock().unwrap().as_ref() {
+                sink(LiveBatch {
+                    version: st.version,
+                    updates,
+                });
+            }
         }
     }
 
-    /// Pause the first build that can see `entry_id`, after it answers the subscriptions it
-    /// found. Earlier builds must run on: the paused read transaction would block the write
-    /// that creates the entry. Resolves `reached` when it gets there; it continues when `resume`
-    /// is sent to.
+    /// Pause the first build that can see `entry_id`, right after it has taken its snapshot and
+    /// before it answers anything. Resolves `reached` when it gets there; it continues when
+    /// `resume` is sent to.
     #[cfg(test)]
     fn pause_build_seeing(
         &self,
@@ -425,28 +555,47 @@ impl LiveStore {
         tokio::sync::oneshot::Receiver<()>,
         tokio::sync::oneshot::Sender<()>,
     ) {
-        let (reached_tx, reached_rx) = tokio::sync::oneshot::channel();
-        let (resume_tx, resume_rx) = tokio::sync::oneshot::channel();
-        *self.inner.build_pause.lock().unwrap() = Some(BuildPause {
-            entry_id,
-            reached: reached_tx,
-            resume: resume_rx,
-        });
-        (reached_rx, resume_tx)
+        let (pause, reached, resume) = Pause::new();
+        *self.inner.build_pause.lock().unwrap() = Some((entry_id, pause));
+        (reached, resume)
     }
 
     #[cfg(test)]
     async fn wait_at_build_pause(&self, forest: &Forest) {
+        use std::sync::atomic::Ordering;
+        if self.inner.panic_next_build.swap(false, Ordering::SeqCst) {
+            panic!("test build panic");
+        }
         let pause = {
             let mut pause = self.inner.build_pause.lock().unwrap();
             match &*pause {
-                Some(p) if forest.entry(p.entry_id).is_some() => pause.take(),
+                Some((entry_id, _)) if forest.entry(*entry_id).is_some() => pause.take(),
                 _ => None,
             }
         };
+        if let Some((_, pause)) = pause {
+            pause.wait().await;
+        }
+    }
+
+    /// Pause the next `subscribe` between reading its first value and inserting it.
+    #[cfg(test)]
+    fn pause_next_subscribe(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (pause, reached, resume) = Pause::new();
+        *self.inner.subscribe_pause.lock().unwrap() = Some(pause);
+        (reached, resume)
+    }
+
+    #[cfg(test)]
+    async fn wait_at_subscribe_pause(&self) {
+        let pause = self.inner.subscribe_pause.lock().unwrap().take();
         if let Some(pause) = pause {
-            let _ = pause.reached.send(());
-            let _ = pause.resume.await;
+            pause.wait().await;
         }
     }
 }
@@ -482,17 +631,24 @@ mod tests {
     use chrono::{DateTime, Duration, TimeZone, Utc};
     use gv_core::{
         DEFAULT_USER_ID,
-        actions::{CreateEntry, CreateUser, MoveEntry},
+        actions::{
+            AttachValue, CreateAttribute, CreateEntry, CreateUser, MoveEntry, UpdateEntryCompletion,
+        },
         io::SystemIo,
         models::{
+            activity::{Activity, ActivityName},
             entry::{Entry, Position, Temporal},
             user::User,
         },
-        queries::{FindAncestors, FindDescendants, FindEntryJoinById, RootEntriesInInterval},
+        queries::{
+            ActivityTemplateJoin, FindAncestors, FindDescendants, FindEntryJoinById,
+            RootEntriesInInterval,
+        },
+        std_lib::StandardLibrary,
     };
     use gv_ui::{ChildSlot, ChildSlots, SuggestedRootInsertionTime, WouldCreateCycle, child_slots};
     use std::collections::HashSet;
-    use tokio::sync::mpsc;
+    use tokio::sync::{mpsc, oneshot};
 
     fn day() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 10, 30, 0, 0, 0).unwrap()
@@ -546,6 +702,55 @@ mod tests {
             .expect("sink dropped")
     }
 
+    /// A file database opened the way the app opens one.
+    async fn file_pool() -> SqlitePool {
+        let path = std::env::temp_dir().join(format!("gv-live-{}.sqlite", Uuid::new_v4()));
+        let url = format!("sqlite://{}?mode=rwc", path.display());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(20)
+            .connect_with(crate::client::connect_options(&url).unwrap())
+            .await
+            .unwrap();
+        sqlx::migrate!("../gv-sql/sqlite/migrations")
+            .run(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    /// A store that wakes only when told, so a test controls exactly which builds run, and a
+    /// client to write with that doesn't wake it.
+    async fn quiet_store(pool: SqlitePool) -> (LiveStore, broadcast::Sender<()>, SqliteClient) {
+        let (changes, rx) = broadcast::channel(16);
+        let store = LiveStore::new(pool.clone(), rx);
+        let writer = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
+        writer
+            .run_action(CreateUser::from(User::default_user()).into())
+            .await
+            .unwrap();
+        (store, changes, writer)
+    }
+
+    async fn reach(reached: oneshot::Receiver<()>) {
+        tokio::time::timeout(std::time::Duration::from_secs(5), reached)
+            .await
+            .expect("timed out waiting for the pause point")
+            .unwrap();
+    }
+
+    fn find_entry(entry_id: Uuid) -> ClientQuery {
+        ClientQuery::FindEntryById(gv_core::queries::FindEntryById { entry_id })
+    }
+
+    fn found_id(value: &LiveResult) -> Option<Uuid> {
+        match value {
+            LiveResult::Response(ClientQueryResponse::FindEntryById(found)) => {
+                found.as_ref().map(|e| e.id)
+            }
+            other => panic!("unexpected value {other:?}"),
+        }
+    }
+
     fn day_roots() -> ClientQuery {
         ClientQuery::RootEntriesInInterval(RootEntriesInInterval {
             from: day(),
@@ -591,7 +796,7 @@ mod tests {
         let other = entry(None, at(8), false);
         create(&client, &parent).await;
         create(&client, &other).await;
-        store.sync().await;
+        store.sync().await.unwrap();
 
         // First values, synchronously. Forest-backed:
         let slots_sub = store.subscribe(child_slots_of(parent.id)).await.unwrap();
@@ -618,7 +823,7 @@ mod tests {
             .unwrap();
 
         // Drain any batches from versions racing the subscribes.
-        store.sync().await;
+        store.sync().await.unwrap();
         while rx.try_recv().is_ok() {}
         let before = store.version();
 
@@ -693,7 +898,7 @@ mod tests {
         assert_eq!(store.subscription_count(), 0);
         let before = store.version();
         create(&client, &entry(None, at(2), false)).await;
-        store.sync().await;
+        store.sync().await.unwrap();
         assert!(store.version() > before);
         assert!(rx.try_recv().is_err(), "no subscribers, no batch");
 
@@ -702,19 +907,19 @@ mod tests {
         assert_ne!(c.subscription_id, a.subscription_id);
     }
 
-    /// A subscription added mid-build is part of the version being built, so the whole batch
-    /// belongs to one version, with no follow-up rebuild needed.
-    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
-    async fn subscribing_mid_build_joins_the_batch(pool: SqlitePool) {
-        let (client, mut rx) = client(pool).await;
+    /// A forest-backed first value read during a build can be behind that build. It isn't
+    /// overwritten mid-flight; the disagreement asks for one more build, which brings it in line.
+    #[tokio::test]
+    async fn forest_first_value_behind_a_build_catches_up_on_the_next() {
+        let (client, mut rx) = client(file_pool().await).await;
         let store = client.live();
         let parent = entry(None, at(9), true);
         create(&client, &parent).await;
-        store.sync().await;
+        store.sync().await.unwrap();
         let existing = store.subscribe(child_slots_of(parent.id)).await.unwrap();
-        store.sync().await;
+        store.sync().await.unwrap();
 
-        // Hold the build for this write open, after it has answered `existing`.
+        // Hold the build for this write open, after it took its snapshot.
         let child = entry(
             Some(first_drop_position(&existing.value)),
             Temporal::None,
@@ -722,12 +927,12 @@ mod tests {
         );
         let (reached, resume) = store.pause_build_seeing(child.id);
         create(&client, &child).await;
-        reached.await.unwrap();
+        reach(reached).await;
         // Nothing can publish while the refresh task is paused.
         let before = store.version();
         while rx.try_recv().is_ok() {}
 
-        // Forest-backed: answered from the published forest, which doesn't have the child yet.
+        // Answered from the published forest, which doesn't have the child yet.
         let cycle = store
             .subscribe(ClientQuery::WouldCreateCycle(WouldCreateCycle {
                 entry_id: parent.id,
@@ -740,38 +945,324 @@ mod tests {
             cycle.value,
             LiveResult::Response(ClientQueryResponse::WouldCreateCycle(false))
         );
-        // SQL-backed: read fresh, so it's already ahead of the published version.
-        let descendants = store
-            .subscribe(ClientQuery::FindDescendants(FindDescendants {
-                entry_id: parent.id,
-            }))
-            .await
-            .unwrap();
-        assert!(matches!(
-            &descendants.value,
-            LiveResult::Response(ClientQueryResponse::FindDescendants(es))
-                if es.iter().any(|e| e.id == child.id)
-        ));
 
         resume.send(()).unwrap();
         let batch = next_batch(&mut rx).await;
         assert_eq!(batch.version, before + 1);
         let changed: HashSet<_> = batch.updates.iter().map(|u| u.subscription_id).collect();
+        assert_eq!(changed, HashSet::from([existing.subscription_id]));
+
+        let batch = next_batch(&mut rx).await;
+        assert_eq!(batch.version, before + 2);
+        assert_eq!(batch.updates.len(), 1);
+        assert_eq!(batch.updates[0].subscription_id, cycle.subscription_id);
         assert_eq!(
-            changed,
-            HashSet::from([existing.subscription_id, cycle.subscription_id]),
-            "the forest-backed subscriber moved with the batch; the SQL one had nothing to change"
-        );
-        let cycle_value = &batch
-            .updates
-            .iter()
-            .find(|u| u.subscription_id == cycle.subscription_id)
-            .unwrap()
-            .value;
-        assert_eq!(
-            *cycle_value,
+            batch.updates[0].value,
             LiveResult::Response(ClientQueryResponse::WouldCreateCycle(true))
         );
+    }
+
+    /// A SQL-backed first value read during a build can be ahead of that build's snapshot. Neither
+    /// that build nor the next may move it backwards. (Review finding 2.)
+    #[tokio::test]
+    async fn sql_first_value_ahead_of_a_build_never_moves_backwards() {
+        let (client, mut rx) = client(file_pool().await).await;
+        let store = client.live();
+        store.sync().await.unwrap();
+        let _keep = store.subscribe(day_roots()).await.unwrap();
+        let a = entry(None, at(1), false);
+        let w = entry(None, at(2), false);
+        let (reached, resume) = store.pause_build_seeing(a.id);
+        create(&client, &a).await;
+        reach(reached).await; // this build's snapshot has A, not W
+        create(&client, &w).await;
+
+        let before = store.version();
+        let sub = store.subscribe(find_entry(w.id)).await.unwrap();
+        assert_eq!(sub.version, before);
+        assert_eq!(found_id(&sub.value), Some(w.id));
+        while rx.try_recv().is_ok() {}
+
+        resume.send(()).unwrap();
+        store.sync().await.unwrap();
+        store.sync().await.unwrap();
+        assert!(store.version() >= before + 2, "W's own build has run");
+        while let Ok(batch) = rx.try_recv() {
+            assert!(
+                batch
+                    .updates
+                    .iter()
+                    .all(|u| u.subscription_id != sub.subscription_id),
+                "the first value already had W: nothing should touch it"
+            );
+        }
+        let again = store.subscribe(find_entry(w.id)).await.unwrap();
+        assert_eq!(found_id(&again.value), Some(w.id));
+    }
+
+    /// A first value read before a build started and inserted during it fits neither case: it
+    /// could miss a write that build already consumed the notification for, leaving it stale with
+    /// no follow-up. So it's read again.
+    #[tokio::test]
+    async fn first_value_straddling_a_build_start_is_read_again() {
+        let (store, changes, writer) = quiet_store(file_pool().await).await;
+        let w = entry(None, at(2), false);
+
+        let (read_done, finish_subscribe) = store.pause_next_subscribe();
+        let subscribing = tokio::spawn({
+            let store = store.clone();
+            let query = find_entry(w.id);
+            async move { store.subscribe(query).await.unwrap().value }
+        });
+        reach(read_done).await; // first read done, before W exists
+
+        create(&writer, &w).await;
+        let (reached, resume) = store.pause_build_seeing(w.id);
+        changes.send(()).unwrap();
+        reach(reached).await; // W's build has consumed W's notification
+        finish_subscribe.send(()).unwrap();
+
+        let value = subscribing.await.unwrap();
+        assert_eq!(found_id(&value), Some(w.id));
+        resume.send(()).unwrap();
+    }
+
+    /// A forest loaded while a build is in flight may be newer than that build, so it isn't
+    /// published: it would be replaced by an older forest at the next version.
+    #[tokio::test]
+    async fn forest_loaded_during_a_build_is_not_published() {
+        let (store, changes, writer) = quiet_store(file_pool().await).await;
+        let a = entry(None, at(1), true);
+        create(&writer, &a).await;
+
+        let (reached, resume) = store.pause_build_seeing(a.id);
+        changes.send(()).unwrap();
+        reach(reached).await;
+
+        let sub = store.subscribe(child_slots_of(a.id)).await.unwrap();
+        assert_eq!(
+            slots(&sub.value).len(),
+            1,
+            "answered from the loaded forest"
+        );
+        assert!(store.lock().forest.is_none());
+
+        resume.send(()).unwrap();
+        store.sync().await.unwrap();
+        assert!(store.lock().forest.is_some());
+    }
+
+    /// WAL: a write doesn't wait for a build's read transaction. (Review finding 1.)
+    #[tokio::test]
+    async fn writes_do_not_wait_for_a_build() {
+        let (client, _rx) = client(file_pool().await).await;
+        let store = client.live();
+        store.sync().await.unwrap();
+        let a = entry(None, at(1), false);
+        let (reached, resume) = store.pause_build_seeing(a.id);
+        create(&client, &a).await;
+        reach(reached).await;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            create(&client, &entry(None, at(2), false)),
+        )
+        .await
+        .expect("a write should not block on the build's read transaction");
+        resume.send(()).unwrap();
+    }
+
+    /// Writers that read before they write queue up rather than failing with "database is locked",
+    /// which is what deferred transactions do under WAL when they interleave.
+    #[tokio::test]
+    async fn concurrent_writers_all_succeed() {
+        let (client, _rx) = client(file_pool().await).await;
+        let target = entry(None, at(0), false);
+        create(&client, &target).await;
+        let mut writers = Vec::new();
+        for i in 0..128 {
+            let client = client.clone();
+            let entry_id = target.id;
+            writers.push(tokio::spawn(async move {
+                // Reads the entry to authorize the change, then writes.
+                let action = UpdateEntryCompletion {
+                    actor_id: DEFAULT_USER_ID,
+                    entry_id,
+                    is_complete: i % 2 == 0,
+                };
+                client.run_action(action.into()).await
+            }));
+        }
+        for writer in writers {
+            writer.await.unwrap().unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn init_opens_the_database_in_wal_with_full_sync() {
+        let path = std::env::temp_dir().join(format!("gv-live-{}.sqlite", Uuid::new_v4()));
+        let client = SqliteClient::init(&format!("sqlite://{}?mode=rwc", path.display()))
+            .await
+            .unwrap();
+        let mut conn = client.pool.acquire().await.unwrap();
+        let journal: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(journal, "wal");
+        let synchronous: i64 = sqlx::query_scalar("PRAGMA synchronous")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(synchronous, 2, "FULL");
+    }
+
+    /// The batch reaches the sink inside the step that publishes its version, so a `subscribe`
+    /// that reports version v knows batch v is already queued. (Review finding 4.)
+    #[tokio::test]
+    async fn batch_reaches_the_sink_before_its_version_is_visible() {
+        let (client, _rx) = client(file_pool().await).await;
+        let store = client.live();
+        let inner = Arc::downgrade(&store.inner);
+        let (held, mut held_rx) = mpsc::unbounded_channel();
+        store.set_batch_sink(Arc::new(move |_| {
+            let inner = inner.upgrade().unwrap();
+            let _ = held.send(inner.state.try_lock().is_err());
+        }));
+        let _keep = store.subscribe(day_roots()).await.unwrap();
+        create(&client, &entry(None, at(1), false)).await;
+        let state_was_locked =
+            tokio::time::timeout(std::time::Duration::from_secs(5), held_rx.recv())
+                .await
+                .unwrap()
+                .unwrap();
+        assert!(state_was_locked);
+    }
+
+    /// `sync` reports a failed build instead of waiting for a later success. (Review finding 3.)
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+    async fn sync_fails_when_the_build_fails(pool: SqlitePool) {
+        let (client, _rx) = client(pool.clone()).await;
+        let store = client.live();
+        store.sync().await.unwrap();
+        sqlx::query("ALTER TABLE entries RENAME TO entries_gone")
+            .execute(&pool)
+            .await
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), store.sync())
+            .await
+            .expect("sync should finish")
+            .expect_err("the build failed");
+        assert!(store.lock().building.is_none());
+        sqlx::query("ALTER TABLE entries_gone RENAME TO entries")
+            .execute(&pool)
+            .await
+            .unwrap();
+        store.sync().await.unwrap();
+    }
+
+    /// A panic fails one answer, not the version. (Review finding 6.)
+    #[tokio::test]
+    async fn panicking_answer_becomes_failed() {
+        let value = catching_panics(async { panic!("broken invariant") }).await;
+        assert_eq!(
+            value,
+            LiveResult::Failed {
+                message: "panicked: broken invariant".to_string()
+            }
+        );
+    }
+
+    /// A panic in a build doesn't end the refresh loop. (Review finding 6.)
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+    async fn refresh_loop_survives_a_panicking_build(pool: SqlitePool) {
+        let (store, changes, writer) = quiet_store(pool).await;
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        store.set_batch_sink(Arc::new(move |batch| {
+            let _ = tx.send(batch);
+        }));
+        let roots = store.subscribe(day_roots()).await.unwrap();
+        store
+            .inner
+            .panic_next_build
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        tokio::time::timeout(std::time::Duration::from_secs(5), store.sync())
+            .await
+            .unwrap()
+            .expect_err("the build panicked");
+        assert!(store.lock().building.is_none());
+
+        create(&writer, &entry(None, at(1), false)).await;
+        changes.send(()).unwrap();
+        let batch = next_batch(&mut rx).await;
+        assert_eq!(batch.updates[0].subscription_id, roots.subscription_id);
+    }
+
+    /// `ActivityTemplateJoin` follows the template root's attributes live.
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+    async fn activity_template_join_follows_an_attach(pool: SqlitePool) {
+        let (client, mut rx) = client(pool).await;
+        let store = client.live();
+        let attribute = StandardLibrary::attributes().remove(0);
+        client
+            .run_action(CreateAttribute::from(attribute.clone()).into())
+            .await
+            .unwrap();
+        let activity = Activity {
+            id: Uuid::new_v4(),
+            owner_id: DEFAULT_USER_ID,
+            name: ActivityName::parse("Squat".to_string()).unwrap(),
+            description: None,
+            source_activity_id: None,
+        };
+        let root_id = Uuid::new_v4();
+        client
+            .run_action(activity.into_create_activity(root_id).into())
+            .await
+            .unwrap();
+        store.sync().await.unwrap();
+
+        let join = store
+            .subscribe(ClientQuery::ActivityTemplateJoin(ActivityTemplateJoin {
+                activity_id: activity.id,
+            }))
+            .await
+            .unwrap();
+        let LiveResult::Response(ClientQueryResponse::ActivityTemplateJoin(Some(first))) =
+            &join.value
+        else {
+            panic!("expected a join, got {:?}", join.value)
+        };
+        assert_eq!(first.entry.id, root_id);
+        assert!(first.attributes.is_empty());
+        store.sync().await.unwrap();
+        while rx.try_recv().is_ok() {}
+
+        client
+            .run_action(
+                AttachValue {
+                    actor_id: DEFAULT_USER_ID,
+                    entry_id: root_id,
+                    attribute_id: attribute.id,
+                }
+                .into(),
+            )
+            .await
+            .unwrap();
+        let batch = next_batch(&mut rx).await;
+        let LiveResult::Response(ClientQueryResponse::ActivityTemplateJoin(Some(after))) =
+            &batch.updates[0].value
+        else {
+            panic!("expected a join")
+        };
+        assert_eq!(after.attributes.len(), 1);
+
+        let missing = store
+            .read(ClientQuery::ActivityTemplateJoin(ActivityTemplateJoin {
+                activity_id: Uuid::new_v4(),
+            }))
+            .await
+            .unwrap();
+        assert_eq!(missing, ClientQueryResponse::ActivityTemplateJoin(None));
     }
 
     /// `read` answers once against the latest version, from whichever backing the query has.
@@ -783,7 +1274,7 @@ mod tests {
         create(&client, &parent).await;
         // Forest-backed answers come from the latest *published* version, which trails a commit
         // until the refresh task builds it.
-        store.sync().await;
+        store.sync().await.unwrap();
         let slots_sub = store.subscribe(child_slots_of(parent.id)).await.unwrap();
         let child = entry(
             Some(first_drop_position(&slots_sub.value)),
@@ -791,7 +1282,7 @@ mod tests {
             true,
         );
         create(&client, &child).await;
-        store.sync().await;
+        store.sync().await.unwrap();
 
         let cycle = |entry_id, proposed_parent_id| {
             ClientQuery::WouldCreateCycle(WouldCreateCycle {
@@ -841,7 +1332,7 @@ mod tests {
             start: past_day + Duration::hours(9),
         };
         create(&client, &root).await;
-        store.sync().await;
+        store.sync().await.unwrap();
         assert_eq!(
             suggested().await,
             past_day + Duration::hours(9) + Duration::minutes(1)

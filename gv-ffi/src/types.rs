@@ -33,7 +33,7 @@ use gv_core::{
 };
 use gv_ui::{
     ChildSlot,
-    queries::{ChildSlots, SuggestedRootInsertionTime, WouldCreateCycle},
+    queries::{ChildSlots, SetsMembers, SuggestedRootInsertionTime, WouldCreateCycle},
 };
 use uuid::Uuid;
 
@@ -555,6 +555,18 @@ pub struct ChildSlots {
 }
 
 #[uniffi::remote(Record)]
+/// The members of a sets sequence, in order; none if it doesn't display as sets.
+pub struct SetsMembers {
+    pub sequence_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+/// An activity's template root with its activity and attributes.
+pub struct ActivityTemplateJoin {
+    pub activity_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
 /// Would moving `entry_id` under `proposed_parent_id` create a cycle? (Drag-time check.)
 pub struct WouldCreateCycle {
     pub entry_id: Uuid,
@@ -631,9 +643,11 @@ pub enum DomainQueryResponse {
 /// asked, never how it is answered.
 pub enum ClientQuery {
     ChildSlots(ChildSlots),
+    SetsMembers(SetsMembers),
     WouldCreateCycle(WouldCreateCycle),
     SuggestedRootInsertionTime(SuggestedRootInsertionTime),
     RootEntriesInInterval(RootEntriesInInterval),
+    ActivityTemplateJoin(ActivityTemplateJoin),
     FindEntryById(FindEntryById),
     FindEntryJoinById(FindEntryJoinById),
     FindAncestors(FindAncestors),
@@ -651,9 +665,11 @@ pub enum ClientQuery {
 #[uniffi::remote(Enum)]
 pub enum ClientQueryResponse {
     ChildSlots(Vec<ChildSlot>),
+    SetsMembers(Vec<Entry>),
     WouldCreateCycle(bool),
     SuggestedRootInsertionTime(DateTime<Utc>),
     RootEntriesInInterval(Vec<Entry>),
+    ActivityTemplateJoin(Option<EntryJoin>),
     FindEntryById(Option<Entry>),
     FindEntryJoinById(Option<EntryJoin>),
     FindAncestors(Vec<Uuid>),

@@ -14,17 +14,17 @@ use gv_core::{
         entry_join::EntryJoin,
     },
     queries::{
-        AllActivities, AllAttributes, DistinctTextValuesForAttribute, FindActivityById,
-        FindActivityTemplateRoot, FindAncestors, FindAttributeById, FindAttributePairsForEntry,
-        FindAttributesByOwner, FindDescendants, FindEntryById, FindEntryJoinById,
-        RootEntriesInInterval,
+        ActivityTemplateJoin, AllActivities, AllAttributes, DistinctTextValuesForAttribute,
+        FindActivityById, FindActivityTemplateRoot, FindAncestors, FindAttributeById,
+        FindAttributePairsForEntry, FindAttributesByOwner, FindDescendants, FindEntryById,
+        FindEntryJoinById, RootEntriesInInterval,
     },
     query_executor::{ForestExecutor, QueryExecutor},
 };
 use gv_sql::sqlite::SqliteQueryExecutor;
 use gv_ui::{
     ChildSlot,
-    queries::{ChildSlots, SuggestedRootInsertionTime, WouldCreateCycle},
+    queries::{ChildSlots, SetsMembers, SuggestedRootInsertionTime, WouldCreateCycle},
 };
 use uuid::Uuid;
 
@@ -34,10 +34,12 @@ use uuid::Uuid;
 pub enum ClientQuery {
     // Forest-backed
     ChildSlots(ChildSlots),
+    SetsMembers(SetsMembers),
     WouldCreateCycle(WouldCreateCycle),
     SuggestedRootInsertionTime(SuggestedRootInsertionTime),
     // Client-only (SQLite)
     RootEntriesInInterval(RootEntriesInInterval),
+    ActivityTemplateJoin(ActivityTemplateJoin),
     // Shared with the domain set
     FindEntryById(FindEntryById),
     FindEntryJoinById(FindEntryJoinById),
@@ -58,10 +60,12 @@ pub enum ClientQuery {
 pub enum ClientQueryResponse {
     // Forest-backed
     ChildSlots(Vec<ChildSlot>),
+    SetsMembers(Vec<Entry>),
     WouldCreateCycle(bool),
     SuggestedRootInsertionTime(DateTime<Utc>),
     // Client-only (SQLite)
     RootEntriesInInterval(Vec<Entry>),
+    ActivityTemplateJoin(Option<EntryJoin>),
     // Shared with the domain set
     FindEntryById(Option<Entry>),
     FindEntryJoinById(Option<EntryJoin>),
@@ -89,6 +93,7 @@ impl ClientQuery {
         match self {
             // Forest-backed
             ClientQuery::ChildSlots(q) => forest.execute(q).await.map(R::ChildSlots),
+            ClientQuery::SetsMembers(q) => forest.execute(q).await.map(R::SetsMembers),
             ClientQuery::WouldCreateCycle(q) => forest.execute(q).await.map(R::WouldCreateCycle),
             ClientQuery::SuggestedRootInsertionTime(q) => {
                 forest.execute(q).await.map(R::SuggestedRootInsertionTime)
@@ -96,6 +101,9 @@ impl ClientQuery {
             // SQLite-backed
             ClientQuery::RootEntriesInInterval(q) => {
                 sql.execute(q).await.map(R::RootEntriesInInterval)
+            }
+            ClientQuery::ActivityTemplateJoin(q) => {
+                sql.execute(q).await.map(R::ActivityTemplateJoin)
             }
             ClientQuery::FindEntryById(q) => sql.execute(q).await.map(R::FindEntryById),
             ClientQuery::FindEntryJoinById(q) => sql.execute(q).await.map(R::FindEntryJoinById),

@@ -902,11 +902,6 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     func forestActivityTemplateRoot(activityId: Uuid)  -> Entry?
     
     /**
-     * Ancestors of `entry_id` from immediate parent up to the root.
-     */
-    func forestAncestors(entryId: Uuid)  -> [Entry]
-    
-    /**
      * Direct children of `parent_id`, sorted by fractional index.
      */
     func forestChildren(parentId: Uuid)  -> [Entry]
@@ -919,27 +914,9 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     func forestPositionAfterChildren(parentId: Uuid)  -> Position?
     
     /**
-     * Position between two adjacent children of a sequence.
-     * `pred_id` and `succ_id` are the IDs of the predecessor and successor entries;
-     * pass `None` for the start or end of the child list.
-     * Caller must ensure `parent_id` refers to a sequence entry.
-     */
-    func forestPositionBetween(parentId: Uuid, predId: Uuid?, succId: Uuid?)  -> Position?
-    
-    /**
      * All root entries (no parent), sorted by canonical instant.
      */
     func forestRoots()  -> [Entry]
-    
-    /**
-     * Root entries whose canonical instant falls within `[from, to)`, sorted by time.
-     */
-    func forestRootsIn(from: UtcDateTime, to: UtcDateTime)  -> [Entry]
-    
-    /**
-     * Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
-     */
-    func forestWouldCreateCycle(entryId: Uuid, proposedParentId: Uuid)  -> Bool
     
     /**
      * Answer a live query once against the latest version, without subscribing.
@@ -966,7 +943,9 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     
     /**
      * Register the batch listener. Call once, before the first `live_subscribe`: batches are
-     * deltas on top of first values, so a subscriber that misses one stays stale.
+     * deltas on top of first values, so a subscriber that misses one stays stale. `on_batch` runs
+     * inside the step that publishes the version, so it must only enqueue: it must not block or
+     * call back into this object.
      */
     func setLiveListener(listener: LiveListener) 
     
@@ -1122,18 +1101,6 @@ open func forestActivityTemplateRoot(activityId: Uuid) -> Entry?  {
 }
     
     /**
-     * Ancestors of `entry_id` from immediate parent up to the root.
-     */
-open func forestAncestors(entryId: Uuid) -> [Entry]  {
-    return try!  FfiConverterSequenceTypeEntry.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_ancestors(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(entryId),$0
-    )
-})
-}
-    
-    /**
      * Direct children of `parent_id`, sorted by fractional index.
      */
 open func forestChildren(parentId: Uuid) -> [Entry]  {
@@ -1160,55 +1127,12 @@ open func forestPositionAfterChildren(parentId: Uuid) -> Position?  {
 }
     
     /**
-     * Position between two adjacent children of a sequence.
-     * `pred_id` and `succ_id` are the IDs of the predecessor and successor entries;
-     * pass `None` for the start or end of the child list.
-     * Caller must ensure `parent_id` refers to a sequence entry.
-     */
-open func forestPositionBetween(parentId: Uuid, predId: Uuid?, succId: Uuid?) -> Position?  {
-    return try!  FfiConverterOptionTypePosition.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_position_between(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(parentId),
-        FfiConverterOptionTypeUuid.lower(predId),
-        FfiConverterOptionTypeUuid.lower(succId),$0
-    )
-})
-}
-    
-    /**
      * All root entries (no parent), sorted by canonical instant.
      */
 open func forestRoots() -> [Entry]  {
     return try!  FfiConverterSequenceTypeEntry.lift(try! rustCall() {
     uniffi_gv_ffi_fn_method_gainzvillecore_forest_roots(
             self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-    /**
-     * Root entries whose canonical instant falls within `[from, to)`, sorted by time.
-     */
-open func forestRootsIn(from: UtcDateTime, to: UtcDateTime) -> [Entry]  {
-    return try!  FfiConverterSequenceTypeEntry.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_roots_in(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUtcDateTime_lower(from),
-        FfiConverterTypeUtcDateTime_lower(to),$0
-    )
-})
-}
-    
-    /**
-     * Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
-     */
-open func forestWouldCreateCycle(entryId: Uuid, proposedParentId: Uuid) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_would_create_cycle(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(entryId),
-        FfiConverterTypeUuid_lower(proposedParentId),$0
     )
 })
 }
@@ -1265,7 +1189,9 @@ open func runAction(action: Action)throws   {try rustCallWithError(FfiConverterT
     
     /**
      * Register the batch listener. Call once, before the first `live_subscribe`: batches are
-     * deltas on top of first values, so a subscriber that misses one stays stale.
+     * deltas on top of first values, so a subscriber that misses one stays stale. `on_batch` runs
+     * inside the step that publishes the version, so it must only enqueue: it must not block or
+     * call back into this object.
      */
 open func setLiveListener(listener: LiveListener)  {try! rustCall() {
     uniffi_gv_ffi_fn_method_gainzvillecore_set_live_listener(
@@ -1369,8 +1295,9 @@ public func FfiConverterTypeGainzvilleCore_lower(_ value: GainzvilleCore) -> UIn
 
 /**
  * Swift implements this to receive live-query batches: one call per data version, carrying only
- * the subscriptions whose result changed. Called on a Rust thread, in version order; the
- * implementation should hop to the main actor and apply the whole batch in one step.
+ * the subscriptions whose result changed. Called on a Rust thread, in version order, before any
+ * `live_subscribe` can report that version. The implementation must only enqueue the batch, then
+ * apply it on the main actor in one step.
  */
 public protocol LiveListener: AnyObject, Sendable {
     
@@ -1379,8 +1306,9 @@ public protocol LiveListener: AnyObject, Sendable {
 }
 /**
  * Swift implements this to receive live-query batches: one call per data version, carrying only
- * the subscriptions whose result changed. Called on a Rust thread, in version order; the
- * implementation should hop to the main actor and apply the whole batch in one step.
+ * the subscriptions whose result changed. Called on a Rust thread, in version order, before any
+ * `live_subscribe` can report that version. The implementation must only enqueue the batch, then
+ * apply it on the main actor in one step.
  */
 open class LiveListenerImpl: LiveListener, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1736,6 +1664,59 @@ public func FfiConverterTypeActivity_lift(_ buf: RustBuffer) throws -> Activity 
 #endif
 public func FfiConverterTypeActivity_lower(_ value: Activity) -> RustBuffer {
     return FfiConverterTypeActivity.lower(value)
+}
+
+
+/**
+ * An activity's template root with its activity and attributes.
+ */
+public struct ActivityTemplateJoin: Equatable, Hashable {
+    public var activityId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(activityId: Uuid) {
+        self.activityId = activityId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ActivityTemplateJoin: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeActivityTemplateJoin: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ActivityTemplateJoin {
+        return
+            try ActivityTemplateJoin(
+                activityId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ActivityTemplateJoin, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.activityId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActivityTemplateJoin_lift(_ buf: RustBuffer) throws -> ActivityTemplateJoin {
+    return try FfiConverterTypeActivityTemplateJoin.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActivityTemplateJoin_lower(_ value: ActivityTemplateJoin) -> RustBuffer {
+    return FfiConverterTypeActivityTemplateJoin.lower(value)
 }
 
 
@@ -4803,6 +4784,59 @@ public func FfiConverterTypeSelectConfig_lower(_ value: SelectConfig) -> RustBuf
 
 
 /**
+ * The members of a sets sequence, in order; none if it doesn't display as sets.
+ */
+public struct SetsMembers: Equatable, Hashable {
+    public var sequenceId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sequenceId: Uuid) {
+        self.sequenceId = sequenceId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SetsMembers: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSetsMembers: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SetsMembers {
+        return
+            try SetsMembers(
+                sequenceId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SetsMembers, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.sequenceId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSetsMembers_lift(_ buf: RustBuffer) throws -> SetsMembers {
+    return try FfiConverterTypeSetsMembers.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSetsMembers_lower(_ value: SetsMembers) -> RustBuffer {
+    return FfiConverterTypeSetsMembers.lower(value)
+}
+
+
+/**
  * When a new log root on the day starting at `day_start` should be placed: now if the
  * day is today, else just after the day's last root, else noon.
  *
@@ -6177,11 +6211,15 @@ public enum ClientQuery: Equatable, Hashable {
     
     case childSlots(ChildSlots
     )
+    case setsMembers(SetsMembers
+    )
     case wouldCreateCycle(WouldCreateCycle
     )
     case suggestedRootInsertionTime(SuggestedRootInsertionTime
     )
     case rootEntriesInInterval(RootEntriesInInterval
+    )
+    case activityTemplateJoin(ActivityTemplateJoin
     )
     case findEntryById(FindEntryById
     )
@@ -6231,49 +6269,55 @@ public struct FfiConverterTypeClientQuery: FfiConverterRustBuffer {
         case 1: return .childSlots(try FfiConverterTypeChildSlots.read(from: &buf)
         )
         
-        case 2: return .wouldCreateCycle(try FfiConverterTypeWouldCreateCycle.read(from: &buf)
+        case 2: return .setsMembers(try FfiConverterTypeSetsMembers.read(from: &buf)
         )
         
-        case 3: return .suggestedRootInsertionTime(try FfiConverterTypeSuggestedRootInsertionTime.read(from: &buf)
+        case 3: return .wouldCreateCycle(try FfiConverterTypeWouldCreateCycle.read(from: &buf)
         )
         
-        case 4: return .rootEntriesInInterval(try FfiConverterTypeRootEntriesInInterval.read(from: &buf)
+        case 4: return .suggestedRootInsertionTime(try FfiConverterTypeSuggestedRootInsertionTime.read(from: &buf)
         )
         
-        case 5: return .findEntryById(try FfiConverterTypeFindEntryById.read(from: &buf)
+        case 5: return .rootEntriesInInterval(try FfiConverterTypeRootEntriesInInterval.read(from: &buf)
         )
         
-        case 6: return .findEntryJoinById(try FfiConverterTypeFindEntryJoinById.read(from: &buf)
+        case 6: return .activityTemplateJoin(try FfiConverterTypeActivityTemplateJoin.read(from: &buf)
         )
         
-        case 7: return .findAncestors(try FfiConverterTypeFindAncestors.read(from: &buf)
+        case 7: return .findEntryById(try FfiConverterTypeFindEntryById.read(from: &buf)
         )
         
-        case 8: return .findDescendants(try FfiConverterTypeFindDescendants.read(from: &buf)
+        case 8: return .findEntryJoinById(try FfiConverterTypeFindEntryJoinById.read(from: &buf)
         )
         
-        case 9: return .findActivityById(try FfiConverterTypeFindActivityById.read(from: &buf)
+        case 9: return .findAncestors(try FfiConverterTypeFindAncestors.read(from: &buf)
         )
         
-        case 10: return .allActivities(try FfiConverterTypeAllActivities.read(from: &buf)
+        case 10: return .findDescendants(try FfiConverterTypeFindDescendants.read(from: &buf)
         )
         
-        case 11: return .findActivityTemplateRoot(try FfiConverterTypeFindActivityTemplateRoot.read(from: &buf)
+        case 11: return .findActivityById(try FfiConverterTypeFindActivityById.read(from: &buf)
         )
         
-        case 12: return .findAttributeById(try FfiConverterTypeFindAttributeById.read(from: &buf)
+        case 12: return .allActivities(try FfiConverterTypeAllActivities.read(from: &buf)
         )
         
-        case 13: return .allAttributes(try FfiConverterTypeAllAttributes.read(from: &buf)
+        case 13: return .findActivityTemplateRoot(try FfiConverterTypeFindActivityTemplateRoot.read(from: &buf)
         )
         
-        case 14: return .findAttributesByOwner(try FfiConverterTypeFindAttributesByOwner.read(from: &buf)
+        case 14: return .findAttributeById(try FfiConverterTypeFindAttributeById.read(from: &buf)
         )
         
-        case 15: return .findAttributePairsForEntry(try FfiConverterTypeFindAttributePairsForEntry.read(from: &buf)
+        case 15: return .allAttributes(try FfiConverterTypeAllAttributes.read(from: &buf)
         )
         
-        case 16: return .distinctTextValuesForAttribute(try FfiConverterTypeDistinctTextValuesForAttribute.read(from: &buf)
+        case 16: return .findAttributesByOwner(try FfiConverterTypeFindAttributesByOwner.read(from: &buf)
+        )
+        
+        case 17: return .findAttributePairsForEntry(try FfiConverterTypeFindAttributePairsForEntry.read(from: &buf)
+        )
+        
+        case 18: return .distinctTextValuesForAttribute(try FfiConverterTypeDistinctTextValuesForAttribute.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6289,78 +6333,88 @@ public struct FfiConverterTypeClientQuery: FfiConverterRustBuffer {
             FfiConverterTypeChildSlots.write(v1, into: &buf)
             
         
-        case let .wouldCreateCycle(v1):
+        case let .setsMembers(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterTypeSetsMembers.write(v1, into: &buf)
+            
+        
+        case let .wouldCreateCycle(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterTypeWouldCreateCycle.write(v1, into: &buf)
             
         
         case let .suggestedRootInsertionTime(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeSuggestedRootInsertionTime.write(v1, into: &buf)
             
         
         case let .rootEntriesInInterval(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeRootEntriesInInterval.write(v1, into: &buf)
             
         
+        case let .activityTemplateJoin(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeActivityTemplateJoin.write(v1, into: &buf)
+            
+        
         case let .findEntryById(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeFindEntryById.write(v1, into: &buf)
             
         
         case let .findEntryJoinById(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeFindEntryJoinById.write(v1, into: &buf)
             
         
         case let .findAncestors(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeFindAncestors.write(v1, into: &buf)
             
         
         case let .findDescendants(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeFindDescendants.write(v1, into: &buf)
             
         
         case let .findActivityById(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeFindActivityById.write(v1, into: &buf)
             
         
         case let .allActivities(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeAllActivities.write(v1, into: &buf)
             
         
         case let .findActivityTemplateRoot(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeFindActivityTemplateRoot.write(v1, into: &buf)
             
         
         case let .findAttributeById(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeFindAttributeById.write(v1, into: &buf)
             
         
         case let .allAttributes(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(15))
             FfiConverterTypeAllAttributes.write(v1, into: &buf)
             
         
         case let .findAttributesByOwner(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(16))
             FfiConverterTypeFindAttributesByOwner.write(v1, into: &buf)
             
         
         case let .findAttributePairsForEntry(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(17))
             FfiConverterTypeFindAttributePairsForEntry.write(v1, into: &buf)
             
         
         case let .distinctTextValuesForAttribute(v1):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(18))
             FfiConverterTypeDistinctTextValuesForAttribute.write(v1, into: &buf)
             
         }
@@ -6390,11 +6444,15 @@ public enum ClientQueryResponse: Equatable, Hashable {
     
     case childSlots([ChildSlot]
     )
+    case setsMembers([Entry]
+    )
     case wouldCreateCycle(Bool
     )
     case suggestedRootInsertionTime(UtcDateTime
     )
     case rootEntriesInInterval([Entry]
+    )
+    case activityTemplateJoin(EntryJoin?
     )
     case findEntryById(Entry?
     )
@@ -6444,49 +6502,55 @@ public struct FfiConverterTypeClientQueryResponse: FfiConverterRustBuffer {
         case 1: return .childSlots(try FfiConverterSequenceTypeChildSlot.read(from: &buf)
         )
         
-        case 2: return .wouldCreateCycle(try FfiConverterBool.read(from: &buf)
+        case 2: return .setsMembers(try FfiConverterSequenceTypeEntry.read(from: &buf)
         )
         
-        case 3: return .suggestedRootInsertionTime(try FfiConverterTypeUtcDateTime.read(from: &buf)
+        case 3: return .wouldCreateCycle(try FfiConverterBool.read(from: &buf)
         )
         
-        case 4: return .rootEntriesInInterval(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        case 4: return .suggestedRootInsertionTime(try FfiConverterTypeUtcDateTime.read(from: &buf)
         )
         
-        case 5: return .findEntryById(try FfiConverterOptionTypeEntry.read(from: &buf)
+        case 5: return .rootEntriesInInterval(try FfiConverterSequenceTypeEntry.read(from: &buf)
         )
         
-        case 6: return .findEntryJoinById(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
+        case 6: return .activityTemplateJoin(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
         )
         
-        case 7: return .findAncestors(try FfiConverterSequenceTypeUuid.read(from: &buf)
+        case 7: return .findEntryById(try FfiConverterOptionTypeEntry.read(from: &buf)
         )
         
-        case 8: return .findDescendants(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        case 8: return .findEntryJoinById(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
         )
         
-        case 9: return .findActivityById(try FfiConverterOptionTypeActivity.read(from: &buf)
+        case 9: return .findAncestors(try FfiConverterSequenceTypeUuid.read(from: &buf)
         )
         
-        case 10: return .allActivities(try FfiConverterSequenceTypeActivity.read(from: &buf)
+        case 10: return .findDescendants(try FfiConverterSequenceTypeEntry.read(from: &buf)
         )
         
-        case 11: return .findActivityTemplateRoot(try FfiConverterOptionTypeEntry.read(from: &buf)
+        case 11: return .findActivityById(try FfiConverterOptionTypeActivity.read(from: &buf)
         )
         
-        case 12: return .findAttributeById(try FfiConverterOptionTypeAttribute.read(from: &buf)
+        case 12: return .allActivities(try FfiConverterSequenceTypeActivity.read(from: &buf)
         )
         
-        case 13: return .allAttributes(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        case 13: return .findActivityTemplateRoot(try FfiConverterOptionTypeEntry.read(from: &buf)
         )
         
-        case 14: return .findAttributesByOwner(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        case 14: return .findAttributeById(try FfiConverterOptionTypeAttribute.read(from: &buf)
         )
         
-        case 15: return .findAttributePairsForEntry(try FfiConverterSequenceTypeAttributePair.read(from: &buf)
+        case 15: return .allAttributes(try FfiConverterSequenceTypeAttribute.read(from: &buf)
         )
         
-        case 16: return .distinctTextValuesForAttribute(try FfiConverterSequenceString.read(from: &buf)
+        case 16: return .findAttributesByOwner(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        )
+        
+        case 17: return .findAttributePairsForEntry(try FfiConverterSequenceTypeAttributePair.read(from: &buf)
+        )
+        
+        case 18: return .distinctTextValuesForAttribute(try FfiConverterSequenceString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6502,78 +6566,88 @@ public struct FfiConverterTypeClientQueryResponse: FfiConverterRustBuffer {
             FfiConverterSequenceTypeChildSlot.write(v1, into: &buf)
             
         
-        case let .wouldCreateCycle(v1):
+        case let .setsMembers(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .wouldCreateCycle(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterBool.write(v1, into: &buf)
             
         
         case let .suggestedRootInsertionTime(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeUtcDateTime.write(v1, into: &buf)
             
         
         case let .rootEntriesInInterval(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterSequenceTypeEntry.write(v1, into: &buf)
             
         
-        case let .findEntryById(v1):
-            writeInt(&buf, Int32(5))
-            FfiConverterOptionTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .findEntryJoinById(v1):
+        case let .activityTemplateJoin(v1):
             writeInt(&buf, Int32(6))
             FfiConverterOptionTypeEntryJoin.write(v1, into: &buf)
             
         
-        case let .findAncestors(v1):
+        case let .findEntryById(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterOptionTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .findEntryJoinById(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterOptionTypeEntryJoin.write(v1, into: &buf)
+            
+        
+        case let .findAncestors(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterSequenceTypeUuid.write(v1, into: &buf)
             
         
         case let .findDescendants(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(10))
             FfiConverterSequenceTypeEntry.write(v1, into: &buf)
             
         
         case let .findActivityById(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(11))
             FfiConverterOptionTypeActivity.write(v1, into: &buf)
             
         
         case let .allActivities(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(12))
             FfiConverterSequenceTypeActivity.write(v1, into: &buf)
             
         
         case let .findActivityTemplateRoot(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(13))
             FfiConverterOptionTypeEntry.write(v1, into: &buf)
             
         
         case let .findAttributeById(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(14))
             FfiConverterOptionTypeAttribute.write(v1, into: &buf)
             
         
         case let .allAttributes(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(15))
             FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
             
         
         case let .findAttributesByOwner(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(16))
             FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
             
         
         case let .findAttributePairsForEntry(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(17))
             FfiConverterSequenceTypeAttributePair.write(v1, into: &buf)
             
         
         case let .distinctTextValuesForAttribute(v1):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(18))
             FfiConverterSequenceString.write(v1, into: &buf)
             
         }
@@ -9301,25 +9375,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_activity_template_root() != 27869) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_ancestors() != 33280) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_children() != 12500) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_after_children() != 62380) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_between() != 25130) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots() != 1668) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots_in() != 17182) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_would_create_cycle() != 50699) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_live_read() != 2144) {
@@ -9334,7 +9396,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_run_action() != 9666) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_set_live_listener() != 43491) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_set_live_listener() != 10945) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_start_background_ticker() != 12896) {

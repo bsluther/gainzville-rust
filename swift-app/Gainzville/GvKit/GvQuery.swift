@@ -17,6 +17,7 @@
 //    value (`$slots.error`), in the style of SQLiteData's `@FetchAll`.
 //  - A query that depends on view @State (not on init inputs) can't be
 //    declared in init; use `$value.load(_:)` from `.task(id:)` / `.onChange`.
+//  - `@Observable` models hold a `GvLiveQuery` directly instead (see below).
 //
 
 import Foundation
@@ -42,19 +43,21 @@ enum GvQueryError: Error {
 @propertyWrapper
 struct GvQuery<Value>: DynamicProperty {
     private let key: GvKey<Value>
-    @State private var box: GvQueryBox<Value>
+    @State private var box: GvLiveQuery<Value>
     @Environment(\.gvClient) private var client
 
     init(_ key: GvKey<Value>) {
         self.key = key
         // Evaluated on every view init but kept only the first time (State
         // semantics); creating a box is cheap and does not subscribe.
-        _box = State(initialValue: GvQueryBox(defaultValue: key.defaultValue))
+        _box = State(initialValue: GvLiveQuery(key, client: nil))
     }
 
     var wrappedValue: Value { box.value }
 
-    var projectedValue: GvQueryState<Value> { GvQueryState(box: box) }
+    /// The box itself, for its side channels and controls: `$value.error`,
+    /// `$value.load(_:)`.
+    var projectedValue: GvLiveQuery<Value> { box }
 
     // DynamicProperty.update() isn't guaranteed main-actor isolated by the SDK,
     // but SwiftUI calls it on the main thread before each body.
@@ -65,32 +68,28 @@ struct GvQuery<Value>: DynamicProperty {
     }
 }
 
-/// The hook's side channels and imperative controls (`$value`).
-@MainActor
-struct GvQueryState<Value> {
-    fileprivate let box: GvQueryBox<Value>
-
-    var error: (any Error)? { box.error }
-
-    /// Re-target to `key` imperatively (for a query that depends on view
-    /// @State). Holds until the declared query changes.
-    func load(_ key: GvKey<Value>) { box.load(key) }
-}
-
-/// Per-hook storage, kept alive by SwiftUI `@State`. Holds the Rust handle.
+/// One live query: the value and its side channels, kept current by batches.
+/// `@GvQuery` is the adapter for views. An `@Observable` model that needs a live
+/// query holds one of these directly, built from a `GvClient` passed down by its
+/// view. (An `ObservableObject` wouldn't forward a nested box's changes.)
+///
+/// Creating a box is cheap: it subscribes on the first read of `value` or `error`.
+/// Releasing it releases the Rust handle.
 ///
 /// Observation is driven by a single `revision` counter rather than by the
-/// stored value itself: the value is set inside `update()` on (re)subscribe,
-/// and mutating observed state while SwiftUI is updating the view would
-/// schedule a redundant re-render (or warn). `update()` writes without
-/// bumping; batch deliveries and `load` bump.
+/// stored value itself: the value is set inside `update()` or a first read while
+/// SwiftUI is rendering, and mutating observed state then would schedule a
+/// redundant re-render (or warn). Those paths write without bumping; batch
+/// deliveries and `load` bump.
+@MainActor
 @Observable
-final class GvQueryBox<Value>: GvSubscriber {
+final class GvLiveQuery<Value>: GvSubscriber {
     private var revision: UInt64 = 0
 
     @ObservationIgnored private var storage: Value
     @ObservationIgnored private var storedError: (any Error)?
     @ObservationIgnored private var decode: ((ClientQueryResponse) -> Value?)?
+    @ObservationIgnored private var pending: GvKey<Value>?
     @ObservationIgnored private var hasDeclared = false
     @ObservationIgnored private var declaredQuery: ClientQuery?
     @ObservationIgnored private var activeQuery: ClientQuery?
@@ -99,18 +98,29 @@ final class GvQueryBox<Value>: GvSubscriber {
     @ObservationIgnored private var version: UInt64 = 0
     @ObservationIgnored private weak var client: GvClient?
 
-    init(defaultValue: Value) {
-        storage = defaultValue
+    /// With a `nil` client (previews) the value stays the key's default.
+    init(_ key: GvKey<Value>, client: GvClient?) {
+        storage = key.defaultValue
+        pending = key
+        self.client = client
     }
 
+    /// The key's default until the first answer, then the last good value.
     var value: Value {
         _ = revision
+        startIfPending()
         return storage
     }
 
     var error: (any Error)? {
         _ = revision
+        startIfPending()
         return storedError
+    }
+
+    private func startIfPending() {
+        guard let key = pending, let client else { return }
+        start(key, client: client)
     }
 
     /// Called from `update()`: follow the declared query.
@@ -122,15 +132,20 @@ final class GvQueryBox<Value>: GvSubscriber {
         start(key, client: client)
     }
 
-    /// Imperative re-target; see `GvQueryState.load`.
+    /// Re-target to `key` imperatively (for a query that depends on view @State
+    /// or model state). Holds until the declared query changes, if there is one.
     func load(_ key: GvKey<Value>) {
-        guard let client else { return }  // not bound yet; the declared query applies
-        guard key.query != activeQuery else { return }
+        guard let client else {
+            pending = key  // not bound yet: applies once a client arrives, unless one is declared
+            return
+        }
+        guard pending != nil || key.query != activeQuery else { return }
         start(key, client: client)
         revision &+= 1
     }
 
     private func start(_ key: GvKey<Value>, client: GvClient) {
+        pending = nil
         self.client = client
         activeQuery = key.query
         decode = key.decode

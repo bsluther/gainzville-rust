@@ -1,6 +1,5 @@
 use std::sync::{Arc, LazyLock, Once};
 
-use chrono::{DateTime, Utc};
 use generation::{Arbitrary, Opts, SimulationContext};
 use gv_client::{
     client::SqliteClient,
@@ -16,7 +15,7 @@ use gv_core::{
     std_lib::StandardLibrary,
 };
 use tokio::runtime::Runtime;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::types::FfiError;
@@ -51,8 +50,9 @@ pub trait CoreListener: Send + Sync {
 }
 
 /// Swift implements this to receive live-query batches: one call per data version, carrying only
-/// the subscriptions whose result changed. Called on a Rust thread, in version order; the
-/// implementation should hop to the main actor and apply the whole batch in one step.
+/// the subscriptions whose result changed. Called on a Rust thread, in version order, before any
+/// `live_subscribe` can report that version. The implementation must only enqueue the batch, then
+/// apply it on the main actor in one step.
 #[uniffi::export(with_foreign)]
 pub trait LiveListener: Send + Sync {
     fn on_batch(&self, batch: LiveBatch);
@@ -113,6 +113,14 @@ impl GainzvilleCore {
             }
         });
 
+        // Load the forest off the caller's thread, so the first forest-backed subscribe doesn't.
+        let live = client.live().clone();
+        RUNTIME.spawn(async move {
+            if let Err(e) = live.warm().await {
+                warn!(error = %e, "warming the live forest failed");
+            }
+        });
+
         Ok(Arc::new(GainzvilleCore { client, actor_id }))
     }
 
@@ -163,7 +171,9 @@ impl GainzvilleCore {
     // -------------------------------------------------------------------------
 
     /// Register the batch listener. Call once, before the first `live_subscribe`: batches are
-    /// deltas on top of first values, so a subscriber that misses one stays stale.
+    /// deltas on top of first values, so a subscriber that misses one stays stale. `on_batch` runs
+    /// inside the step that publishes the version, so it must only enqueue: it must not block or
+    /// call back into this object.
     pub fn set_live_listener(&self, listener: Arc<dyn LiveListener>) {
         self.client
             .live()
@@ -229,13 +239,6 @@ impl GainzvilleCore {
             .unwrap_or_default()
     }
 
-    /// Root entries whose canonical instant falls within `[from, to)`, sorted by time.
-    pub fn forest_roots_in(&self, from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<Entry> {
-        self.forest_snapshot()
-            .map(|f| f.roots_in(from..to).into_iter().cloned().collect())
-            .unwrap_or_default()
-    }
-
     /// Direct children of `parent_id`, sorted by fractional index.
     pub fn forest_children(&self, parent_id: Uuid) -> Vec<Entry> {
         self.forest_snapshot()
@@ -252,40 +255,12 @@ impl GainzvilleCore {
             .and_then(|f| f.template_root(activity_id).cloned())
     }
 
-    /// Ancestors of `entry_id` from immediate parent up to the root.
-    pub fn forest_ancestors(&self, entry_id: Uuid) -> Vec<Entry> {
-        self.forest_snapshot()
-            .map(|f| f.ancestors(entry_id).into_iter().cloned().collect())
-            .unwrap_or_default()
-    }
-
     /// Position immediately after the last child of `parent_id`.
     /// Returns `None` if the parent is not found in the current snapshot.
     /// Caller must ensure `parent_id` refers to a sequence entry.
     pub fn forest_position_after_children(&self, parent_id: Uuid) -> Option<Position> {
         self.forest_snapshot()
             .and_then(|f| f.position_after_children(parent_id))
-    }
-
-    /// Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
-    pub fn forest_would_create_cycle(&self, entry_id: Uuid, proposed_parent_id: Uuid) -> bool {
-        self.forest_snapshot()
-            .map(|f| f.would_create_cycle(entry_id, proposed_parent_id))
-            .unwrap_or(false)
-    }
-
-    /// Position between two adjacent children of a sequence.
-    /// `pred_id` and `succ_id` are the IDs of the predecessor and successor entries;
-    /// pass `None` for the start or end of the child list.
-    /// Caller must ensure `parent_id` refers to a sequence entry.
-    pub fn forest_position_between(
-        &self,
-        parent_id: Uuid,
-        pred_id: Option<Uuid>,
-        succ_id: Option<Uuid>,
-    ) -> Option<Position> {
-        self.forest_snapshot()
-            .and_then(|f| f.position_between(parent_id, pred_id, succ_id))
     }
 
     // (Suggested root insertion time moved to the client set:
@@ -393,6 +368,7 @@ impl GainzvilleCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use gv_core::{DEFAULT_USER_ID, models::entry::Temporal};
     use gv_ui::{ChildSlot, ChildSlots, WouldCreateCycle};
     use std::sync::Mutex;
@@ -448,7 +424,7 @@ mod tests {
         core.run_action(CreateEntry::from(parent.clone()).into())
             .unwrap();
         // Versions trail commits; wait for one that includes the parent.
-        RUNTIME.block_on(core.client.live().sync());
+        RUNTIME.block_on(core.client.live().sync()).unwrap();
 
         let sub = core
             .live_subscribe(ClientQuery::ChildSlots(ChildSlots {

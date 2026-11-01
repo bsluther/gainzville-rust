@@ -14,8 +14,14 @@
 //  one main-actor step, so every hook moves to the new version together and
 //  SwiftUI renders the screen once, never a mix of two versions.
 //
+//  Batches go through one queue. Rust enqueues batch v before any `subscribe`
+//  can report version v, so a `subscribe` that returns v first applies what's
+//  queued up to v: a newly mounted hook is never ahead of its neighbours because
+//  of a batch still in flight.
+//
 
 import Foundation
+import os
 import SwiftUI
 
 // MARK: - Listener
@@ -33,6 +39,27 @@ final class GvBatchListener: LiveListener {
 
     nonisolated func onBatch(batch: LiveBatch) {
         handler(batch)
+    }
+}
+
+/// Batches waiting for the main actor, in version order. The listener pushes on
+/// a Rust thread, so this never blocks for longer than an array operation.
+private nonisolated final class GvBatchQueue: @unchecked Sendable {
+    private let lock = NSLock()
+    private var batches: [LiveBatch] = []
+
+    func push(_ batch: LiveBatch) {
+        lock.withLock { batches.append(batch) }
+    }
+
+    /// Remove and return the queued batches, oldest first, up to `version` if given.
+    func take(upTo version: UInt64? = nil) -> [LiveBatch] {
+        lock.withLock {
+            let count = version.map { v in batches.prefix { $0.version <= v }.count } ?? batches.count
+            let taken = Array(batches.prefix(count))
+            batches.removeFirst(count)
+            return taken
+        }
     }
 }
 
@@ -57,13 +84,17 @@ final class GvClient {
     /// (Rust refcounts them), so several hooks can sit behind one id.
     private var routes: [UInt64: [WeakSubscriber]] = [:]
     private var subscribesSincePrune = 0
+    private let queue = GvBatchQueue()
+    private let signposter = OSSignposter(subsystem: "com.gainzville", category: "GvKit")
 
     /// Registers the batch listener; create this before any hook subscribes.
     init(core: GainzvilleCore) {
         self.core = core
+        let queue = queue
         let listener = GvBatchListener { [weak self] batch in
+            queue.push(batch)
             Task { @MainActor [weak self] in
-                self?.apply(batch)
+                self?.applyQueued()
             }
         }
         core.setLiveListener(listener: listener)
@@ -73,7 +104,16 @@ final class GvClient {
     /// Returns the first value; the caller keeps `handle` alive for as long as
     /// it wants updates (releasing it unsubscribes).
     func subscribe(_ query: ClientQuery, for subscriber: any GvSubscriber) throws -> LiveSubscribed {
-        let subscribed = try core.liveSubscribe(query: query)
+        // Runs SQL or a forest walk on the main thread: signposted so a slow
+        // question shows up in Points of Interest and Hangs traces.
+        let subscribed = try signposter.withIntervalSignpost(
+            "liveSubscribe",
+            id: signposter.makeSignpostID(),
+            "\(String(describing: query), privacy: .public)"
+        ) {
+            try core.liveSubscribe(query: query)
+        }
+        applyQueued(upTo: subscribed.version)
         routes[subscribed.subscriptionId, default: []].append(WeakSubscriber(subscriber: subscriber))
         subscribesSincePrune += 1
         if subscribesSincePrune >= 64 { prune() }
@@ -85,6 +125,12 @@ final class GvClient {
     /// default if the query is inactive or fails.
     func read<Value>(_ key: GvKey<Value>) -> Value {
         core.read(key)
+    }
+
+    private func applyQueued(upTo version: UInt64? = nil) {
+        for batch in queue.take(upTo: version) {
+            apply(batch)
+        }
     }
 
     /// Apply one batch in one main-actor step.

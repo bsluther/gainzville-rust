@@ -260,6 +260,23 @@ impl QueryExecutor<FindActivityTemplateRoot> for SqliteQueryExecutor<'_> {
     }
 }
 
+impl QueryExecutor<ActivityTemplateJoin> for SqliteQueryExecutor<'_> {
+    async fn execute(
+        &mut self,
+        query: ActivityTemplateJoin,
+    ) -> Result<<ActivityTemplateJoin as Query>::Response> {
+        let root = self
+            .execute(FindActivityTemplateRoot {
+                activity_id: query.activity_id,
+            })
+            .await?;
+        match root {
+            Some(root) => self.execute(FindEntryJoinById { entry_id: root.id }).await,
+            None => Ok(None),
+        }
+    }
+}
+
 impl QueryExecutor<FindEntryById> for SqliteQueryExecutor<'_> {
     async fn execute(
         &mut self,

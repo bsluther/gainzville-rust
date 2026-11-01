@@ -8,12 +8,13 @@
 use chrono::{DateTime, Utc};
 use gv_core::{
     error::Result,
+    models::entry::Entry,
     queries::Query,
     query_executor::{ForestExecutor, QueryExecutor},
 };
 use uuid::Uuid;
 
-use crate::child_slots::{ChildSlot, child_slots};
+use crate::child_slots::{ChildSlot, child_slots, sets_members};
 
 /// A sequence's children laid out for display: drop, child, drop, ..., drop
 /// (`gv_ui::child_slots`).
@@ -29,6 +30,23 @@ impl Query for ChildSlots {
 impl QueryExecutor<ChildSlots> for ForestExecutor<'_> {
     async fn execute(&mut self, query: ChildSlots) -> Result<Vec<ChildSlot>> {
         Ok(child_slots(self.forest, query.parent_id))
+    }
+}
+
+/// The members of a sets sequence, in order: its children if it displays as sets, otherwise none.
+/// Screen-shaped so it can grow what the sets card needs, such as set numbering.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SetsMembers {
+    pub sequence_id: Uuid,
+}
+
+impl Query for SetsMembers {
+    type Response = Vec<Entry>;
+}
+
+impl QueryExecutor<SetsMembers> for ForestExecutor<'_> {
+    async fn execute(&mut self, query: SetsMembers) -> Result<Vec<Entry>> {
+        Ok(sets_members(self.forest, query.sequence_id))
     }
 }
 

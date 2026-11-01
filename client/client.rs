@@ -16,8 +16,11 @@ use gv_core::{
     query_executor::QueryExecutor,
     std_lib::StandardLibrary,
 };
-use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
-use std::{sync::Arc, time::Duration};
+use sqlx::{
+    SqlitePool,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
+};
+use std::{str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
@@ -26,6 +29,19 @@ use gv_sql::sqlite::{SqliteDeltaExecutor, SqliteQueryExecutor};
 
 use crate::live::LiveStore;
 use crate::query_store::{QueryStore, QuerySubscription};
+
+/// How the app opens its database.
+///
+/// WAL, so a live-query build's read transaction neither blocks writers nor is blocked by them.
+/// `synchronous = FULL` rather than WAL's usual `NORMAL`: a commit survives a power cut, at a small
+/// cost per write. WAL also means `-wal` and `-shm` files sit beside the database, so a backup must
+/// go through SQLite (the backup API or `VACUUM INTO`), not copy the file.
+pub(crate) fn connect_options(db_path: &str) -> Result<SqliteConnectOptions> {
+    Ok(SqliteConnectOptions::from_str(db_path)
+        .db_err()?
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Full))
+}
 
 #[derive(Debug, Clone)]
 pub struct SqliteClient {
@@ -41,7 +57,7 @@ impl SqliteClient {
     pub async fn init(db_path: &str) -> Result<Self> {
         let pool = SqlitePoolOptions::new()
             .max_connections(20)
-            .connect(db_path)
+            .connect_with(connect_options(db_path)?)
             .await
             .db_err()?;
         let client = Self::from_pool(pool, Arc::new(SystemIo::default()));
@@ -158,8 +174,10 @@ impl SqliteClient {
             self.change_transmitter.receiver_count()
         );
 
-        // Begin Sqlite transaction.
-        let mut tx = self.pool.begin().await.db_err()?;
+        // Begin Sqlite transaction. IMMEDIATE takes the write lock now: a mutator reads before it
+        // writes, and under WAL a deferred transaction that started reading before another writer
+        // committed fails at its first write, without waiting for the busy timeout.
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.db_err()?;
         let mut executor = SqliteQueryExecutor::new(&mut tx);
 
         // Create mutation.
@@ -449,7 +467,7 @@ pub mod tests {
             .await
             .unwrap();
         // Settle: no build in flight may mask the lag.
-        client.live().sync().await;
+        client.live().sync().await.unwrap();
 
         flood_change_channel(&client);
         client
