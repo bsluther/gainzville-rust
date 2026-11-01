@@ -324,8 +324,8 @@ listed deletions. "Screen" means everything rendered under one navigation destin
 - **Double work until S5.** QueryStore re-runs `AllEntries` (held by `subscribeForest`) on every write,
   alongside LiveStore's rebuild (skeptic). It goes away in S5, so don't linger between S1 and S5.
 - **Per-version cost.** Each write re-answers every mounted `FindEntryJoinById` in SQL (architecture
-  concern; `ChildSlot` carries `Entry`, not the join). That's accepted; the join map / delta forest
-  is deferred.
+  concern; `ChildSlot` carries `Entry`, not the join). That's accepted. Whether to answer
+  joins from memory at all (a full in-memory model) is an open question.
 - **`ObservableObject` holding `@Observable` boxes** won't re-render. S4 must convert the VM (§3b).
 - **Swift 5 language mode.** Main-actor assumptions (`MainActor.assumeIsolated` in GvQuery.swift:62)
   are only checked at runtime, so watch the console in debug runs.
@@ -362,5 +362,5 @@ listed deletions. "Screen" means everything rendered under one navigation destin
 ## Follow-ups (not in this migration)
 
 `settle()` (§3a option 2) if needed, then version-at-commit with sync; hook loading state; in-memory
-preview client; intent-level writes, which replace `GvWrites.swift` bodies; forest → full in-memory
-model and join map; GvKit as a Swift package with internal FFI types.
+preview client; intent-level writes, which replace `GvWrites.swift` bodies; an open question,
+whether to hold all data in memory (full model, join map); GvKit as a Swift package with internal FFI types.

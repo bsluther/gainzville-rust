@@ -37,8 +37,9 @@ are useful too.
   wrapped in GvKit write helpers, so the intent phase changes helper bodies rather than call sites.
 - **Read-your-writes isn't added now.** Today's path doesn't have it either, and every
   write-then-expect site is eventual by design. See plan §3a.
-- **Generalizing the forest into a full in-memory model is deferred**, and so are the join map and
-  version-at-commit.
+- **Whether to hold all of the user's data in memory is an open question, not planned work.** Today
+  the forest holds entries only. Growing it into a full model (values, attributes, activities, a join
+  map) is undecided; don't build toward it or assume it. Version-at-commit is also out of scope.
 - **Keep the `Query` trait and the hand-written flat sets. No macros.** The owner reviews this code by
   reading it.
 - **Hooks are for fetching data.** View models stay only where there's real UI logic, and they hold
