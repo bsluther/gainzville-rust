@@ -61,8 +61,11 @@ probe tests into the suite as regression tests where they apply.
 **Must fix:**
 
 1. **Finding 1 (High): a build's read transaction blocks writers.** SQLite runs in rollback-journal
-   mode, because sqlx doesn't set `journal_mode`. Open the pool in WAL with `synchronous = NORMAL`
-   (`SqliteConnectOptions::journal_mode(Wal)`) where `SqliteClient::init` builds the pool.
+   mode, because sqlx doesn't set `journal_mode`. Open the pool in WAL
+   (`SqliteConnectOptions::journal_mode(Wal)`) where `SqliteClient::init` builds the pool. **Use
+   `synchronous = FULL`, not the usual WAL pairing `NORMAL`.** This is the owner's decision:
+   durability matters for dogfooding, and FULL loses nothing on a power cut, at a small per-write
+   cost.
 2. **Finding 2 (High once WAL is on): a SQL-backed first value can regress at the next version.**
    **Ship this together with #1.** The review offers three fixes. Prefer (a), build epochs, because
    (b) adds main-thread latency on subscribe. Also stop `latest_forest()` from publishing a forest it
