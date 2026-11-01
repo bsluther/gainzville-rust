@@ -71,6 +71,22 @@ probe tests into the suite as regression tests where they apply.
    **Ship this together with #1.** The review offers three fixes. Prefer (a), build epochs, because
    (b) adds main-thread latency on subscribe. Also stop `latest_forest()` from publishing a forest it
    loaded itself while a build is in flight.
+
+   **The rule to implement against: a first value may be briefly out of step, but it never moves
+   backwards, and something already guarantees a follow-up that brings it in line.** A first value
+   is read outside any build, so it can be out of step in either direction, depending on the
+   backing:
+
+   - **SQL-backed** first values are read "now", so they can be *ahead* of the published version.
+     The write they already reflect sends its own change notification, so a reconciling build is
+     coming. A build that was already in flight when the subscription joined must **not** answer it
+     or overwrite it, because that build's snapshot is older. That is the bug.
+   - **Forest-backed** first values come from the last published forest, so they can be *behind* a
+     build in flight. That build **must** answer them, which is why `build_and_swap` loops to pick up
+     mid-build subscribers. Keep that for forest-backed questions.
+
+   Add a regression test for each direction. Probe 1 in `live-review-probes.diff` covers the SQL
+   case.
 3. **Finding 6 (Medium-Low): a panic in a build kills the refresh loop for good.** Catch unwinds per
    answer and map them to `LiveResult::Failed`, or supervise and restart the loop.
 
