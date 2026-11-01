@@ -18,13 +18,12 @@ registration (for the reactive iOS cache model).
 | `DeltaExecutor<M>` / `AnyDeltaExecutor` | `core/src/delta_executor.rs` | Write-path traits (core, DB-agnostic); apply a `Delta<M>` / `AnyDelta` |
 | `SqliteDeltaExecutor` / `PostgresDeltaExecutor` | `gv-sql/sqlite/delta_executor.rs`, `gv-sql/postgres/delta_executor.rs` | Write `AnyDelta` to DB inside the current transaction |
 | `Query` trait | `core/src/queries.rs` | Binds each question type to its `Response` type at compile time |
-| `define_questions!` macro | `core/src/queries.rs` | Declares questions: struct + derives + `Query` impl |
-| `define_query_set!` macro | `core/src/queries.rs` | Generates a flat query set: enum, response enum, `From`s, executor bound, dispatch |
+| `define_query!` macro | `core/src/queries.rs` | Declares one `gv-core` question: struct + derives + `Query` impl |
 | `DomainQuery` set | `core/src/queries.rs` | What mutators and the server ask; answerable by SQLite and Postgres |
 | `ClientQuery` set | `client/queries.rs` | What Swift subscribes to / reads; forest- or SQLite-backed per member |
 | `QueryExecutor<Q>` | `core/src/query_executor.rs` | One impl per (executor, query) pair; SQL lives in `gv-sql` |
 | `ForestQuery` | `core/src/query_executor.rs` | Answer a question from the in-memory `Forest` (sync, pure) |
-| `DomainQueryExecutor` | generated in `core/src/queries.rs` | Bound for the domain set; single bound used by all mutator signatures |
+| `DomainQueryExecutor` | `core/src/query_executor.rs` | Bound for the domain set; single bound used by all mutator signatures |
 | `SqliteQueryExecutor` | `gv-sql/sqlite/query_executor.rs` | Holds `&mut SqliteConnection`; domain set + client-only SQL questions |
 | `PostgresQueryExecutor` | `gv-sql/postgres/query_executor.rs` | Domain set only (`$1/$2` placeholders, `ANY($1)`) |
 
@@ -182,14 +181,16 @@ pub trait Query: Clone + Debug + PartialEq + Eq + Hash + Send + 'static {
 A query is a question with a typed answer; nothing about SQL. The trait is **not sealed**:
 questions answered from the forest that return UI types (`gv_ui::ChildSlots` → `Vec<ChildSlot>`)
 are defined in `gv-ui`, which `gv-core` can't depend on. The `Eq + Hash` bounds are there because
-a question is a subscription key. Questions are declared with `define_questions!`:
+a question is a subscription key. In `gv-core`, `define_query!` writes the struct, its derives, and
+its `Query` impl:
 
 ```rust
-define_questions! {
-    pub struct FindEntryById { pub entry_id: Uuid } => Option<Entry>;
-    pub struct AllActivities; => Vec<Activity>;
+define_query! {
+    pub struct FindEntryById { pub entry_id: Uuid } => Option<Entry>
 }
 ```
+
+`gv-ui` writes the same three things out by hand.
 
 **Where a question is defined** is set by who must see it: questions answered by a SQL executor
 live in `gv-core` (`gv-sql` depends only on `gv-core`), including SQLite-only client questions such
@@ -197,42 +198,52 @@ as `RootEntriesInInterval`; forest-answered questions with UI answers live in `g
 
 ### Query sets: grouped by who can answer them
 
-Each context declares the flat set of questions it accepts, with `define_query_set!`. A question
-several contexts need is a plain variant in each set; **no set wraps another**.
+Each context has a hand-written, flat enum of the questions it accepts. A question several contexts
+need is a plain variant in each set; **no set wraps another**.
 
 ```rust
 // core/src/queries.rs — mutators and the server; every member answerable by SQLite and Postgres
-define_query_set! {
-    pub enum DomainQuery -> DomainQueryResponse {
-        executor DomainQueryExecutor { IsEmailRegistered, FindEntryById, /* ... */ }
-    }
+pub enum DomainQuery {
+    IsEmailRegistered(IsEmailRegistered),
+    FindEntryById(FindEntryById),
+    // ...
 }
 
-// client/queries.rs — what Swift sees; the group is the whole backing decision
-define_query_set! {
-    pub enum ClientQuery -> ClientQueryResponse {
-        forest { ChildSlots, WouldCreateCycle, SuggestedRootInsertionTime }
-        executor ClientSqlExecutor { RootEntriesInInterval, FindEntryJoinById, /* ... */ }
-    }
+// client/queries.rs — what Swift sees
+pub enum ClientQuery {
+    ChildSlots(ChildSlots),
+    RootEntriesInInterval(RootEntriesInInterval),
+    FindEntryJoinById(FindEntryJoinById),
+    // ...
 }
 ```
 
-The macro generates the set enum, a response enum (`Variant(<Q as Query>::Response)`),
-`From<Q> for Set`, the executor bound (a blanket-implemented alias for `QueryExecutor<Q>` over the
-executor members), and dispatch: `DomainQuery::execute(&mut impl DomainQueryExecutor)`;
-`ClientQuery::{is_forest_backed, answer_from_forest, execute}`. A question that isn't in the domain
-set needs no Postgres impl, and the compiler asks for an impl only where a set requires one.
+Each set comes with a response enum (one variant per member, holding that question's answer type),
+`From<Q> for Set`, and dispatch:
 
-**FFI from the same source.** Each list is wrapped in an exported x-macro (`core_questions!`,
-`ui_questions!`, `domain_query_set!`, `client_query_set!`) that calls a callback with the
-declaration. The defining crate passes `define_questions` / `define_query_set`; `gv-ffi` passes
-callbacks that emit `#[uniffi::remote(Record)]` per question and `#[uniffi::remote(Enum)]` per set,
-so `gv-core` never depends on uniffi. Hand-written in `gv-ffi` still: answer types (domain records,
-`ChildSlot`) and the live envelope (`LiveValue`, `LiveBatch`).
+- `DomainQuery::execute(&mut impl DomainQueryExecutor)`. `DomainQueryExecutor` is a
+  blanket-implemented alias for `QueryExecutor<Q>` over the members.
+- `ClientQuery::is_forest_backed` is **the backing decision**, a plain `match` over every member.
+  `ClientQuery::answer_from_forest` and `ClientQuery::execute` (on `SqliteQueryExecutor`) dispatch
+  to the answers and return `None` for a member with the other backing. Neither has a wildcard arm,
+  so the compiler points at each one when a member is added, but nothing checks that the three
+  agree on a member's backing.
 
-Adding a question: define it (`core_questions!` or `ui_questions!`), answer it (`QueryExecutor`
-impl per required backend, or `ForestQuery`), list it in each set that accepts it, add a GvKit key,
-regenerate bindings.
+A question that isn't in the domain set needs no Postgres impl, and the compiler asks for an impl
+only where a set requires one.
+
+**FFI.** `gv-ffi/src/types.rs` restates each question as `#[uniffi::remote(Record)]` and each set
+and response as `#[uniffi::remote(Enum)]`, the same way it restates actions, so `gv-core` never
+depends on uniffi. A mismatch with the Rust definition is a compile error; doc comments are copied
+by hand, because they are what reaches Swift.
+
+Adding a client question touches these places:
+
+1. Define it: `core/src/queries.rs` or `gv-ui/src/queries.rs`.
+2. Answer it: `ForestQuery` in `gv-ui`, or `QueryExecutor` in `gv-sql` for each required backend.
+3. Add it to the set in `client/queries.rs`: the enum, the response, `From`, and all three matches.
+4. Declare it to the FFI in `gv-ffi/src/types.rs`: the record, and both `ClientQuery` enums.
+5. Regenerate the bindings, then add a GvKit key in `swift-app/Gainzville/GvKit/`.
 
 ### `QueryExecutor<Q>` Trait (`core/src/query_executor.rs`)
 
@@ -246,7 +257,7 @@ pub trait QueryExecutor<Q: Query> {
 The trait is **generic over the query type** rather than having a single generic method. This is
 intentional — see Design Decisions below.
 
-`DomainQueryExecutor` (generated by `define_query_set!`) is a marker trait alias combining
+`DomainQueryExecutor` is a marker trait alias combining
 `QueryExecutor<Q>` for every member of the domain set. Mutators take
 `executor: &mut impl DomainQueryExecutor` — a single clean bound that means "can answer any domain
 question".
@@ -305,8 +316,8 @@ silently returning the wrong type.
 
 `Query` used to be sealed so every query lived in `gv-core` and one `AnyQuery` enum stayed
 complete. That forced every executor to answer every question (a client-only question needed a
-dead Postgres impl) and kept UI-typed questions out. Now exhaustiveness comes from each generated
-set enum, "where can it run" from each set's executor bound, and the dependency graph keeps the
+dead Postgres impl) and kept UI-typed questions out. Now exhaustiveness comes from each set enum,
+"where can it run" from the executor each set dispatches to, and the dependency graph keeps the
 domain set to `gv-core` questions. Trade-off: any crate can define a question; review happens at
 set membership instead.
 
@@ -378,6 +389,7 @@ into that variant at the call site, so core never names a sqlx type. See
 
 **FFI dispatch**: Swift sends `ClientQuery` values to the live store (`live_subscribe`,
 `live_read`); the legacy `QueryStore` path still takes `DomainQuery` until it is retired screen by
-screen. Dispatch is generated per set, so it is exhaustive by construction. See
+screen. Each set's dispatch is a `match` with no wildcard arm, so the compiler checks it covers every
+member. See
 [Boundary transformations](./boundary-transformations.md) for how domain types cross the FFI
 boundary as uniffi remote types.
