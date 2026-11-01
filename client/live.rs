@@ -36,6 +36,9 @@ pub type SubscriptionId = u64;
 pub type Version = u64;
 
 /// What a subscription holds: the answer, or why there isn't one.
+/// BSL: not sure I love the "Answer" name but i can see the reason, we have a response (called that
+///     to not be confused with a Result), now we're differentiate it from a Response. But in this
+///     case we really do just have a monadic result type with a string error type, no?
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiveValue {
     Answer(ClientQueryResponse),
@@ -55,6 +58,9 @@ pub struct LiveUpdate {
 
 /// Everything that changed in one version. Batches are deltas: a consumer applies them in order
 /// on top of the first values `subscribe` returned.
+/// BSL: deltas is perhaps a little misleading, if a LiveUpdate just holds a valuef or an id, then
+///     they're only deltas in the sense that they're new values for a given key. They're not fine
+///     grained deltas like "remove this entry from that child list" or some such, right?
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiveBatch {
     pub version: Version,
