@@ -52,6 +52,23 @@ consumers do that work ad hoc: each view model is its own small piece of infrast
    *Mechanism:* the backing is chosen per kind of query.
 3. **Every answer a view sees comes from one version of the data.** A screen never mixes two moments.
    *Mechanism:* batched, versioned push (modeled on `watch_all`).
+
+   *Refinement (2026-11-01): first values may be briefly out of step, but never move backwards.*
+   Batches are consistent, but a hook's first value is read outside any build, so a newly mounted
+   view can sit one version off its neighbours for a moment. The rule:
+
+   - **Never backwards.** A first value is never replaced by an older one.
+   - **A follow-up is already guaranteed** to bring it in line, and it depends on the backing:
+     - *SQL-backed* first values can be **ahead**, because they're read "now". The write they
+       already reflect triggers its own build, and a build already in flight must not overwrite
+       them with its older snapshot.
+     - *Forest-backed* first values can be **behind**, because they come from the last published
+       forest. The build in flight answers them.
+
+   This came out of the [LiveStore review](#livestore-review-2026-11-01) (finding 2). Answering a
+   question from the published in-memory version would make its first value exact. That's one
+   argument to weigh if holding all data in memory is ever considered, which is an open question,
+   not a plan.
 4. **Answers arrive as values; views don't fetch them.** A view holds its answers and re-renders only
    when one of them changes. It never calls into Rust while rendering.
    *Mechanism:* push into per-subscription boxes; `subscribe` returns the first value.
@@ -451,6 +468,37 @@ Findings:
   - no state-during-update warnings.
 - *Separate from the spike.* The linker warns that the Rust static library targets a newer OS than
   the app's deployment target, and the build machine's simulator is out of date.
+
+### LiveStore review (2026-11-01)
+
+A focused correctness review of `client/live.rs` came before the full migration. The review and its
+probe tests are on the spike branch: `docs/gvkit-migration/live-review.md`. It found 2 high, 2 medium,
+2 medium-low and 4 low findings, plus 1 informational one. The fixes are part of the migration's first
+step (`MIGRATION-HANDOFF.md`).
+
+- **A build's read transaction blocks writes.** SQLite was in rollback-journal mode, because sqlx
+  doesn't set `journal_mode`. A write that lands during a build waits on the main thread for the rest
+  of that build: about 120 to 170 ms measured in debug with 1,500 entries. Past sqlx's 5-second busy
+  timeout it fails, and `try?` drops the user's action.
+  - *Fix:* WAL, with `synchronous = FULL` (owner's decision; durability matters for dogfooding).
+  - WAL adds `-wal` and `-shm` sidecar files, so RFD 2's backups must use SQLite's backup API or
+    `VACUUM INTO`, not a raw file copy.
+- **A first value can move backwards (live once WAL is on).** A SQL-backed first value read mid-build
+  was overwritten by that build's older snapshot. This led to the principle 3 refinement.
+  - *Fix:* build epochs, so a SQL-backed subscription that joins mid-build isn't answered by that
+    build.
+- **Smaller fixes in the same step:**
+  - a panic in a build no longer kills the refresh loop;
+  - batches are delivered through one serial queue, so a screen can't render two versions;
+  - `sync()` gets a failure path.
+
+### Migration (2026-11-01)
+
+The owner decided to migrate the whole app now. The plan (`docs/gvkit-migration/plan.md` on the
+spike branch) inventories 30 Swift consumers and proceeds in seven steps, S0 to S6. It needs only
+two new client questions, `SetsMembers` and `ActivityTemplateJoin`. Writes stay record-level, wrapped
+in GvKit helpers. Read-your-writes isn't added: no write-then-expect site needs it. The migration
+runs locally from the handoff.
 
 ### Open
 
