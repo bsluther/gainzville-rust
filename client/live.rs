@@ -81,7 +81,7 @@ pub struct Subscribed {
 // --- Backing ---------------------------------------------------------------------------------
 
 // Which backing answers a query is declared in `ClientQuery` (`is_forest_backed`); these adapt
-// the generated dispatch to `LiveValue`.
+// its dispatch to `LiveValue`.
 
 fn answer_from_forest(query: &ClientQuery, forest: &Forest) -> LiveValue {
     match query.answer_from_forest(forest) {

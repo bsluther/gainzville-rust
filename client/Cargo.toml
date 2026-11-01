@@ -22,11 +22,10 @@ async-stream = "0.3"
 sqlx = { workspace = true }
 tracing = { workspace = true }
 itertools = { workspace = true }
+chrono = { workspace = true }
 
 # Binary dependencies
 tokio = { workspace = true }
 dotenvy = { workspace = true }
 uuid = { workspace = true }
 
-[dev-dependencies]
-chrono = { workspace = true }
