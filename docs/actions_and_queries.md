@@ -234,8 +234,8 @@ only where a set requires one.
 
 **FFI.** `gv-ffi/src/types.rs` restates each question as `#[uniffi::remote(Record)]` and each set
 and response as `#[uniffi::remote(Enum)]`, the same way it restates actions, so `gv-core` never
-depends on uniffi. A mismatch with the Rust definition is a compile error; doc comments are copied
-by hand, because they are what reaches Swift.
+depends on uniffi. A mismatch with the Rust definition is a compile error. Doc comments here reach
+Swift, so they describe what a caller needs; implementation notes stay on the Rust definitions.
 
 Adding a client question touches these places:
 

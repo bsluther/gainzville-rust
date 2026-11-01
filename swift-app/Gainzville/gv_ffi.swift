@@ -2044,8 +2044,7 @@ public func FfiConverterTypeAttribute_lower(_ value: Attribute) -> RustBuffer {
 
 
 /**
- * A sequence's children laid out for display: drop, child, drop, ..., drop
- * (`gv_ui::child_slots`).
+ * A sequence's children laid out for display: drop, child, drop, ..., drop.
  */
 public struct ChildSlots: Equatable, Hashable {
     public var parentId: Uuid
@@ -2605,9 +2604,7 @@ public func FfiConverterTypeDeleteEntryRecursive_lower(_ value: DeleteEntryRecur
 
 /**
  * Distinct text values previously entered for an attribute (plan ∪ actual), sorted — the
- * source for a text attribute's input autocomplete. Scoped by `attribute_id` alone: the
- * value-owner invariant guarantees every value for an attribute belongs to that
- * attribute's owner, so no owner filter is needed.
+ * source for a text attribute's input autocomplete.
  */
 public struct DistinctTextValuesForAttribute: Equatable, Hashable {
     public var attributeId: Uuid
@@ -3531,10 +3528,6 @@ public func FfiConverterTypeFindValueByKey_lower(_ value: FindValueByKey) -> Rus
 }
 
 
-/**
- * `entry_ids` is owned (not borrowed) so that this struct can implement `Clone` and be
- * stored in a set enum.
- */
 public struct FindValuesForEntries: Equatable, Hashable {
     public var entryIds: [Uuid]
 
@@ -4612,16 +4605,12 @@ public func FfiConverterTypePosition_lower(_ value: Position) -> RustBuffer {
 
 /**
  * Log roots (parentless, non-template entries) whose canonical instant falls in the
- * half-open interval `[from, to)`, sorted by canonical instant (ties by id). Same
- * semantics as `Forest::roots_in`, but answered by the database: this is what a log day
- * shows. Client-only (SQLite): not in the domain set, so Postgres needn't answer it.
+ * half-open interval `[from, to)`, sorted by canonical instant (ties by id). This is what a
+ * log day shows.
  *
- * Unlike `EntriesRootedInTimeInterval` it returns roots only (no descendants), is
- * half-open (an entry at the next day's midnight is not on this day), and places
- * end-anchored entries (`End`, `DurationAndEnd`) by their canonical instant rather than
- * by the `start_time` column. The executor pre-filters in SQL with
- * `ROOT_INTERVAL_END_ANCHOR_SLACK_MS` and applies the exact predicate with
- * `log_roots_in_interval`.
+ * Returns roots only (no descendants). An entry at the next day's midnight is not on this
+ * day, and end-anchored entries (`End`, `DurationAndEnd`) are placed by their canonical
+ * instant.
  */
 public struct RootEntriesInInterval: Equatable, Hashable {
     public var from: UtcDateTime
@@ -6610,8 +6599,7 @@ public func FfiConverterTypeClientQueryResponse_lower(_ value: ClientQueryRespon
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
- * What mutators and the server can ask: every member is answerable by both the SQLite
- * and Postgres executors (`DomainQueryExecutor`, the bound every mutator takes).
+ * A question for the legacy `QueryStore` path. New code uses `ClientQuery`.
  */
 
 public enum DomainQuery: Equatable, Hashable {

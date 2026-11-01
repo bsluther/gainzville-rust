@@ -424,6 +424,9 @@ pub struct EntryJoin {
 //
 // One remote Record per question, restating the structs in `gv_core::queries` and
 // `gv_ui::queries`, like the action records below.
+//
+// Doc comments here reach Swift, so they describe what a caller needs. Implementation notes stay on
+// the Rust definitions.
 
 #[uniffi::remote(Record)]
 pub struct IsEmailRegistered {
@@ -469,16 +472,12 @@ pub struct EntriesRootedInTimeInterval {
 
 #[uniffi::remote(Record)]
 /// Log roots (parentless, non-template entries) whose canonical instant falls in the
-/// half-open interval `[from, to)`, sorted by canonical instant (ties by id). Same
-/// semantics as `Forest::roots_in`, but answered by the database: this is what a log day
-/// shows. Client-only (SQLite): not in the domain set, so Postgres needn't answer it.
+/// half-open interval `[from, to)`, sorted by canonical instant (ties by id). This is what a
+/// log day shows.
 ///
-/// Unlike `EntriesRootedInTimeInterval` it returns roots only (no descendants), is
-/// half-open (an entry at the next day's midnight is not on this day), and places
-/// end-anchored entries (`End`, `DurationAndEnd`) by their canonical instant rather than
-/// by the `start_time` column. The executor pre-filters in SQL with
-/// `ROOT_INTERVAL_END_ANCHOR_SLACK_MS` and applies the exact predicate with
-/// `log_roots_in_interval`.
+/// Returns roots only (no descendants). An entry at the next day's midnight is not on this
+/// day, and end-anchored entries (`End`, `DurationAndEnd`) are placed by their canonical
+/// instant.
 pub struct RootEntriesInInterval {
     pub from: DateTime<Utc>,
     pub to: DateTime<Utc>,
@@ -533,8 +532,6 @@ pub struct FindValuesForEntry {
 }
 
 #[uniffi::remote(Record)]
-/// `entry_ids` is owned (not borrowed) so that this struct can implement `Clone` and be
-/// stored in a set enum.
 pub struct FindValuesForEntries {
     pub entry_ids: Vec<Uuid>,
 }
@@ -546,16 +543,13 @@ pub struct FindAttributePairsForEntry {
 
 #[uniffi::remote(Record)]
 /// Distinct text values previously entered for an attribute (plan ∪ actual), sorted — the
-/// source for a text attribute's input autocomplete. Scoped by `attribute_id` alone: the
-/// value-owner invariant guarantees every value for an attribute belongs to that
-/// attribute's owner, so no owner filter is needed.
+/// source for a text attribute's input autocomplete.
 pub struct DistinctTextValuesForAttribute {
     pub attribute_id: Uuid,
 }
 
 #[uniffi::remote(Record)]
-/// A sequence's children laid out for display: drop, child, drop, ..., drop
-/// (`gv_ui::child_slots`).
+/// A sequence's children laid out for display: drop, child, drop, ..., drop.
 pub struct ChildSlots {
     pub parent_id: Uuid,
 }
@@ -582,8 +576,7 @@ pub struct SuggestedRootInsertionTime {
 // Swift sees each set as one flat enum. `is_forest_backed` doesn't cross: the backing is invisible.
 
 #[uniffi::remote(Enum)]
-/// What mutators and the server can ask: every member is answerable by both the SQLite
-/// and Postgres executors (`DomainQueryExecutor`, the bound every mutator takes).
+/// A question for the legacy `QueryStore` path. New code uses `ClientQuery`.
 pub enum DomainQuery {
     IsEmailRegistered(IsEmailRegistered),
     FindUserById(FindUserById),
