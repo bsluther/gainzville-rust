@@ -22,7 +22,7 @@ registration (for the reactive iOS cache model).
 | `DomainQuery` set | `core/src/queries.rs` | What mutators and the server ask; answerable by SQLite and Postgres |
 | `ClientQuery` set | `client/queries.rs` | What Swift subscribes to / reads; forest- or SQLite-backed per member |
 | `QueryExecutor<Q>` | `core/src/query_executor.rs` | One impl per (executor, query) pair; SQL lives in `gv-sql` |
-| `ForestQuery` | `core/src/query_executor.rs` | Answer a question from the in-memory `Forest` (sync, pure) |
+| `ForestExecutor` | `core/src/query_executor.rs` | Answers questions from the in-memory `Forest`; impls live in `gv-ui` |
 | `DomainQueryExecutor` | `core/src/query_executor.rs` | Bound for the domain set; single bound used by all mutator signatures |
 | `SqliteQueryExecutor` | `gv-sql/sqlite/query_executor.rs` | Holds `&mut SqliteConnection`; domain set + client-only SQL questions |
 | `PostgresQueryExecutor` | `gv-sql/postgres/query_executor.rs` | Domain set only (`$1/$2` placeholders, `ANY($1)`) |
@@ -218,16 +218,14 @@ pub enum ClientQuery {
 }
 ```
 
-Each set comes with a response enum (one variant per member, holding that question's answer type),
-`From<Q> for Set`, and dispatch:
+Each set comes with a response enum (one variant per member, holding that question's answer type)
+and one dispatch match:
 
 - `DomainQuery::execute(&mut impl DomainQueryExecutor)`. `DomainQueryExecutor` is a
-  blanket-implemented alias for `QueryExecutor<Q>` over the members.
-- `ClientQuery::is_forest_backed` is **the backing decision**, a plain `match` over every member.
-  `ClientQuery::answer_from_forest` and `ClientQuery::execute` (on `SqliteQueryExecutor`) dispatch
-  to the answers and return `None` for a member with the other backing. Neither has a wildcard arm,
-  so the compiler points at each one when a member is added, but nothing checks that the three
-  agree on a member's backing.
+  blanket-implemented alias for `QueryExecutor<Q>` over the members. `DomainQuery` also has
+  `From<Q>` impls.
+- `ClientQuery::execute(&mut ForestExecutor, &mut SqliteQueryExecutor)` is **the backing decision**:
+  each member's arm names the executor that answers it, and nothing else declares a backing.
 
 A question that isn't in the domain set needs no Postgres impl, and the compiler asks for an impl
 only where a set requires one.
@@ -240,8 +238,9 @@ Swift, so they describe what a caller needs; implementation notes stay on the Ru
 Adding a client question touches these places:
 
 1. Define it: `core/src/queries.rs` or `gv-ui/src/queries.rs`.
-2. Answer it: `ForestQuery` in `gv-ui`, or `QueryExecutor` in `gv-sql` for each required backend.
-3. Add it to the set in `client/queries.rs`: the enum, the response, `From`, and all three matches.
+2. Answer it: a `QueryExecutor` impl, on `ForestExecutor` in `gv-ui` or on each required backend in
+   `gv-sql`.
+3. Add it to the set in `client/queries.rs`: the enum, the response, and its arm in `execute`.
 4. Declare it to the FFI in `gv-ffi/src/types.rs`: the record, and both `ClientQuery` enums.
 5. Regenerate the bindings, then add a GvKit key in `swift-app/Gainzville/GvKit/`.
 

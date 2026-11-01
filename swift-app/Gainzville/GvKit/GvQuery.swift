@@ -13,10 +13,8 @@
 //    with different inputs) and unsubscribes when SwiftUI releases the view's
 //    state (the box, and with it the Rust handle, is freed).
 //  - The value is always present: the key's default until the first answer,
-//    then the last delivered value. Loading and error are side channels on
-//    the projected value (`$slots.isLoading`, `$slots.error`), in the style of
-//    SQLiteData's `@FetchAll`. `isLoading` is always false today: every
-//    answer is local and synchronous.
+//    then the last delivered value. Errors are a side channel on the projected
+//    value (`$slots.error`), in the style of SQLiteData's `@FetchAll`.
 //  - A query that depends on view @State (not on init inputs) can't be
 //    declared in init; use `$value.load(_:)` from `.task(id:)` / `.onChange`.
 //
@@ -72,7 +70,6 @@ struct GvQuery<Value>: DynamicProperty {
 struct GvQueryState<Value> {
     fileprivate let box: GvQueryBox<Value>
 
-    var isLoading: Bool { box.isLoading }
     var error: (any Error)? { box.error }
 
     /// Re-target to `key` imperatively (for a query that depends on view
@@ -109,11 +106,6 @@ final class GvQueryBox<Value>: GvSubscriber {
     var value: Value {
         _ = revision
         return storage
-    }
-
-    var isLoading: Bool {
-        _ = revision
-        return false
     }
 
     var error: (any Error)? {
@@ -163,7 +155,7 @@ final class GvQueryBox<Value>: GvSubscriber {
         }
     }
 
-    func receive(_ value: LiveValue, subscriptionId id: UInt64, version v: UInt64) {
+    func receive(_ value: LiveResult, subscriptionId id: UInt64, version v: UInt64) {
         // Ignore updates for a previous target, and anything not newer than
         // what we hold (the first value can already reflect batch `v`).
         guard id == subscriptionId, v > version else { return }
@@ -172,13 +164,13 @@ final class GvQueryBox<Value>: GvSubscriber {
         revision &+= 1
     }
 
-    private func accept(_ value: LiveValue, fallback: Value?) {
+    private func accept(_ value: LiveResult, fallback: Value?) {
         switch value {
         case .failed(let message):
             // Keep the last good value; surface the failure on the side channel.
             storedError = GvQueryError.failed(message)
             if let fallback { storage = fallback }
-        case .answer(let response):
+        case .response(let response):
             if let decoded = decode?(response) {
                 storage = decoded
                 storedError = nil

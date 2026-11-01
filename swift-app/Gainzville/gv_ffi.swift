@@ -944,7 +944,7 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     /**
      * Answer a live query once against the latest version, without subscribing.
      */
-    func liveRead(query: ClientQuery) throws  -> LiveValue
+    func liveRead(query: ClientQuery) throws  -> ClientQueryResponse
     
     /**
      * Subscribe to a live query. Returns the first value immediately.
@@ -1216,8 +1216,8 @@ open func forestWouldCreateCycle(entryId: Uuid, proposedParentId: Uuid) -> Bool 
     /**
      * Answer a live query once against the latest version, without subscribing.
      */
-open func liveRead(query: ClientQuery)throws  -> LiveValue  {
-    return try  FfiConverterTypeLiveValue_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+open func liveRead(query: ClientQuery)throws  -> ClientQueryResponse  {
+    return try  FfiConverterTypeClientQueryResponse_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
     uniffi_gv_ffi_fn_method_gainzvillecore_live_read(
             self.uniffiCloneHandle(),
         FfiConverterTypeClientQuery_lower(query),$0
@@ -3920,12 +3920,12 @@ public func FfiConverterTypeLiveBatch_lower(_ value: LiveBatch) -> RustBuffer {
 public struct LiveSubscribed {
     public var subscriptionId: UInt64
     public var version: UInt64
-    public var value: LiveValue
+    public var value: LiveResult
     public var handle: LiveSubscriptionHandle
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(subscriptionId: UInt64, version: UInt64, value: LiveValue, handle: LiveSubscriptionHandle) {
+    public init(subscriptionId: UInt64, version: UInt64, value: LiveResult, handle: LiveSubscriptionHandle) {
         self.subscriptionId = subscriptionId
         self.version = version
         self.value = value
@@ -3950,7 +3950,7 @@ public struct FfiConverterTypeLiveSubscribed: FfiConverterRustBuffer {
             try LiveSubscribed(
                 subscriptionId: FfiConverterUInt64.read(from: &buf), 
                 version: FfiConverterUInt64.read(from: &buf), 
-                value: FfiConverterTypeLiveValue.read(from: &buf), 
+                value: FfiConverterTypeLiveResult.read(from: &buf), 
                 handle: FfiConverterTypeLiveSubscriptionHandle.read(from: &buf)
         )
     }
@@ -3958,7 +3958,7 @@ public struct FfiConverterTypeLiveSubscribed: FfiConverterRustBuffer {
     public static func write(_ value: LiveSubscribed, into buf: inout [UInt8]) {
         FfiConverterUInt64.write(value.subscriptionId, into: &buf)
         FfiConverterUInt64.write(value.version, into: &buf)
-        FfiConverterTypeLiveValue.write(value.value, into: &buf)
+        FfiConverterTypeLiveResult.write(value.value, into: &buf)
         FfiConverterTypeLiveSubscriptionHandle.write(value.handle, into: &buf)
     }
 }
@@ -3981,11 +3981,11 @@ public func FfiConverterTypeLiveSubscribed_lower(_ value: LiveSubscribed) -> Rus
 
 public struct LiveUpdate: Equatable, Hashable {
     public var subscriptionId: UInt64
-    public var value: LiveValue
+    public var value: LiveResult
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(subscriptionId: UInt64, value: LiveValue) {
+    public init(subscriptionId: UInt64, value: LiveResult) {
         self.subscriptionId = subscriptionId
         self.value = value
     }
@@ -4007,13 +4007,13 @@ public struct FfiConverterTypeLiveUpdate: FfiConverterRustBuffer {
         return
             try LiveUpdate(
                 subscriptionId: FfiConverterUInt64.read(from: &buf), 
-                value: FfiConverterTypeLiveValue.read(from: &buf)
+                value: FfiConverterTypeLiveResult.read(from: &buf)
         )
     }
 
     public static func write(_ value: LiveUpdate, into buf: inout [UInt8]) {
         FfiConverterUInt64.write(value.subscriptionId, into: &buf)
-        FfiConverterTypeLiveValue.write(value.value, into: &buf)
+        FfiConverterTypeLiveResult.write(value.value, into: &buf)
     }
 }
 
@@ -7522,9 +7522,9 @@ public func FfiConverterTypeLengthValue_lower(_ value: LengthValue) -> RustBuffe
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum LiveValue: Equatable, Hashable {
+public enum LiveResult: Equatable, Hashable {
     
-    case answer(ClientQueryResponse
+    case response(ClientQueryResponse
     )
     case failed(message: String
     )
@@ -7536,20 +7536,20 @@ public enum LiveValue: Equatable, Hashable {
 }
 
 #if compiler(>=6)
-extension LiveValue: Sendable {}
+extension LiveResult: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeLiveValue: FfiConverterRustBuffer {
-    typealias SwiftType = LiveValue
+public struct FfiConverterTypeLiveResult: FfiConverterRustBuffer {
+    typealias SwiftType = LiveResult
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LiveValue {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LiveResult {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .answer(try FfiConverterTypeClientQueryResponse.read(from: &buf)
+        case 1: return .response(try FfiConverterTypeClientQueryResponse.read(from: &buf)
         )
         
         case 2: return .failed(message: try FfiConverterString.read(from: &buf)
@@ -7559,11 +7559,11 @@ public struct FfiConverterTypeLiveValue: FfiConverterRustBuffer {
         }
     }
 
-    public static func write(_ value: LiveValue, into buf: inout [UInt8]) {
+    public static func write(_ value: LiveResult, into buf: inout [UInt8]) {
         switch value {
         
         
-        case let .answer(v1):
+        case let .response(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeClientQueryResponse.write(v1, into: &buf)
             
@@ -7580,15 +7580,15 @@ public struct FfiConverterTypeLiveValue: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeLiveValue_lift(_ buf: RustBuffer) throws -> LiveValue {
-    return try FfiConverterTypeLiveValue.lift(buf)
+public func FfiConverterTypeLiveResult_lift(_ buf: RustBuffer) throws -> LiveResult {
+    return try FfiConverterTypeLiveResult.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeLiveValue_lower(_ value: LiveValue) -> RustBuffer {
-    return FfiConverterTypeLiveValue.lower(value)
+public func FfiConverterTypeLiveResult_lower(_ value: LiveResult) -> RustBuffer {
+    return FfiConverterTypeLiveResult.lower(value)
 }
 
 
@@ -9322,7 +9322,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_would_create_cycle() != 50699) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_live_read() != 59073) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_live_read() != 2144) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_live_subscribe() != 47170) {

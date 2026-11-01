@@ -8,13 +8,16 @@
 //! answers every subscribed query (forest-backed ones from the forest, SQL-backed ones in the same
 //! transaction), then swaps the results in under one lock and emits one `LiveBatch`. Which backing
 //! answers a query is declared per question in the client set (`crate::queries::ClientQuery`) and
-//! is invisible to the consumer.
+//! is invisible both to this store and to the consumer.
+//!
+//! Every answer is assumed to be local and fast: a query that needed the network wouldn't be in
+//! the snapshot and would hold up the whole version.
 //!
 //! This sits beside `QueryStore` (the older ping-and-pull cache) during migration; both listen to
 //! the same change broadcast.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{Arc, Mutex, MutexGuard},
 };
 
@@ -22,12 +25,14 @@ use gv_core::{
     error::{DbErr, Result},
     forest::Forest,
     queries::AllEntries,
-    query_executor::QueryExecutor,
+    query_executor::{ForestExecutor, QueryExecutor},
 };
 use gv_sql::sqlite::SqliteQueryExecutor;
 use sqlx::{SqliteConnection, SqlitePool};
 use tokio::sync::{Notify, broadcast, watch};
 use tracing::warn;
+#[cfg(test)]
+use uuid::Uuid;
 
 use crate::queries::{ClientQuery, ClientQueryResponse};
 use crate::query_store::next_change;
@@ -35,13 +40,11 @@ use crate::query_store::next_change;
 pub type SubscriptionId = u64;
 pub type Version = u64;
 
-/// What a subscription holds: the answer, or why there isn't one.
-/// BSL: not sure I love the "Answer" name but i can see the reason, we have a response (called that
-///     to not be confused with a Result), now we're differentiate it from a Response. But in this
-///     case we really do just have a monadic result type with a string error type, no?
+/// What a subscription holds: the query's response, or why there isn't one. An enum rather than
+/// `Result` because uniffi can't carry a `Result` in a field.
 #[derive(Debug, Clone, PartialEq)]
-pub enum LiveValue {
-    Answer(ClientQueryResponse),
+pub enum LiveResult {
+    Response(ClientQueryResponse),
     /// The query itself failed (e.g. a lookup of an entry that no longer exists). Delivered like
     /// a value so one failing query can't stall the version for everyone; consumers keep their
     /// last good value and surface this on a side channel.
@@ -50,17 +53,25 @@ pub enum LiveValue {
     },
 }
 
+impl From<Result<ClientQueryResponse>> for LiveResult {
+    fn from(result: Result<ClientQueryResponse>) -> Self {
+        match result {
+            Ok(response) => LiveResult::Response(response),
+            Err(e) => LiveResult::Failed {
+                message: e.to_string(),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiveUpdate {
     pub subscription_id: SubscriptionId,
-    pub value: LiveValue,
+    pub value: LiveResult,
 }
 
-/// Everything that changed in one version. Batches are deltas: a consumer applies them in order
-/// on top of the first values `subscribe` returned.
-/// BSL: deltas is perhaps a little misleading, if a LiveUpdate just holds a valuef or an id, then
-///     they're only deltas in the sense that they're new values for a given key. They're not fine
-///     grained deltas like "remove this entry from that child list" or some such, right?
+/// Everything that changed in one version: the full new value of each subscription whose result
+/// changed. A consumer applies batches in order on top of the first values `subscribe` returned.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiveBatch {
     pub version: Version,
@@ -74,46 +85,18 @@ pub type BatchSink = Arc<dyn Fn(LiveBatch) + Send + Sync>;
 pub struct Subscribed {
     pub subscription_id: SubscriptionId,
     pub version: Version,
-    pub value: LiveValue,
+    pub value: LiveResult,
     pub handle: LiveSubscription,
 }
 
-// --- Backing ---------------------------------------------------------------------------------
-
-// Which backing answers a query is declared in `ClientQuery` (`is_forest_backed`); these adapt
-// its dispatch to `LiveValue`.
-
-fn answer_from_forest(query: &ClientQuery, forest: &Forest) -> LiveValue {
-    match query.answer_from_forest(forest) {
-        Some(response) => LiveValue::Answer(response),
-        None => LiveValue::Failed {
-            message: "not a forest-backed query".to_string(),
-        },
-    }
-}
-
-async fn answer_from_sql(query: &ClientQuery, conn: &mut SqliteConnection) -> LiveValue {
-    match query
-        .clone()
-        .execute(&mut SqliteQueryExecutor::new(conn))
+async fn answer(query: ClientQuery, forest: &Forest, conn: &mut SqliteConnection) -> LiveResult {
+    query
+        .execute(
+            &mut ForestExecutor::new(forest),
+            &mut SqliteQueryExecutor::new(conn),
+        )
         .await
-    {
-        Some(Ok(response)) => LiveValue::Answer(response),
-        Some(Err(e)) => LiveValue::Failed {
-            message: e.to_string(),
-        },
-        None => LiveValue::Failed {
-            message: "not a SQL-backed query".to_string(),
-        },
-    }
-}
-
-async fn answer(query: &ClientQuery, forest: &Forest, conn: &mut SqliteConnection) -> LiveValue {
-    if query.is_forest_backed() {
-        answer_from_forest(query, forest)
-    } else {
-        answer_from_sql(query, conn).await
-    }
+        .into()
 }
 
 // --- Store -----------------------------------------------------------------------------------
@@ -121,7 +104,7 @@ async fn answer(query: &ClientQuery, forest: &Forest, conn: &mut SqliteConnectio
 struct Sub {
     id: SubscriptionId,
     refcount: usize,
-    value: LiveValue,
+    value: LiveResult,
 }
 
 struct State {
@@ -132,7 +115,7 @@ struct State {
     forest: Option<Arc<Forest>>,
     subs: HashMap<ClientQuery, Sub>,
     next_id: SubscriptionId,
-    /// A version is being built (its key set is already fixed).
+    /// A version is being built.
     building: bool,
 }
 
@@ -140,10 +123,20 @@ struct Inner {
     pool: SqlitePool,
     state: Mutex<State>,
     sink: Mutex<Option<BatchSink>>,
-    /// Asks the refresh loop for another version without a data change (see `subscribe`).
+    /// Asks the refresh loop for another version without a data change (see `sync`).
     rebuild: Notify,
     /// The latest published version, for `sync`.
     published: watch::Sender<Version>,
+    /// Lets a test subscribe at a known point in a build (see `pause_next_build`).
+    #[cfg(test)]
+    build_pause: Mutex<Option<BuildPause>>,
+}
+
+#[cfg(test)]
+struct BuildPause {
+    entry_id: Uuid,
+    reached: tokio::sync::oneshot::Sender<()>,
+    resume: tokio::sync::oneshot::Receiver<()>,
 }
 
 #[derive(Clone)]
@@ -173,6 +166,8 @@ impl LiveStore {
                 sink: Mutex::new(None),
                 rebuild: Notify::new(),
                 published: watch::channel(0).0,
+                #[cfg(test)]
+                build_pause: Mutex::new(None),
             }),
         };
         let loop_store = store.clone();
@@ -231,67 +226,54 @@ impl LiveStore {
     /// Identical queries share one subscription id (refcounted, like `QueryStore`); the id is
     /// never reused after the last handle drops.
     ///
-    /// Coherence: a forest-backed first value is computed from the latest published forest, so it
-    /// belongs to the returned version. A SQL-backed first value is read fresh and may already
-    /// reflect a write whose version hasn't been published yet — one hook can briefly be a
-    /// version ahead of the others until the next batch. If the read may instead be *behind*
-    /// (a version was building or was published while it ran), another version is requested.
+    /// Coherence: the first value is answered against the latest published forest, and inserted
+    /// only if that version is still the latest (otherwise it's answered again), so it can't be
+    /// behind the returned version; a build in flight picks up the new subscription before
+    /// publishing (`build_and_swap`). A forest-backed first value belongs exactly to the returned
+    /// version. A SQL-backed one is read fresh and may already reflect a write whose version
+    /// hasn't been published yet, so one hook can briefly be a version ahead of the others until
+    /// the next batch.
     pub async fn subscribe(&self, query: ClientQuery) -> Result<Subscribed> {
-        let seen_version = {
+        {
             let mut st = self.lock();
             if let Some(subscribed) = self.join_existing(&mut st, &query) {
                 return Ok(subscribed);
             }
-            st.version
-        };
-
-        let sql_value = if query.is_forest_backed() {
-            self.ensure_forest().await?;
-            None
-        } else {
-            let mut conn = self.inner.pool.acquire().await.db_err()?;
-            Some(answer_from_sql(&query, &mut conn).await)
-        };
-
-        let mut st = self.lock();
-        if let Some(subscribed) = self.join_existing(&mut st, &query) {
-            return Ok(subscribed);
         }
-        let value = match sql_value {
-            Some(value) => {
-                if st.building || st.version != seen_version {
-                    self.inner.rebuild.notify_one();
-                }
-                value
+
+        let mut conn = self.inner.pool.acquire().await.db_err()?;
+        loop {
+            let (forest, seen_version) = self.latest_forest().await?;
+            let value = answer(query.clone(), &forest, &mut conn).await;
+
+            let mut st = self.lock();
+            if let Some(subscribed) = self.join_existing(&mut st, &query) {
+                return Ok(subscribed);
             }
-            None => {
-                let forest = st
-                    .forest
-                    .clone()
-                    .unwrap_or_else(|| Arc::new(Forest::from(Vec::new())));
-                answer_from_forest(&query, &forest)
+            if st.version != seen_version {
+                continue;
             }
-        };
-        let id = st.next_id;
-        st.next_id += 1;
-        st.subs.insert(
-            query.clone(),
-            Sub {
-                id,
-                refcount: 1,
-                value: value.clone(),
-            },
-        );
-        Ok(Subscribed {
-            subscription_id: id,
-            version: st.version,
-            value,
-            handle: LiveSubscription {
-                inner: Arc::clone(&self.inner),
-                query,
-                id,
-            },
-        })
+            let id = st.next_id;
+            st.next_id += 1;
+            st.subs.insert(
+                query.clone(),
+                Sub {
+                    id,
+                    refcount: 1,
+                    value: value.clone(),
+                },
+            );
+            return Ok(Subscribed {
+                subscription_id: id,
+                version: st.version,
+                value,
+                handle: LiveSubscription {
+                    inner: Arc::clone(&self.inner),
+                    query,
+                    id,
+                },
+            });
+        }
     }
 
     fn join_existing(&self, st: &mut State, query: &ClientQuery) -> Option<Subscribed> {
@@ -311,82 +293,44 @@ impl LiveStore {
 
     /// Answer a query once against the latest version, without subscribing. Forest-backed
     /// queries use the latest published forest; SQL-backed ones read the database now.
-    pub async fn read(&self, query: ClientQuery) -> Result<LiveValue> {
-        if query.is_forest_backed() {
-            let forest = self.ensure_forest().await?;
-            Ok(answer_from_forest(&query, &forest))
-        } else {
-            let mut conn = self.inner.pool.acquire().await.db_err()?;
-            Ok(answer_from_sql(&query, &mut conn).await)
-        }
+    pub async fn read(&self, query: ClientQuery) -> Result<ClientQueryResponse> {
+        let (forest, _) = self.latest_forest().await?;
+        let mut conn = self.inner.pool.acquire().await.db_err()?;
+        query
+            .execute(
+                &mut ForestExecutor::new(&forest),
+                &mut SqliteQueryExecutor::new(&mut conn),
+            )
+            .await
     }
 
-    async fn ensure_forest(&self) -> Result<Arc<Forest>> {
-        if let Some(forest) = self.lock().forest.clone() {
-            return Ok(forest);
+    /// The latest published forest and the version it belongs to, loading it if nothing has been
+    /// published yet.
+    async fn latest_forest(&self) -> Result<(Arc<Forest>, Version)> {
+        {
+            let st = self.lock();
+            if let Some(forest) = &st.forest {
+                return Ok((Arc::clone(forest), st.version));
+            }
         }
         let mut conn = self.inner.pool.acquire().await.db_err()?;
         let entries = SqliteQueryExecutor::new(&mut conn)
             .execute(AllEntries)
             .await?;
         let forest = Arc::new(Forest::from(entries));
-        Ok(self.lock().forest.get_or_insert(forest).clone())
+        let mut st = self.lock();
+        let forest = Arc::clone(st.forest.get_or_insert(forest));
+        Ok((forest, st.version))
     }
 
     /// Build the next version from one read transaction and publish what changed.
     async fn publish_next_version(&self) -> Result<()> {
-        let keys: Vec<ClientQuery> = {
-            let mut st = self.lock();
-            st.building = true;
-            st.subs.keys().cloned().collect()
-        };
-        let built = self.build(&keys).await;
-        let (forest, values) = match built {
-            Ok(built) => built,
+        self.lock().building = true;
+        let batch = match self.build_and_swap().await {
+            Ok(batch) => batch,
             Err(e) => {
                 self.lock().building = false;
                 return Err(e);
-            }
-        };
-
-        let batch = {
-            let mut st = self.lock();
-            st.building = false;
-            st.version += 1;
-            st.forest = Some(Arc::clone(&forest));
-            let mut updates = Vec::new();
-            for (query, value) in values {
-                // Skip keys whose last subscriber dropped while building.
-                if let Some(sub) = st.subs.get_mut(&query) {
-                    if sub.value != value {
-                        sub.value = value.clone();
-                        updates.push(LiveUpdate {
-                            subscription_id: sub.id,
-                            value,
-                        });
-                    }
-                }
-            }
-            // Forest-backed subscriptions added mid-build were answered from the previous forest;
-            // answer them from this one so the whole batch belongs to this version.
-            let built_keys: HashSet<&ClientQuery> = keys.iter().collect();
-            for (query, sub) in st.subs.iter_mut() {
-                if built_keys.contains(query) || !query.is_forest_backed() {
-                    continue;
-                }
-                let value = answer_from_forest(query, &forest);
-                if sub.value != value {
-                    sub.value = value.clone();
-                    updates.push(LiveUpdate {
-                        subscription_id: sub.id,
-                        value,
-                    });
-                }
-            }
-            self.inner.published.send_replace(st.version);
-            LiveBatch {
-                version: st.version,
-                updates,
             }
         };
 
@@ -399,22 +343,111 @@ impl LiveStore {
         Ok(())
     }
 
-    async fn build(
-        &self,
-        keys: &[ClientQuery],
-    ) -> Result<(Arc<Forest>, Vec<(ClientQuery, LiveValue)>)> {
-        // One read transaction: the forest and every SQL-backed answer see the same snapshot.
+    /// Answer every subscription in one read transaction, so the forest and every SQL-backed
+    /// answer see the same snapshot, then swap the results in. A subscription added while this
+    /// runs is answered too, so the whole batch belongs to the new version: the swap happens only
+    /// under a lock that finds nothing left to answer.
+    async fn build_and_swap(&self) -> Result<LiveBatch> {
         let mut tx = self.inner.pool.begin().await.db_err()?;
         let entries = SqliteQueryExecutor::new(&mut *tx)
             .execute(AllEntries)
             .await?;
         let forest = Arc::new(Forest::from(entries));
-        let mut values = Vec::with_capacity(keys.len());
-        for query in keys {
-            values.push((query.clone(), answer(query, &forest, &mut *tx).await));
+        let mut values: HashMap<ClientQuery, LiveResult> = HashMap::new();
+        let batch = loop {
+            let missing: Vec<ClientQuery> = {
+                let mut st = self.lock();
+                let missing: Vec<ClientQuery> = st
+                    .subs
+                    .keys()
+                    .filter(|query| !values.contains_key(*query))
+                    .cloned()
+                    .collect();
+                if missing.is_empty() {
+                    break self.swap_in(&mut st, forest, values);
+                }
+                missing
+            };
+            for query in missing {
+                let value = answer(query.clone(), &forest, &mut *tx).await;
+                values.insert(query, value);
+            }
+            #[cfg(test)]
+            self.wait_at_build_pause(&forest).await;
+        };
+        // Read-only, and the version is already published: nothing here can undo it.
+        if let Err(e) = tx.rollback().await {
+            warn!(error = %e, "live: ending a build's read transaction failed");
         }
-        tx.rollback().await.db_err()?;
-        Ok((forest, values))
+        Ok(batch)
+    }
+
+    /// Publish a built version. Clears `building` in the same step as the version bump: `sync`
+    /// reads the two together.
+    fn swap_in(
+        &self,
+        st: &mut State,
+        forest: Arc<Forest>,
+        values: HashMap<ClientQuery, LiveResult>,
+    ) -> LiveBatch {
+        st.building = false;
+        st.version += 1;
+        st.forest = Some(forest);
+        let mut updates = Vec::new();
+        for (query, value) in values {
+            // Skip keys whose last subscriber dropped while building.
+            if let Some(sub) = st.subs.get_mut(&query) {
+                if sub.value != value {
+                    sub.value = value.clone();
+                    updates.push(LiveUpdate {
+                        subscription_id: sub.id,
+                        value,
+                    });
+                }
+            }
+        }
+        self.inner.published.send_replace(st.version);
+        LiveBatch {
+            version: st.version,
+            updates,
+        }
+    }
+
+    /// Pause the first build that can see `entry_id`, after it answers the subscriptions it
+    /// found. Earlier builds must run on: the paused read transaction would block the write
+    /// that creates the entry. Resolves `reached` when it gets there; it continues when `resume`
+    /// is sent to.
+    #[cfg(test)]
+    fn pause_build_seeing(
+        &self,
+        entry_id: Uuid,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (reached_tx, reached_rx) = tokio::sync::oneshot::channel();
+        let (resume_tx, resume_rx) = tokio::sync::oneshot::channel();
+        *self.inner.build_pause.lock().unwrap() = Some(BuildPause {
+            entry_id,
+            reached: reached_tx,
+            resume: resume_rx,
+        });
+        (reached_rx, resume_tx)
+    }
+
+    #[cfg(test)]
+    async fn wait_at_build_pause(&self, forest: &Forest) {
+        let pause = {
+            let mut pause = self.inner.build_pause.lock().unwrap();
+            match &*pause {
+                Some(p) if forest.entry(p.entry_id).is_some() => pause.take(),
+                _ => None,
+            }
+        };
+        if let Some(pause) = pause {
+            let _ = pause.reached.send(());
+            let _ = pause.resume.await;
+        }
     }
 }
 
@@ -458,8 +491,8 @@ mod tests {
         queries::{FindAncestors, FindDescendants, FindEntryJoinById, RootEntriesInInterval},
     };
     use gv_ui::{ChildSlot, ChildSlots, SuggestedRootInsertionTime, WouldCreateCycle, child_slots};
+    use std::collections::HashSet;
     use tokio::sync::mpsc;
-    use uuid::Uuid;
 
     fn day() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 10, 30, 0, 0, 0).unwrap()
@@ -514,34 +547,33 @@ mod tests {
     }
 
     fn day_roots() -> ClientQuery {
-        RootEntriesInInterval {
+        ClientQuery::RootEntriesInInterval(RootEntriesInInterval {
             from: day(),
             to: day() + Duration::days(1),
-        }
-        .into()
+        })
     }
 
     fn child_slots_of(parent_id: Uuid) -> ClientQuery {
-        ChildSlots { parent_id }.into()
+        ClientQuery::ChildSlots(ChildSlots { parent_id })
     }
 
-    fn slots(value: &LiveValue) -> &[ChildSlot] {
+    fn slots(value: &LiveResult) -> &[ChildSlot] {
         match value {
-            LiveValue::Answer(ClientQueryResponse::ChildSlots(slots)) => slots,
+            LiveResult::Response(ClientQueryResponse::ChildSlots(slots)) => slots,
             other => panic!("expected child slots, got {other:?}"),
         }
     }
 
-    fn root_ids(value: &LiveValue) -> Vec<Uuid> {
+    fn root_ids(value: &LiveResult) -> Vec<Uuid> {
         match value {
-            LiveValue::Answer(ClientQueryResponse::RootEntriesInInterval(es)) => {
+            LiveResult::Response(ClientQueryResponse::RootEntriesInInterval(es)) => {
                 es.iter().map(|e| e.id).collect()
             }
             other => panic!("unexpected value {other:?}"),
         }
     }
 
-    fn first_drop_position(value: &LiveValue) -> Position {
+    fn first_drop_position(value: &LiveResult) -> Position {
         match &slots(value)[0] {
             ChildSlot::Drop { position, .. } => position.clone(),
             other => panic!("expected a drop slot, got {other:?}"),
@@ -573,16 +605,15 @@ mod tests {
         let roots = store.subscribe(day_roots()).await.unwrap();
         assert_eq!(root_ids(&roots.value), vec![other.id, parent.id]);
         let descendants = store
-            .subscribe(
-                FindDescendants {
-                    entry_id: parent.id,
-                }
-                .into(),
-            )
+            .subscribe(ClientQuery::FindDescendants(FindDescendants {
+                entry_id: parent.id,
+            }))
             .await
             .unwrap();
         let _unrelated = store
-            .subscribe(FindEntryJoinById { entry_id: other.id }.into())
+            .subscribe(ClientQuery::FindEntryJoinById(FindEntryJoinById {
+                entry_id: other.id,
+            }))
             .await
             .unwrap();
 
@@ -671,6 +702,78 @@ mod tests {
         assert_ne!(c.subscription_id, a.subscription_id);
     }
 
+    /// A subscription added mid-build is part of the version being built, so the whole batch
+    /// belongs to one version, with no follow-up rebuild needed.
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+    async fn subscribing_mid_build_joins_the_batch(pool: SqlitePool) {
+        let (client, mut rx) = client(pool).await;
+        let store = client.live();
+        let parent = entry(None, at(9), true);
+        create(&client, &parent).await;
+        store.sync().await;
+        let existing = store.subscribe(child_slots_of(parent.id)).await.unwrap();
+        store.sync().await;
+
+        // Hold the build for this write open, after it has answered `existing`.
+        let child = entry(
+            Some(first_drop_position(&existing.value)),
+            Temporal::None,
+            true,
+        );
+        let (reached, resume) = store.pause_build_seeing(child.id);
+        create(&client, &child).await;
+        reached.await.unwrap();
+        // Nothing can publish while the refresh task is paused.
+        let before = store.version();
+        while rx.try_recv().is_ok() {}
+
+        // Forest-backed: answered from the published forest, which doesn't have the child yet.
+        let cycle = store
+            .subscribe(ClientQuery::WouldCreateCycle(WouldCreateCycle {
+                entry_id: parent.id,
+                proposed_parent_id: child.id,
+            }))
+            .await
+            .unwrap();
+        assert_eq!(cycle.version, before);
+        assert_eq!(
+            cycle.value,
+            LiveResult::Response(ClientQueryResponse::WouldCreateCycle(false))
+        );
+        // SQL-backed: read fresh, so it's already ahead of the published version.
+        let descendants = store
+            .subscribe(ClientQuery::FindDescendants(FindDescendants {
+                entry_id: parent.id,
+            }))
+            .await
+            .unwrap();
+        assert!(matches!(
+            &descendants.value,
+            LiveResult::Response(ClientQueryResponse::FindDescendants(es))
+                if es.iter().any(|e| e.id == child.id)
+        ));
+
+        resume.send(()).unwrap();
+        let batch = next_batch(&mut rx).await;
+        assert_eq!(batch.version, before + 1);
+        let changed: HashSet<_> = batch.updates.iter().map(|u| u.subscription_id).collect();
+        assert_eq!(
+            changed,
+            HashSet::from([existing.subscription_id, cycle.subscription_id]),
+            "the forest-backed subscriber moved with the batch; the SQL one had nothing to change"
+        );
+        let cycle_value = &batch
+            .updates
+            .iter()
+            .find(|u| u.subscription_id == cycle.subscription_id)
+            .unwrap()
+            .value;
+        assert_eq!(
+            *cycle_value,
+            LiveResult::Response(ClientQueryResponse::WouldCreateCycle(true))
+        );
+    }
+
     /// `read` answers once against the latest version, from whichever backing the query has.
     #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
     async fn read_once_uses_latest_version(pool: SqlitePool) {
@@ -691,18 +794,18 @@ mod tests {
         store.sync().await;
 
         let cycle = |entry_id, proposed_parent_id| {
-            ClientQuery::from(WouldCreateCycle {
+            ClientQuery::WouldCreateCycle(WouldCreateCycle {
                 entry_id,
                 proposed_parent_id,
             })
         };
         assert_eq!(
             store.read(cycle(parent.id, child.id)).await.unwrap(),
-            LiveValue::Answer(ClientQueryResponse::WouldCreateCycle(true))
+            ClientQueryResponse::WouldCreateCycle(true)
         );
         assert_eq!(
             store.read(cycle(child.id, parent.id)).await.unwrap(),
-            LiveValue::Answer(ClientQueryResponse::WouldCreateCycle(false))
+            ClientQueryResponse::WouldCreateCycle(false)
         );
         assert_eq!(store.subscription_count(), 1, "read does not subscribe");
     }
@@ -716,16 +819,15 @@ mod tests {
         let past_day = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let suggested = || async {
             match store
-                .read(
+                .read(ClientQuery::SuggestedRootInsertionTime(
                     SuggestedRootInsertionTime {
                         day_start: past_day,
-                    }
-                    .into(),
-                )
+                    },
+                ))
                 .await
                 .unwrap()
             {
-                LiveValue::Answer(ClientQueryResponse::SuggestedRootInsertionTime(t)) => t,
+                ClientQueryResponse::SuggestedRootInsertionTime(t) => t,
                 other => panic!("unexpected value {other:?}"),
             }
         };
@@ -753,15 +855,12 @@ mod tests {
         let store = client.live();
         // FindAncestors errors (NotFound) for a missing entry.
         let failing = store
-            .subscribe(
-                FindAncestors {
-                    entry_id: Uuid::new_v4(),
-                }
-                .into(),
-            )
+            .subscribe(ClientQuery::FindAncestors(FindAncestors {
+                entry_id: Uuid::new_v4(),
+            }))
             .await
             .unwrap();
-        assert!(matches!(failing.value, LiveValue::Failed { .. }));
+        assert!(matches!(failing.value, LiveResult::Failed { .. }));
         let roots = store.subscribe(day_roots()).await.unwrap();
         create(&client, &entry(None, at(3), false)).await;
         let batch = next_batch(&mut rx).await;
@@ -816,7 +915,7 @@ mod tests {
         }
         // A child of an in-day root must not appear as a root.
         let fresh = Forest::from(client.run_query(AllEntries).await.unwrap());
-        let fresh_slots = LiveValue::Answer(ClientQueryResponse::ChildSlots(child_slots(
+        let fresh_slots = LiveResult::Response(ClientQueryResponse::ChildSlots(child_slots(
             &fresh, parent.id,
         )));
         create(

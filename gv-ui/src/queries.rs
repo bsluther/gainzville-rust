@@ -2,11 +2,15 @@
 //!
 //! Defined here rather than in `gv-core` because their answers are UI types (`ChildSlot`) or
 //! screen rules, and `gv-core` stays domain-only. Membership in the client set, and the choice to
-//! answer them from the forest, live in `gv_client::queries`. Each question's answer is a
-//! `ForestQuery` impl: a pure function of the forest.
+//! answer them from the forest, live in `gv_client::queries`. Each answer is a thin
+//! `ForestExecutor` impl over a pure function of the forest.
 
 use chrono::{DateTime, Utc};
-use gv_core::{forest::Forest, queries::Query, query_executor::ForestQuery};
+use gv_core::{
+    error::Result,
+    queries::Query,
+    query_executor::{ForestExecutor, QueryExecutor},
+};
 use uuid::Uuid;
 
 use crate::child_slots::{ChildSlot, child_slots};
@@ -22,9 +26,9 @@ impl Query for ChildSlots {
     type Response = Vec<ChildSlot>;
 }
 
-impl ForestQuery for ChildSlots {
-    fn answer(&self, forest: &Forest) -> Vec<ChildSlot> {
-        child_slots(forest, self.parent_id)
+impl QueryExecutor<ChildSlots> for ForestExecutor<'_> {
+    async fn execute(&mut self, query: ChildSlots) -> Result<Vec<ChildSlot>> {
+        Ok(child_slots(self.forest, query.parent_id))
     }
 }
 
@@ -39,9 +43,11 @@ impl Query for WouldCreateCycle {
     type Response = bool;
 }
 
-impl ForestQuery for WouldCreateCycle {
-    fn answer(&self, forest: &Forest) -> bool {
-        forest.would_create_cycle(self.entry_id, self.proposed_parent_id)
+impl QueryExecutor<WouldCreateCycle> for ForestExecutor<'_> {
+    async fn execute(&mut self, query: WouldCreateCycle) -> Result<bool> {
+        Ok(self
+            .forest
+            .would_create_cycle(query.entry_id, query.proposed_parent_id))
     }
 }
 
@@ -59,8 +65,10 @@ impl Query for SuggestedRootInsertionTime {
     type Response = DateTime<Utc>;
 }
 
-impl ForestQuery for SuggestedRootInsertionTime {
-    fn answer(&self, forest: &Forest) -> DateTime<Utc> {
-        forest.suggested_root_day_insertion_time(self.day_start)
+impl QueryExecutor<SuggestedRootInsertionTime> for ForestExecutor<'_> {
+    async fn execute(&mut self, query: SuggestedRootInsertionTime) -> Result<DateTime<Utc>> {
+        Ok(self
+            .forest
+            .suggested_root_day_insertion_time(query.day_start))
     }
 }

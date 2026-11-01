@@ -41,7 +41,7 @@ final class GvBatchListener: LiveListener {
 /// Something that holds one live subscription's value (a `@GvQuery` hook's box).
 @MainActor
 protocol GvSubscriber: AnyObject {
-    func receive(_ value: LiveValue, subscriptionId: UInt64, version: UInt64)
+    func receive(_ value: LiveResult, subscriptionId: UInt64, version: UInt64)
 }
 
 private struct WeakSubscriber {
@@ -53,8 +53,6 @@ private struct WeakSubscriber {
 @MainActor
 final class GvClient {
     let core: GainzvilleCore
-    /// The newest version applied.
-    private(set) var version: UInt64 = 0
     /// Subscription id -> the hooks holding it. Identical queries share one id
     /// (Rust refcounts them), so several hooks can sit behind one id.
     private var routes: [UInt64: [WeakSubscriber]] = [:]
@@ -91,7 +89,6 @@ final class GvClient {
 
     /// Apply one batch in one main-actor step.
     private func apply(_ batch: LiveBatch) {
-        version = max(version, batch.version)
         for update in batch.updates {
             guard let entries = routes[update.subscriptionId] else { continue }
             let live = entries.filter { $0.subscriber != nil }
@@ -120,8 +117,7 @@ extension GainzvilleCore {
     /// `ForestViewModel`). Same semantics: latest version, no subscription,
     /// the key's default if the query is inactive or fails.
     func read<Value>(_ key: GvKey<Value>) -> Value {
-        guard let query = key.query,
-              case .answer(let response)? = try? liveRead(query: query) else {
+        guard let query = key.query, let response = try? liveRead(query: query) else {
             return key.defaultValue
         }
         return key.decode(response) ?? key.defaultValue

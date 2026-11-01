@@ -432,8 +432,8 @@ pub mod tests {
     /// Same regression for the live store's refresh loop.
     #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
     async fn test_live_store_survives_lagged_change_channel(pool: SqlitePool) {
-        use crate::live::LiveValue;
-        use crate::queries::ClientQueryResponse;
+        use crate::live::LiveResult;
+        use crate::queries::{ClientQuery, ClientQueryResponse};
         let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
         client.seed_default_user().await.unwrap();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -443,10 +443,12 @@ pub mod tests {
         let entry = lag_test_entry();
         let sub = client
             .live()
-            .subscribe(gv_core::queries::FindEntryById { entry_id: entry.id }.into())
+            .subscribe(ClientQuery::FindEntryById(
+                gv_core::queries::FindEntryById { entry_id: entry.id },
+            ))
             .await
             .unwrap();
-        // Settle: no pending rebuild request may mask the lag (subscribe can request one).
+        // Settle: no build in flight may mask the lag.
         client.live().sync().await;
 
         flood_change_channel(&client);
@@ -462,7 +464,7 @@ pub mod tests {
         assert_eq!(batch.updates[0].subscription_id, sub.subscription_id);
         assert!(matches!(
             &batch.updates[0].value,
-            LiveValue::Answer(ClientQueryResponse::FindEntryById(Some(e))) if e.id == entry.id
+            LiveResult::Response(ClientQueryResponse::FindEntryById(Some(e))) if e.id == entry.id
         ));
     }
 }

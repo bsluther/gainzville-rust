@@ -18,11 +18,17 @@ pub trait QueryExecutor<Q: Query> {
     async fn execute(&mut self, query: Q) -> Result<Q::Response>;
 }
 
-/// A question answered from an in-memory [`Forest`] alone: synchronous and pure. The other way to
-/// answer a question (besides a [`QueryExecutor`]); which one a context uses is decided by its
-/// query set (`gv_client::queries::ClientQuery::is_forest_backed`).
-pub trait ForestQuery: Query {
-    fn answer(&self, forest: &Forest) -> Self::Response;
+/// Answers questions from an in-memory [`Forest`]. Its answers never suspend or fail, but it has
+/// the same shape as any other backing, so a query set can treat them alike
+/// (`gv_client::queries::ClientQuery::execute`).
+pub struct ForestExecutor<'f> {
+    pub forest: &'f Forest,
+}
+
+impl<'f> ForestExecutor<'f> {
+    pub fn new(forest: &'f Forest) -> Self {
+        ForestExecutor { forest }
+    }
 }
 
 /// Executors that answer every member of [`DomainQuery`](crate::queries::DomainQuery). A single

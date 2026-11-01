@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
 use gv_client::{
-    live::{LiveBatch, LiveUpdate, LiveValue},
+    live::{LiveBatch, LiveResult, LiveUpdate},
     queries::{ClientQuery, ClientQueryResponse},
 };
 use gv_core::{
@@ -573,7 +573,7 @@ pub struct SuggestedRootInsertionTime {
 
 // --- Query sets ---
 //
-// Swift sees each set as one flat enum. `is_forest_backed` doesn't cross: the backing is invisible.
+// Swift sees each set as one flat enum. The backing doesn't cross: it's invisible.
 
 #[uniffi::remote(Enum)]
 /// A question for the legacy `QueryStore` path. New code uses `ClientQuery`.
@@ -671,7 +671,7 @@ pub enum ClientQueryResponse {
 // --- Live queries (gv-client) ---
 //
 // The live envelope around `ClientQuery`/`ClientQueryResponse`: what comes back per subscription
-// (`LiveValue`), delivered in `LiveBatch`es. Nothing here says how a query is answered; that is
+// (`LiveResult`), delivered in `LiveBatch`es. Nothing here says how a query is answered; that is
 // declared in `gv_client::queries`.
 
 #[uniffi::remote(Enum)]
@@ -688,15 +688,15 @@ pub enum ChildSlot {
 }
 
 #[uniffi::remote(Enum)]
-pub enum LiveValue {
-    Answer(ClientQueryResponse),
+pub enum LiveResult {
+    Response(ClientQueryResponse),
     Failed { message: String },
 }
 
 #[uniffi::remote(Record)]
 pub struct LiveUpdate {
     pub subscription_id: u64,
-    pub value: LiveValue,
+    pub value: LiveResult,
 }
 
 #[uniffi::remote(Record)]

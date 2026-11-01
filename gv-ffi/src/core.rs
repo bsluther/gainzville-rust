@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use generation::{Arbitrary, Opts, SimulationContext};
 use gv_client::{
     client::SqliteClient,
-    live::{LiveBatch, LiveSubscription, LiveValue},
-    queries::ClientQuery,
+    live::{LiveBatch, LiveResult, LiveSubscription},
+    queries::{ClientQuery, ClientQueryResponse},
     query_store::{QuerySubscription, next_change},
 };
 use gv_core::{
@@ -67,7 +67,7 @@ pub struct LiveSubscriptionHandle(#[allow(dead_code)] LiveSubscription);
 pub struct LiveSubscribed {
     pub subscription_id: u64,
     pub version: u64,
-    pub value: LiveValue,
+    pub value: LiveResult,
     pub handle: Arc<LiveSubscriptionHandle>,
 }
 
@@ -184,7 +184,7 @@ impl GainzvilleCore {
     }
 
     /// Answer a live query once against the latest version, without subscribing.
-    pub fn live_read(&self, query: ClientQuery) -> Result<LiveValue, FfiError> {
+    pub fn live_read(&self, query: ClientQuery) -> Result<ClientQueryResponse, FfiError> {
         RUNTIME
             .block_on(self.client.live().read(query))
             .map_err(FfiError::from)
@@ -393,7 +393,6 @@ impl GainzvilleCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gv_client::queries::ClientQueryResponse;
     use gv_core::{DEFAULT_USER_ID, models::entry::Temporal};
     use gv_ui::{ChildSlot, ChildSlots, WouldCreateCycle};
     use std::sync::Mutex;
@@ -452,14 +451,11 @@ mod tests {
         RUNTIME.block_on(core.client.live().sync());
 
         let sub = core
-            .live_subscribe(
-                ChildSlots {
-                    parent_id: parent.id,
-                }
-                .into(),
-            )
+            .live_subscribe(ClientQuery::ChildSlots(ChildSlots {
+                parent_id: parent.id,
+            }))
             .unwrap();
-        let LiveValue::Answer(ClientQueryResponse::ChildSlots(slots)) = &sub.value else {
+        let LiveResult::Response(ClientQueryResponse::ChildSlots(slots)) = &sub.value else {
             panic!("expected child slots")
         };
         let ChildSlot::Drop { position, .. } = slots[0].clone() else {
@@ -483,7 +479,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         };
         assert!(batch.version > sub.version);
-        let LiveValue::Answer(ClientQueryResponse::ChildSlots(after)) = &batch.updates[0].value
+        let LiveResult::Response(ClientQueryResponse::ChildSlots(after)) = &batch.updates[0].value
         else {
             panic!("expected child slots")
         };
@@ -491,15 +487,12 @@ mod tests {
 
         // Read once: moving the parent under its child would be a cycle.
         assert_eq!(
-            core.live_read(
-                WouldCreateCycle {
-                    entry_id: parent.id,
-                    proposed_parent_id: child.id,
-                }
-                .into()
-            )
+            core.live_read(ClientQuery::WouldCreateCycle(WouldCreateCycle {
+                entry_id: parent.id,
+                proposed_parent_id: child.id,
+            }))
             .unwrap(),
-            LiveValue::Answer(ClientQueryResponse::WouldCreateCycle(true))
+            ClientQueryResponse::WouldCreateCycle(true)
         );
 
         // Releasing the handle (Swift dropping its reference) unsubscribes.
