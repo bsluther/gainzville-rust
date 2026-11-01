@@ -113,7 +113,11 @@ impl Arbitrary for Option<Position> {
             return None;
         }
         // TODO: consider using p_valid to choose invalid, non-sequence parents.
-        let parent = model.entries().filter(|e| e.is_sequence).choose(rng)?;
+        // Generated entries are log entries, and core rejects a log entry under a template parent.
+        let parent = model
+            .entries()
+            .filter(|e| e.is_sequence && !e.is_template)
+            .choose(rng)?;
         // Choose a child position.
         let entries: Vec<Entry> = model.entries().cloned().collect();
         let forest = Forest::from(entries);

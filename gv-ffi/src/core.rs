@@ -406,6 +406,26 @@ mod tests {
         }
     }
 
+    /// The seeder stops at the first rejected entry, so one bad pick loses the rest. A fresh
+    /// database has the standard library's templates, which must not be picked as parents.
+    #[test]
+    fn seeding_arbitrary_entries_creates_them_all() {
+        let path = std::env::temp_dir().join(format!("gv-ffi-seed-{}.sqlite", Uuid::new_v4()));
+        let core = GainzvilleCore::new(
+            format!("sqlite://{}?mode=rwc", path.display()),
+            DEFAULT_USER_ID,
+            Arc::new(NoopListener),
+        )
+        .unwrap();
+        core.dev_create_arbitrary_entries(200).unwrap();
+        let snapshot = RUNTIME
+            .block_on(core.client.run_query(SnapshotAll))
+            .unwrap();
+        let log_entries = snapshot.entries.iter().filter(|e| !e.is_template).count();
+        assert_eq!(log_entries, 200);
+        let _ = std::fs::remove_file(&path);
+    }
+
     /// The exported surface end to end, as Swift drives it: register the listener, subscribe
     /// (first value synchronously), write, receive one batch, release the handle.
     #[test]
