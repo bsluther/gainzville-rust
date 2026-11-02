@@ -8,8 +8,8 @@ enum LibraryDestination: Hashable {
 
 /// Library root — browse Activities and Attributes.
 struct LibraryView: View {
-    @EnvironmentObject var activitiesVM: ActivitiesViewModel
-    @EnvironmentObject var attributesVM: AttributesViewModel
+    @GvQuery(.allActivities) private var activities: [Activity]
+    @GvQuery(.allAttributes) private var attributes: [Attribute]
     @State private var selectedTab: LibraryTab = .activities
 
     var body: some View {
@@ -25,9 +25,9 @@ struct LibraryView: View {
 
             switch selectedTab {
             case .activities:
-                ActivitiesListView(activities: activitiesVM.activities)
+                ActivitiesListView(activities: activities)
             case .attributes:
-                AttributesListView(attributes: attributesVM.attributes)
+                AttributesListView(attributes: attributes)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -71,7 +71,5 @@ enum LibraryTab: String, CaseIterable, Identifiable {
 #Preview {
     NavigationStack {
         LibraryView()
-            .environmentObject(ActivitiesViewModel())
-            .environmentObject(AttributesViewModel())
     }
 }

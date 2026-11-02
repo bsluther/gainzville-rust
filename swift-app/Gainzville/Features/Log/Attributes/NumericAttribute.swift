@@ -17,7 +17,7 @@ import AppKit
 struct NumericAttribute: View {
     let entry: Entry
     let pair: NumericAttributePair
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
 
     @State private var editMin: String = ""
     @State private var editMax: String = ""
@@ -51,7 +51,7 @@ struct NumericAttribute: View {
             range: (active: isRangeMode, toggle: toggleRange),
             remove: {
                 pendingRemoval = true
-                forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+                gv?.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
                 focusedField = nil
             }
         )
@@ -169,7 +169,7 @@ struct NumericAttribute: View {
             if case .range(let lo, _) = pair.actual {
                 let v = parseEndpoint(editMin) ?? lo
                 editMin = format(v)
-                forestVM.updateAttributeValue(
+                gv?.updateAttributeValue(
                     entryId: entry.id,
                     attributeId: pair.attrId,
                     field: .actual,
@@ -231,10 +231,10 @@ struct NumericAttribute: View {
         case nil:
             return false
         case .clear:
-            forestVM.clearAttributeValue(entryId: entry.id, attributeId: pair.attrId, field: .actual)
+            gv?.clearAttributeValue(entryId: entry.id, attributeId: pair.attrId, field: .actual)
             return true
         case .set(let value):
-            forestVM.updateAttributeValue(
+            gv?.updateAttributeValue(
                 entryId: entry.id,
                 attributeId: pair.attrId,
                 field: .actual,

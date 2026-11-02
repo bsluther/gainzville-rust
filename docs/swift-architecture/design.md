@@ -2,6 +2,10 @@
 
 > Definitive reference for the native Swift iOS app. Synthesizes research and assessment docs.
 > For historical rationale see `gv-ios-architecture.md`; for codebase gaps see `codebase-assessment.md`.
+>
+> **Partly superseded (2026-11-01).** The read and notification paths here (`CoreListener`,
+> `on_data_changed`, view models re-reading a cache) were replaced by GvKit live queries: versioned
+> batches from `client/live.rs` into `@GvQuery` hooks. See RFD 0003 and `swift-app/SWIFT-APP.md`.
 
 ---
 

@@ -1,0 +1,204 @@
+diff --git a/client/live.rs b/client/live.rs
+index 09d7891..c9b4f1b 100644
+--- a/client/live.rs
++++ b/client/live.rs
+@@ -942,4 +942,199 @@ mod tests {
+         // parent, 00:00, 07:00 (end-only), 23:00 (start+end), 23:00 (duration+end).
+         assert_eq!(from_sql.len(), 5);
+     }
++
++    // ===================== REVIEW PROBES (not for merge) =====================
++
++    async fn file_pool(wal: bool) -> SqlitePool {
++        use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
++        let path = std::env::temp_dir().join(format!("gv-live-probe-{}.sqlite", Uuid::new_v4()));
++        // Same defaults the app gets from `SqlitePoolOptions::connect("sqlite://...")`.
++        let mut opts = SqliteConnectOptions::new()
++            .filename(&path)
++            .create_if_missing(true);
++        if wal {
++            opts = opts.journal_mode(SqliteJournalMode::Wal);
++        }
++        let pool = SqlitePoolOptions::new()
++            .max_connections(20)
++            .connect_with(opts)
++            .await
++            .unwrap();
++        sqlx::migrate!("../gv-sql/sqlite/migrations")
++            .run(&pool)
++            .await
++            .unwrap();
++        pool
++    }
++
++    fn find_entry(entry_id: Uuid) -> ClientQuery {
++        ClientQuery::FindEntryById(gv_core::queries::FindEntryById { entry_id })
++    }
++
++    /// PROBE 1 (WAL): a SQL-backed first value read while an older-snapshot build is in flight
++    /// is followed by a batch at a NEWER version carrying an OLDER value. Swift's `v > version`
++    /// gate accepts it, so the hook goes new -> old -> new.
++    #[tokio::test]
++    async fn probe_sql_first_value_regresses_under_wal() {
++        let pool = file_pool(true).await;
++        let (client, mut rx) = client(pool).await;
++        let store = client.live();
++        store.sync().await;
++
++        // The pause hook only fires in a build that answers at least one subscription.
++        let _keep = store.subscribe(day_roots()).await.unwrap();
++        let a = entry(None, at(1), false);
++        let w = entry(None, at(2), false);
++        let (reached, resume) = store.pause_build_seeing(a.id);
++        create(&client, &a).await;
++        reached.await.unwrap(); // build N+1 holds a snapshot with A, without W
++
++        // WAL: the write commits despite the open read transaction.
++        tokio::time::timeout(std::time::Duration::from_secs(2), create(&client, &w))
++            .await
++            .expect("WAL write should not block on the build's read tx");
++
++        let before = store.version();
++        let sub = store.subscribe(find_entry(w.id)).await.unwrap();
++        assert_eq!(sub.version, before);
++        assert!(
++            matches!(&sub.value, LiveResult::Response(ClientQueryResponse::FindEntryById(Some(e))) if e.id == w.id),
++            "first value is read fresh and already has W"
++        );
++        while rx.try_recv().is_ok() {}
++
++        resume.send(()).unwrap();
++        let b1 = next_batch(&mut rx).await;
++        assert_eq!(b1.version, before + 1);
++        let u1 = b1
++            .updates
++            .iter()
++            .find(|u| u.subscription_id == sub.subscription_id)
++            .expect("the paused build re-answers the new sub from its old snapshot");
++        // REGRESSION: version N+1 > N, value older than the first value.
++        assert_eq!(
++            u1.value,
++            LiveResult::Response(ClientQueryResponse::FindEntryById(None))
++        );
++        // W's own notification then produces N+2, restoring it.
++        let b2 = next_batch(&mut rx).await;
++        assert_eq!(b2.version, before + 2);
++        assert!(b2.updates.iter().any(|u| u.subscription_id == sub.subscription_id
++            && matches!(&u.value, LiveResult::Response(ClientQueryResponse::FindEntryById(Some(_))))));
++    }
++
++    /// PROBE 2 (default journal mode = DELETE, which is what the app gets): a build's read
++    /// transaction blocks every writer's COMMIT for the whole build; past sqlx's 5 s busy_timeout
++    /// the write fails with "database is locked".
++    #[tokio::test]
++    async fn probe_build_blocks_writer_in_default_journal_mode() {
++        let pool = file_pool(false).await;
++        let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
++            .fetch_one(&pool)
++            .await
++            .unwrap();
++        assert_eq!(mode, "delete");
++        let (client, _rx) = client(pool).await;
++        let store = client.live();
++        store.sync().await;
++
++        let _keep = store.subscribe(day_roots()).await.unwrap();
++        let a = entry(None, at(1), false);
++        let (reached, resume) = store.pause_build_seeing(a.id);
++        create(&client, &a).await;
++        reached.await.unwrap();
++
++        let started = std::time::Instant::now();
++        let w = entry(None, at(2), false);
++        let res = client.run_action(CreateEntry::from(w).into()).await;
++        let elapsed = started.elapsed();
++        resume.send(()).unwrap();
++        let err = res.expect_err("write should fail while the build holds its read tx");
++        eprintln!("PROBE2: write failed after {elapsed:?}: {err}");
++        assert!(elapsed >= std::time::Duration::from_millis(4500));
++        assert!(err.to_string().contains("locked"));
++    }
++
++    /// PROBE 3: `sync` has no failure path. If the build it waits for fails, it waits for the
++    /// next data change (forever, if the failure persists).
++    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
++    async fn probe_sync_hangs_when_build_fails(pool: SqlitePool) {
++        let (client, _rx) = client(pool.clone()).await;
++        let store = client.live();
++        store.sync().await;
++        // Let any stray rebuild (sync's notify_one permit) finish first.
++        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
++        sqlx::query("ALTER TABLE entries RENAME TO entries_gone")
++            .execute(&pool)
++            .await
++            .unwrap();
++        let r = tokio::time::timeout(std::time::Duration::from_secs(2), store.sync()).await;
++        assert!(r.is_err(), "sync should still be waiting");
++        assert!(!store.inner.state.lock().unwrap().building);
++    }
++
++    /// PROBE 4: `read` of a forest-backed question right after `run_action` returns answers from
++    /// the previous version (pause makes the window deterministic). `createRootEntry` twice on a
++    /// past day gets the same suggested time.
++    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
++    async fn probe_read_after_write_is_stale(pool: SqlitePool) {
++        let (client, _rx) = client(pool).await;
++        let store = client.live();
++        store.sync().await;
++        let past_day = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
++        let q = || {
++            ClientQuery::SuggestedRootInsertionTime(SuggestedRootInsertionTime {
++                day_start: past_day,
++            })
++        };
++        let t1 = store.read(q()).await.unwrap();
++        let mut root = entry(None, at(0), false);
++        root.temporal = Temporal::Start {
++            start: past_day + Duration::hours(12),
++        };
++        let _keep = store.subscribe(day_roots()).await.unwrap();
++        let (reached, resume) = store.pause_build_seeing(root.id);
++        create(&client, &root).await; // run_action has returned: the write is committed
++        reached.await.unwrap();
++        let t2 = store.read(q()).await.unwrap();
++        resume.send(()).unwrap();
++        assert_eq!(t1, t2, "second root would be placed on top of the first");
++        store.sync().await;
++        assert_ne!(store.read(q()).await.unwrap(), t1);
++    }
++
++    /// PROBE 2b (informational): back-to-back writes with a realistic number of subscriptions,
++    /// default journal mode. Each write's commit waits for the build the previous write started.
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn probe_write_latency_with_subscriptions() {
++        for subs in [0usize, 150] {
++            let pool = file_pool(false).await;
++            let (client, _rx) = client(pool).await;
++            let store = client.live();
++            let mut ids = Vec::new();
++            for i in 0..1500 {
++                let e = entry(None, at(i % 24), false);
++                ids.push(e.id);
++                create(&client, &e).await;
++            }
++            store.sync().await;
++            let mut keep = Vec::new();
++            for id in ids.iter().take(subs) {
++                keep.push(store.subscribe(ClientQuery::FindEntryJoinById(FindEntryJoinById { entry_id: *id })).await.unwrap());
++            }
++            store.sync().await;
++            let mut worst = std::time::Duration::ZERO;
++            let mut total = std::time::Duration::ZERO;
++            for i in 0..30 {
++                let t = std::time::Instant::now();
++                create(&client, &entry(None, at(i % 24), false)).await;
++                let d = t.elapsed();
++                worst = worst.max(d);
++                total += d;
++            }
++            let t = std::time::Instant::now();
++            store.sync().await;
++            eprintln!("PROBE2b subs={subs}: write mean {:?}, worst {:?}; one build ~{:?}", total / 30, worst, t.elapsed());
++        }
++    }
+ }

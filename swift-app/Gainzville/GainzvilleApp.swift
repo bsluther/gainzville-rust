@@ -9,43 +9,18 @@ import SwiftUI
 
 @main
 struct GainzvilleApp: App {
-    let core: GainzvilleCore
-    let coreEnv: CoreEnv
-    let dataChange: DataChange
-    let activitiesVM: ActivitiesViewModel
-    let attributesVM: AttributesViewModel
-    let forestVM: ForestViewModel
+    let gvClient: GvClient
+    let entryExpansion: EntryExpansion
     let logDayStore: LogDayStore
     let dragState: DragState
     let attributeFocus: AttributeFocusModel
     let autocomplete: AutocompleteCoordinator
 
     init() {
-        let listener = AppListener()
-        let c = try! makeCore(listener: listener)
-
-        let avm = ActivitiesViewModel()
-        avm.subscribe(to: c)
-
-        let atvm = AttributesViewModel()
-        atvm.subscribe(to: c)
-
-        let fvm = ForestViewModel()
-        fvm.subscribe(to: c)
-
-        let dc = DataChange()
-
-        // Wire the listener callback after all view models exist.
-        // Singleton VMs refresh first, then dataChange fans out to per-view
-        // VMs (e.g. EntryViewModel) so they re-read the cache too.
-        listener.onChanged = { [weak avm, weak atvm, weak fvm, weak dc] in
-            Task { @MainActor [weak avm, weak atvm, weak fvm, weak dc] in
-                avm?.refresh(from: c)
-                atvm?.refresh(from: c)
-                fvm?.refresh(from: c)
-                dc?.bump()
-            }
-        }
+        let c = try! makeCore()
+        // Live queries (GvKit). Registers the batch listener, so it must exist
+        // before any @GvQuery subscribes.
+        let gv = GvClient(core: c)
 
         // Debug seeds — uncomment once on a fresh DB, then re-comment.
 //         try? c.devSeedStdLib()                       // creates Reps, Load, Outcome, YDS Grade attrs
@@ -53,12 +28,8 @@ struct GainzvilleApp: App {
 //          try? c.devCreateArbitraryValues(count: 40)   // requires at least one entry and one attribute
         // Debug: uncomment to auto-create an activity every 10 s for testing.
         // c.startBackgroundTicker()
-        core = c
-        coreEnv = CoreEnv(core: c)
-        dataChange = dc
-        activitiesVM = avm
-        attributesVM = atvm
-        forestVM = fvm
+        gvClient = gv
+        entryExpansion = EntryExpansion()
         logDayStore = LogDayStore()
         dragState = DragState()
         attributeFocus = AttributeFocusModel()
@@ -68,11 +39,8 @@ struct GainzvilleApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                .environmentObject(coreEnv)
-                .environmentObject(dataChange)
-                .environmentObject(activitiesVM)
-                .environmentObject(attributesVM)
-                .environmentObject(forestVM)
+                .environment(\.gvClient, gvClient)
+                .environment(entryExpansion)
                 .environmentObject(logDayStore)
                 .environmentObject(dragState)
                 .environmentObject(attributeFocus)

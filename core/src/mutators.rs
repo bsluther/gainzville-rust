@@ -26,7 +26,7 @@ use crate::{
         FindDescendants, FindEntryById, FindUserById, FindUserByUsername, FindValueByKey,
         FindValuesForEntries, IsEmailRegistered,
     },
-    query_executor::AnyQueryExecutor,
+    query_executor::DomainQueryExecutor,
 };
 
 // TODO: make randomness/time deterministic in mutations.
@@ -63,7 +63,7 @@ fn validate_template_temporal(
 /// structural checks. There is no dedicated children query; `FindDescendants`
 /// is cheap at the scale of a single sequence.
 async fn load_subtree_forest(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     entry_id: Uuid,
 ) -> Result<Forest> {
     Ok(Forest::from(
@@ -99,7 +99,7 @@ fn sets_member_activity_constraint(
 /// first member is fully anonymous — no "Unnamed" fallback; the caller leaves
 /// the sequence unnamed instead.
 async fn first_member_display_name(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     parent_id: Uuid,
 ) -> Result<Option<String>> {
     let forest = load_subtree_forest(executor, parent_id).await?;
@@ -150,7 +150,7 @@ fn validate_sets_shape(entry: &Entry, forest: &Forest) -> Result<()> {
 }
 
 pub async fn create_user(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: CreateUser,
 ) -> Result<Mutation> {
@@ -209,7 +209,7 @@ pub async fn create_user(
 }
 
 pub async fn create_activity(
-    _executor: &mut impl AnyQueryExecutor,
+    _executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: CreateActivity,
 ) -> Result<Mutation> {
@@ -268,7 +268,7 @@ pub async fn create_activity(
 }
 
 pub async fn create_entry(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: CreateEntry,
 ) -> Result<Mutation> {
@@ -359,7 +359,7 @@ pub async fn create_entry(
 /// position/temporal. Emits all inserts in one mutation (FK checks are deferred
 /// to commit, so delta order doesn't matter).
 pub async fn create_entry_from_activity(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: CreateEntryFromActivity,
 ) -> Result<Mutation> {
@@ -489,7 +489,7 @@ pub async fn create_entry_from_activity(
 /// TOOD: you shouldn't be able to move template entries between template trees. Eg I can't move an
 ///       entry from My Workout's template to Strenght Workout's template.
 pub async fn move_entry(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: MoveEntry,
 ) -> Result<Mutation> {
@@ -638,7 +638,7 @@ pub async fn move_entry(
 }
 
 pub async fn delete_entry_recursive(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: DeleteEntryRecursive,
 ) -> Result<Mutation> {
@@ -720,7 +720,7 @@ pub async fn delete_entry_recursive(
 /// the entry under it as the sole member, splitting the temporal — the
 /// sequence takes the start/end, the entry keeps only its duration.
 pub async fn convert_to_sets(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: ConvertToSets,
 ) -> Result<Mutation> {
@@ -841,7 +841,7 @@ pub async fn convert_to_sets(
 /// copy with fresh ids, inserted immediately after the source among its
 /// siblings.
 pub async fn duplicate_entry(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: DuplicateEntry,
 ) -> Result<Mutation> {
@@ -918,7 +918,7 @@ pub async fn duplicate_entry(
 }
 
 pub async fn create_attribute(
-    _executor: &mut impl AnyQueryExecutor,
+    _executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: CreateAttribute,
 ) -> Result<Mutation> {
@@ -945,7 +945,7 @@ pub async fn create_attribute(
 }
 
 pub async fn update_entry_completion(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: UpdateEntryCompletion,
 ) -> Result<Mutation> {
@@ -993,7 +993,7 @@ pub async fn update_entry_completion(
 }
 
 pub async fn create_value(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: CreateValue,
 ) -> Result<Mutation> {
@@ -1079,7 +1079,7 @@ pub async fn create_value(
 /// config default (both plan and actual). A no-op if the attribute is already
 /// attached. The default is resolved here in core via `Attribute::seed_value`.
 pub async fn attach_value(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: AttachValue,
 ) -> Result<Mutation> {
@@ -1154,7 +1154,7 @@ pub async fn attach_value(
 /// `(entry_id, attribute_id)`. A no-op if no such value exists, so the UI
 /// toggle is idempotent.
 pub async fn delete_attribute_value(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: DeleteAttributeValue,
 ) -> Result<Mutation> {
@@ -1205,7 +1205,7 @@ pub async fn delete_attribute_value(
 }
 
 pub async fn update_attribute_value(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: UpdateAttributeValue,
 ) -> Result<Mutation> {
@@ -1280,7 +1280,7 @@ pub async fn update_attribute_value(
 /// are validated against the config (select option membership, numeric
 /// integer/min/max). A change that leaves the attribute unchanged is a no-op.
 pub async fn update_attribute(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: UpdateAttribute,
 ) -> Result<Mutation> {
@@ -1397,7 +1397,7 @@ pub async fn update_attribute(
 /// a scalar cannot contain children. Position/temporal are not touched here;
 /// they go through `move_entry`.
 pub async fn update_entry(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     io: &dyn Io,
     action: UpdateEntry,
 ) -> Result<Mutation> {

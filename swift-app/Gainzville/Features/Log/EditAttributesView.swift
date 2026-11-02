@@ -1,107 +1,4 @@
 import SwiftUI
-internal import Combine
-
-// View model for EditAttributesView. Subscribes to the owner's full attribute
-// list and to the entry's join (for the set of attributes currently attached),
-// re-reading both on every DataChange tick. Attaching/detaching dispatch the
-// AttachValue / DeleteAttributeValue actions; both are idempotent in core, so
-// the UI never needs to guard against double-toggles.
-@MainActor
-final class EditAttributesViewModel: ObservableObject {
-    @Published private(set) var attributes: [Attribute] = []  // all owned by the entry's owner
-    @Published private(set) var attachedIds: Set<String> = []
-    // Attributes attached to the activity's template root ("All entries" column).
-    @Published private(set) var activityAttachedIds: Set<String> = []
-
-    private var core: GainzvilleCore?
-    private var ownerId: String = ""
-    private var entryId: String = ""
-    private var activityId: String?
-    private var templateRootId: String?
-    private var attrSub: FfiQuerySubscription?
-    private var joinSub: FfiQuerySubscription?
-    private var templateJoinSub: FfiQuerySubscription?
-    private var cancellable: AnyCancellable?
-    private var started = false
-
-    func start(
-        core: GainzvilleCore?,
-        dataChange: DataChange,
-        entryId: String,
-        ownerId: String,
-        activityId: String?
-    ) {
-        guard !started, let core else { return }
-        started = true
-        self.core = core
-        self.entryId = entryId
-        self.ownerId = ownerId
-        self.activityId = activityId
-        attrSub = try? core.subscribeQuery(
-            query: .findAttributesByOwner(FindAttributesByOwner(ownerId: ownerId)))
-        joinSub = try? core.subscribeQuery(
-            query: .findEntryJoinById(FindEntryJoinById(entryId: entryId)))
-        refresh()
-        cancellable = dataChange.didChange.sink { [weak self] in self?.refresh() }
-    }
-
-    /// Resolve the activity's template root from the (app-wide) forest cache the
-    /// first time it's available, then subscribe to its join. Done lazily in
-    /// refresh so a cold-start race — sheet opened before the forest populates —
-    /// recovers on a later DataChange instead of leaving the column dead.
-    private func resolveTemplateRootIfNeeded() {
-        guard templateRootId == nil, let core, let activityId else { return }
-        guard let root = core.forestActivityTemplateRoot(activityId: activityId) else { return }
-        templateRootId = root.id
-        templateJoinSub = try? core.subscribeQuery(
-            query: .findEntryJoinById(FindEntryJoinById(entryId: root.id)))
-    }
-
-    private func refresh() {
-        guard let core else { return }
-        resolveTemplateRootIfNeeded()
-        // Set the attached sets before `attributes`: the `attributes` publisher
-        // drives the order snapshot, which reads the attached sets to group
-        // attached attributes first. Publishing it last guarantees the snapshot
-        // sees up-to-date sets regardless of subscriber timing.
-        if case .findEntryJoinById(let join) =
-            core.readQuery(query: .findEntryJoinById(FindEntryJoinById(entryId: entryId))) {
-            attachedIds = Set((join?.attributes ?? []).map { $0.id })
-        }
-        if let templateRootId,
-           case .findEntryJoinById(let join) =
-            core.readQuery(query: .findEntryJoinById(FindEntryJoinById(entryId: templateRootId))) {
-            activityAttachedIds = Set((join?.attributes ?? []).map { $0.id })
-        }
-        if case .findAttributesByOwner(let list) =
-            core.readQuery(query: .findAttributesByOwner(FindAttributesByOwner(ownerId: ownerId))) {
-            attributes = list
-        }
-    }
-
-    /// Toggle attachment on this entry ("This entry" column).
-    func toggle(_ attributeId: String) {
-        toggle(attributeId, on: entryId, attached: attachedIds.contains(attributeId))
-    }
-
-    /// Toggle attachment on the activity's template root ("All entries" column).
-    /// Under materialization this affects future instances only, not existing
-    /// log entries.
-    func toggleActivity(_ attributeId: String) {
-        guard let templateRootId else { return }
-        toggle(attributeId, on: templateRootId, attached: activityAttachedIds.contains(attributeId))
-    }
-
-    private func toggle(_ attributeId: String, on targetEntryId: String, attached: Bool) {
-        guard let core else { return }
-        let action: Action = attached
-            ? .deleteAttributeValue(DeleteAttributeValue(
-                actorId: SYSTEM_ACTOR_ID, entryId: targetEntryId, attributeId: attributeId))
-            : .attachValue(AttachValue(
-                actorId: SYSTEM_ACTOR_ID, entryId: targetEntryId, attributeId: attributeId))
-        try? core.runAction(action: action)
-    }
-}
 
 struct EditAttributesView: View {
     let entry: Entry
@@ -112,9 +9,13 @@ struct EditAttributesView: View {
     let hasActivity: Bool
     @Binding var isPresented: Bool
 
-    @EnvironmentObject private var coreEnv: CoreEnv
-    @EnvironmentObject private var dataChange: DataChange
-    @StateObject private var vm = EditAttributesViewModel()
+    /// All attributes owned by the entry's owner.
+    @GvQuery private var attributes: [Attribute]
+    @GvQuery private var entryJoin: EntryJoin?
+    /// The activity's template root, for the "All entries" column. Inactive if
+    /// the entry has no activity.
+    @GvQuery private var templateJoin: EntryJoin?
+    @Environment(\.gvClient) private var gv
 
     @State private var searchText = ""
     // Display order is snapshotted once (entry-attached first, then alphabetical)
@@ -122,6 +23,34 @@ struct EditAttributesView: View {
     // Attributes created mid-session append to the end, never reorder existing rows.
     @State private var orderedIds: [String] = []
     @State private var hasSnapshot = false
+
+    init(entry: Entry, entryName: String, hasActivity: Bool, isPresented: Binding<Bool>) {
+        self.entry = entry
+        self.entryName = entryName
+        self.hasActivity = hasActivity
+        _isPresented = isPresented
+        _attributes = GvQuery(.attributesOwned(by: entry.ownerId))
+        _entryJoin = GvQuery(.entryJoin(entry.id))
+        _templateJoin = GvQuery(.activityTemplateJoin(entry.activityId))
+    }
+
+    private var attachedIds: Set<String> {
+        Set((entryJoin?.attributes ?? []).map { $0.id })
+    }
+
+    private var activityAttachedIds: Set<String> {
+        Set((templateJoin?.attributes ?? []).map { $0.id })
+    }
+
+    /// Attach or detach on `entryId`. Both are idempotent in core, so the UI
+    /// never needs to guard against double-toggles.
+    private func toggle(_ attributeId: String, on entryId: String, attached: Bool) {
+        if attached {
+            gv?.removeAttribute(entryId: entryId, attributeId: attributeId)
+        } else {
+            gv?.attachValue(entryId: entryId, attributeId: attributeId)
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -157,14 +86,7 @@ struct EditAttributesView: View {
         #if os(macOS)
         .frame(minWidth: 340, minHeight: 440)
         #endif
-        .onAppear {
-            // The VM resolves the activity's template root (for the "All entries"
-            // column) lazily from the forest cache; activityId is nil when the
-            // entry has no activity (column hidden).
-            vm.start(core: coreEnv.core, dataChange: dataChange,
-                     entryId: entry.id, ownerId: entry.ownerId, activityId: entry.activityId)
-        }
-        .onReceive(vm.$attributes) { _ in rebuildOrderIfNeeded() }
+        .onChange(of: attributes, initial: true) { rebuildOrderIfNeeded() }
         .toolbar {
             #if os(iOS)
             ToolbarItem(placement: .principal) {
@@ -187,7 +109,7 @@ struct EditAttributesView: View {
     /// Attributes to render: the frozen order, resolved to live `Attribute`
     /// values and filtered by the search text.
     private var displayedAttributes: [Attribute] {
-        let byId = Dictionary(vm.attributes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let byId = Dictionary(attributes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         return orderedIds.compactMap { byId[$0] }.filter {
             searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText)
         }
@@ -196,8 +118,10 @@ struct EditAttributesView: View {
     /// Build the frozen order once the attribute list first arrives; afterward
     /// only append newly-created attributes at the end.
     private func rebuildOrderIfNeeded() {
-        let all = vm.attributes
+        let all = attributes
         guard !all.isEmpty else { return }
+        let attachedIds = attachedIds
+        let activityAttachedIds = activityAttachedIds
         let byName: (Attribute, Attribute) -> Bool = {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
@@ -205,12 +129,12 @@ struct EditAttributesView: View {
             // Group order (frozen at open): attributes on this entry first, then
             // attributes on the activity (template), then the rest — each group
             // alphabetical.
-            let onEntry = all.filter { vm.attachedIds.contains($0.id) }.sorted(by: byName)
+            let onEntry = all.filter { attachedIds.contains($0.id) }.sorted(by: byName)
             let onActivity = all
-                .filter { !vm.attachedIds.contains($0.id) && vm.activityAttachedIds.contains($0.id) }
+                .filter { !attachedIds.contains($0.id) && activityAttachedIds.contains($0.id) }
                 .sorted(by: byName)
             let rest = all
-                .filter { !vm.attachedIds.contains($0.id) && !vm.activityAttachedIds.contains($0.id) }
+                .filter { !attachedIds.contains($0.id) && !activityAttachedIds.contains($0.id) }
                 .sorted(by: byName)
             orderedIds = onEntry.map(\.id) + onActivity.map(\.id) + rest.map(\.id)
             hasSnapshot = true
@@ -256,13 +180,17 @@ struct EditAttributesView: View {
                 .foregroundStyle(Color.gvTextPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 0) {
-                GvCheckbox(checked: vm.attachedIds.contains(attr.id)) {
-                    vm.toggle(attr.id)
+                GvCheckbox(checked: attachedIds.contains(attr.id)) {
+                    toggle(attr.id, on: entry.id, attached: attachedIds.contains(attr.id))
                 }
                 .frame(width: 44)
                 if hasActivity {
-                    GvCheckbox(checked: vm.activityAttachedIds.contains(attr.id)) {
-                        vm.toggleActivity(attr.id)
+                    // Under materialization this affects future instances only,
+                    // not existing log entries.
+                    GvCheckbox(checked: activityAttachedIds.contains(attr.id)) {
+                        if let rootId = templateJoin?.entry.id {
+                            toggle(attr.id, on: rootId, attached: activityAttachedIds.contains(attr.id))
+                        }
                     }
                     .frame(width: 44)
                 }

@@ -17,13 +17,15 @@ registration (for the reactive iOS cache model).
 | `Mutation` | `core/src/delta.rs` | Bundles action + timestamp + `Vec<AnyDelta>` for apply/audit |
 | `DeltaExecutor<M>` / `AnyDeltaExecutor` | `core/src/delta_executor.rs` | Write-path traits (core, DB-agnostic); apply a `Delta<M>` / `AnyDelta` |
 | `SqliteDeltaExecutor` / `PostgresDeltaExecutor` | `gv-sql/sqlite/delta_executor.rs`, `gv-sql/postgres/delta_executor.rs` | Write `AnyDelta` to DB inside the current transaction |
-| `Query` (sealed trait) | `core/src/queries.rs` | Binds each request type to its `Response` type at compile time |
-| `define_query!` macro | `core/src/queries.rs` | One-line declaration: struct + seal impl + `Query` impl |
-| `AnyQuery` enum | `core/src/queries.rs` | Type-erased wrapper for all query types; used in FFI / streaming |
+| `Query` trait | `core/src/queries.rs` | Binds each question type to its `Response` type at compile time |
+| `define_query!` macro | `core/src/queries.rs` | Declares one `gv-core` question: struct + derives + `Query` impl |
+| `DomainQuery` set | `core/src/queries.rs` | What mutators and the server ask; answerable by SQLite and Postgres |
+| `ClientQuery` set | `client/queries.rs` | What Swift subscribes to / reads; forest- or SQLite-backed per member |
 | `QueryExecutor<Q>` | `core/src/query_executor.rs` | One impl per (executor, query) pair; SQL lives in `gv-sql` |
-| `AnyQueryExecutor` | `core/src/query_executor.rs` | Marker supertrait; single bound used by all mutator signatures |
-| `SqliteQueryExecutor` | `gv-sql/sqlite/query_executor.rs` | Holds `&mut SqliteConnection`; implements all query impls |
-| `PostgresQueryExecutor` | `gv-sql/postgres/query_executor.rs` | Mirror of above for Postgres (`$1/$2` placeholders, `ANY($1)`) |
+| `ForestExecutor` | `core/src/query_executor.rs` | Answers questions from the in-memory `Forest`; impls live in `gv-ui` |
+| `DomainQueryExecutor` | `core/src/query_executor.rs` | Bound for the domain set; single bound used by all mutator signatures |
+| `SqliteQueryExecutor` | `gv-sql/sqlite/query_executor.rs` | Holds `&mut SqliteConnection`; domain set + client-only SQL questions |
+| `PostgresQueryExecutor` | `gv-sql/postgres/query_executor.rs` | Domain set only (`$1/$2` placeholders, `ANY($1)`) |
 
 ---
 
@@ -67,7 +69,7 @@ sqlx types do not appear in their signatures.
 
 ```rust
 pub async fn create_entry(
-    executor: &mut impl AnyQueryExecutor,
+    executor: &mut impl DomainQueryExecutor,
     action: CreateEntry,
 ) -> Result<Mutation> {
     // Validate: check referenced activity exists, check permissions, etc.
@@ -171,67 +173,76 @@ which boxes the sqlx error into `DomainError::Database` so the signature stays s
 ### Query Trait (`core/src/queries.rs`)
 
 ```rust
-mod sealed { pub trait Sealed {} }
-
-pub trait Query: sealed::Sealed + Clone + Debug + Send + 'static {
-    type Response: Clone + Debug + Send + 'static;
+pub trait Query: Clone + Debug + PartialEq + Eq + Hash + Send + 'static {
+    type Response: Clone + Debug + PartialEq + Send + 'static;
 }
 ```
 
-The trait is **sealed** — only `core` can implement it. This guarantees:
-- Every query type is listed in `core`, enabling exhaustive dispatch
-- Downstream crates (FFI, db crates) cannot introduce new query types that bypass the system
-- The `AnyQuery` enum stays complete
-
-The `define_query!` macro keeps the per-query boilerplate DRY:
+A query is a question with a typed answer; nothing about SQL. The trait is **not sealed**:
+questions answered from the forest that return UI types (`gv_ui::ChildSlots` → `Vec<ChildSlot>`)
+are defined in `gv-ui`, which `gv-core` can't depend on. The `Eq + Hash` bounds are there because
+a question is a subscription key. In `gv-core`, `define_query!` writes the struct, its derives, and
+its `Query` impl:
 
 ```rust
-macro_rules! define_query {
-    ($(#[$meta:meta])* $vis:vis struct $name:ident $body:tt => $response:ty) => {
-        $(#[$meta])*
-        #[derive(Debug, Clone)]
-        $vis struct $name $body
-
-        impl sealed::Sealed for $name {}
-        impl Query for $name {
-            type Response = $response;
-        }
-    };
+define_query! {
+    pub struct FindEntryById { pub entry_id: Uuid } => Option<Entry>
 }
-
-// Usage:
-define_query! { pub struct FindEntryById { pub entry_id: Uuid } => Option<Entry> }
-define_query! { pub struct AllActivities; => Vec<Activity> }
 ```
 
-Each query struct carries its response type as an associated type. `executor.execute(FindEntryById { entry_id })` always returns `Result<Option<Entry>>` — the compiler enforces this regardless of which executor is backing the call.
+`gv-ui` writes the same three things out by hand.
 
-### Query Structs
+**Where a question is defined** is set by who must see it: questions answered by a SQL executor
+live in `gv-core` (`gv-sql` depends only on `gv-core`), including SQLite-only client questions such
+as `RootEntriesInInterval`; forest-answered questions with UI answers live in `gv-ui`.
 
-18 query types, grouped by domain:
+### Query sets: grouped by who can answer them
 
-| Group | Queries |
-|-------|---------|
-| Auth | `IsEmailRegistered`, `FindUserById`, `FindUserByUsername`, `AllActorIds` |
-| Activity | `FindActivityById`, `AllActivities` |
-| Entry | `AllEntries`, `EntriesRootedInTimeInterval`, `FindAncestors`, `FindEntryById`, `FindEntryJoinById`, `FindDescendants` |
-| Attribute | `FindAttributeById`, `AllAttributes`, `FindAttributesByOwner` |
-| Value | `FindValueByKey`, `FindValuesForEntry`, `FindValuesForEntries`, `FindAttributePairsForEntry` |
-
-### `AnyQuery` Enum
-
-All query structs are also wrapped in `AnyQuery` for type-erased dispatch — used in streaming,
-FFI, and simulation:
+Each context has a hand-written, flat enum of the questions it accepts. A question several contexts
+need is a plain variant in each set; **no set wraps another**.
 
 ```rust
-pub enum AnyQuery {
+// core/src/queries.rs — mutators and the server; every member answerable by SQLite and Postgres
+pub enum DomainQuery {
+    IsEmailRegistered(IsEmailRegistered),
     FindEntryById(FindEntryById),
-    AllActivities(AllActivities),
-    // ... all 18 variants
+    // ...
+}
+
+// client/queries.rs — what Swift sees
+pub enum ClientQuery {
+    ChildSlots(ChildSlots),
+    RootEntriesInInterval(RootEntriesInInterval),
+    FindEntryJoinById(FindEntryJoinById),
+    // ...
 }
 ```
 
-`From<QueryStruct> for AnyQuery` impls allow ergonomic construction.
+Each set comes with a response enum (one variant per member, holding that question's answer type)
+and one dispatch match:
+
+- `DomainQuery::execute(&mut impl DomainQueryExecutor)`. `DomainQueryExecutor` is a
+  blanket-implemented alias for `QueryExecutor<Q>` over the members. `DomainQuery` also has
+  `From<Q>` impls.
+- `ClientQuery::execute(&mut ForestExecutor, &mut SqliteQueryExecutor)` is **the backing decision**:
+  each member's arm names the executor that answers it, and nothing else declares a backing.
+
+A question that isn't in the domain set needs no Postgres impl, and the compiler asks for an impl
+only where a set requires one.
+
+**FFI.** `gv-ffi/src/types.rs` restates each question as `#[uniffi::remote(Record)]` and each set
+and response as `#[uniffi::remote(Enum)]`, the same way it restates actions, so `gv-core` never
+depends on uniffi. A mismatch with the Rust definition is a compile error. Doc comments here reach
+Swift, so they describe what a caller needs; implementation notes stay on the Rust definitions.
+
+Adding a client question touches these places:
+
+1. Define it: `core/src/queries.rs` or `gv-ui/src/queries.rs`.
+2. Answer it: a `QueryExecutor` impl, on `ForestExecutor` in `gv-ui` or on each required backend in
+   `gv-sql`.
+3. Add it to the set in `client/queries.rs`: the enum, the response, and its arm in `execute`.
+4. Declare it to the FFI in `gv-ffi/src/types.rs`: the record, and both `ClientQuery` enums.
+5. Regenerate the bindings, then add a GvKit key in `swift-app/Gainzville/GvKit/`.
 
 ### `QueryExecutor<Q>` Trait (`core/src/query_executor.rs`)
 
@@ -245,20 +256,10 @@ pub trait QueryExecutor<Q: Query> {
 The trait is **generic over the query type** rather than having a single generic method. This is
 intentional — see Design Decisions below.
 
-`AnyQueryExecutor` is a marker trait alias combining `QueryExecutor<Q>` for all 18 query types:
-
-```rust
-pub trait AnyQueryExecutor:
-    QueryExecutor<FindEntryById>
-    + QueryExecutor<AllActivities>
-    // ... all 18
-{}
-
-impl<T> AnyQueryExecutor for T where T: QueryExecutor<FindEntryById> + QueryExecutor<AllActivities> + ... {}
-```
-
-Mutators take `executor: &mut impl AnyQueryExecutor` — a single clean bound that means "can
-execute any query."
+`DomainQueryExecutor` is a marker trait alias combining
+`QueryExecutor<Q>` for every member of the domain set. Mutators take
+`executor: &mut impl DomainQueryExecutor` — a single clean bound that means "can answer any domain
+question".
 
 ### DB-Specific Executors (`gv-sql/sqlite/query_executor.rs`, `gv-sql/postgres/query_executor.rs`)
 
@@ -297,11 +298,12 @@ let mut tx = pool.begin().await?;
 let mut executor = SqliteQueryExecutor::new(&mut *tx); // deref at construction
 ```
 
-`PostgresQueryExecutor` mirrors this structure exactly; the only differences are `PgConnection`
-instead of `SqliteConnection` and `$1`/`$2` parameter placeholders instead of `?`.
+`PostgresQueryExecutor` mirrors this structure for the domain set; the only differences are
+`PgConnection` instead of `SqliteConnection` and `$1`/`$2` parameter placeholders instead of `?`.
+It does not implement client-only questions (`RootEntriesInInterval`).
 
 The return type of each impl uses the associated type form (`<QueryStruct as Query>::Response`)
-rather than the concrete type. This ensures the impl stays synchronized with the `define_query!`
+rather than the concrete type. This ensures the impl stays synchronized with the question's
 declaration — if the response type ever changes, the body breaks at the impl site rather than
 silently returning the wrong type.
 
@@ -309,17 +311,20 @@ silently returning the wrong type.
 
 ## Design Decisions
 
-### 1. Sealed `Query` trait
+### 1. Unsealed `Query`, closed sets
 
-Downstream crates cannot implement `Query` for new types. This makes `AnyQuery` exhaustive —
-the compiler rejects any match that omits a variant — and ensures the FFI dispatch function
-covers every possible query.
+`Query` used to be sealed so every query lived in `gv-core` and one `AnyQuery` enum stayed
+complete. That forced every executor to answer every question (a client-only question needed a
+dead Postgres impl) and kept UI-typed questions out. Now exhaustiveness comes from each set enum,
+"where can it run" from the executor each set dispatches to, and the dependency graph keeps the
+domain set to `gv-core` questions. Trade-off: any crate can define a question; review happens at
+set membership instead.
 
-### 2. `define_query!` macro
+### 2. Macros over one declarative list per set
 
-Each query's response type is declared exactly once, co-located with the struct. Without the
-macro, each query would require three separate items: the struct definition, a `sealed::Sealed`
-impl, and a `Query` impl.
+Membership is declared by the context (one list per set), not by tags on each question: the
+questions live in several crates, and `macro_rules!` can't gather tags across crates. The list
+doubles as the documentation of what a context accepts.
 
 ### 3. Per-query executor impls (vs. a monolithic Reader trait)
 
@@ -352,7 +357,7 @@ compile-time guarantee that `FindUserById` returns `Option<User>` unless they're
 to a specific executor.
 
 The solution is the split:
-- `Query` (in `core`) — declares the request→response association once, sealed so only `core` defines it
+- `Query` (in `core`) — declares the request→response association once, in the crate that defines the question
 - `QueryExecutor<Q>` (in `core`) — the execution interface, generic over Q so each DB crate can impl it per query
 
 A single-method approach — `trait QueryExecutor { async fn execute<Q: Query>(&mut self, Q) }` —
@@ -362,12 +367,12 @@ the impl must satisfy the trait for *all* `Q: Query`, not a subset.
 
 The parameterized trait allows each `impl QueryExecutor<ConcreteQuery> for SqliteQueryExecutor`
 to contain exactly the SQL for that query, with no dispatch overhead or runtime type erasure.
-`AnyQueryExecutor` recovers the ergonomic single-bound callsite.
+`DomainQueryExecutor` recovers the ergonomic single-bound callsite.
 
 ### 5. `Reader<DB>` fully retired
 
 `Reader<DB>` required `sqlx::Database` and `sqlx::Connection` in core's public API surface.
-After the migration, core exports `Query`, `QueryExecutor<Q>`, `AnyQueryExecutor`,
+After the migration, core exports `Query`, `QueryExecutor<Q>`, `DomainQueryExecutor`,
 `DeltaExecutor<M>`, `AnyDeltaExecutor`, and domain types. The concrete executors and all SQL live
 in `gv-sql`; `gv-core` has **zero `sqlx` dependency** (`cargo tree -p gv-core | grep sqlx` →
 nothing).
@@ -381,9 +386,8 @@ into that variant at the call site, so core never names a sqlx type. See
 
 ## What's Planned / Deferred
 
-**FFI dispatch**: The `gv-ffi` crate uses `AnyQuery` as the serialization boundary. Swift
-sends `AnyQuery` values (via uniffi), Rust dispatches them through an exhaustive match, and
-stores results in a subscription cache. The sealed `Query` trait guarantees the match is
-exhaustive — adding a new query type forces a compiler error at the dispatch site. See
-[Boundary transformations](./boundary-transformations.md) for how `AnyQuery` and the domain types
-cross the FFI boundary as uniffi remote types.
+**FFI dispatch**: Swift sends `ClientQuery` values to the live store (`live_subscribe`,
+`live_read`). `DomainQuery` doesn't cross the FFI: it's for mutators and the server. Each set's dispatch is a `match` with no wildcard arm, so the compiler checks it covers every
+member. See
+[Boundary transformations](./boundary-transformations.md) for how domain types cross the FFI
+boundary as uniffi remote types.

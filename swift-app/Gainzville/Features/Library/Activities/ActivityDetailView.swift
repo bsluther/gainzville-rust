@@ -3,7 +3,13 @@ import SwiftUI
 struct ActivityDetailView: View {
     let activity: Activity
 
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @GvQuery private var templateRoot: Entry?
+    @Environment(\.gvClient) private var gv
+
+    init(activity: Activity) {
+        self.activity = activity
+        _templateRoot = GvQuery(.activityTemplateRoot(activity.id))
+    }
 
     var body: some View {
         ScrollView {
@@ -24,7 +30,7 @@ struct ActivityDetailView: View {
                 // (duration-only temporal, no completion). Attaching/detaching
                 // attribute values here configures the activity's defaults.
                 GvDetailSection(title: "Template") {
-                    if let root = forestVM.templateRoot(activityId: activity.id) {
+                    if let root = templateRoot {
                         VStack(alignment: .leading, spacing: GvSpacing.md) {
                             EntryView(entry: root)
                                 .environment(\.entryContext, .template)
@@ -37,7 +43,7 @@ struct ActivityDetailView: View {
                                     .foregroundStyle(Color.gvTextSecondary)
                                 Spacer()
                                 GvCheckbox(checked: root.isSequence) {
-                                    forestVM.setIsSequence(entryId: root.id, isSequence: !root.isSequence)
+                                    gv?.setIsSequence(entryId: root.id, isSequence: !root.isSequence)
                                 }
                             }
                         }

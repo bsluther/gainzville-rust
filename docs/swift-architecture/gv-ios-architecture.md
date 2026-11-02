@@ -8,6 +8,9 @@
 
 > This research was conducted without reference to the codebase. It is a valuable starting point but
 > may omit important concerns.
+>
+> **Historical.** The `CoreListener` / `on_data_changed` design discussed here was replaced by GvKit
+> live queries (2026-11-01). See RFD 0003 and `swift-app/SWIFT-APP.md`.
 
 ---
 

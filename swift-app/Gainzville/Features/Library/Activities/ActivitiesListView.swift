@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ActivitiesListView: View {
     let activities: [Activity]
-    @EnvironmentObject var activitiesVM: ActivitiesViewModel
+    @Environment(\.gvClient) private var gv
     @State private var showingCreate = false
 
     var body: some View {
@@ -45,7 +45,7 @@ struct ActivitiesListView: View {
         }
         .sheet(isPresented: $showingCreate) {
             CreateActivityView { name, description in
-                activitiesVM.createActivity(name: name, description: description)
+                gv?.createActivity(name: name, description: description)
             }
         }
     }

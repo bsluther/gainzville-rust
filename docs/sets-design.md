@@ -162,7 +162,7 @@ duration-only temporal, so this closed a *presentation* gap, not a storage gap (
   predecessor. Disabled at one member (core also rejects).
 - **Conversion**: the entry menu's "With sets" converts only — the entry becomes set 1 and the
   card shows `Sets: [1]`. Conversion ≠ addition. The card stays expanded across the swap via the
-  client-minted `sequence_id` (`ForestViewModel.pendingExpandedEntryIds`).
+  client-minted `sequence_id` (marked in `EntryExpansion`, consumed when the new card appears).
 - **Break out**: menu item on sets cards; clears the flag, returns to nested cards.
 - "With sets" and "Duplicate" are hidden on activity template roots (core rejects both).
 

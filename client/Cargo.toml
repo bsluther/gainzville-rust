@@ -13,16 +13,20 @@ path = "tests/tests.rs"
 [dependencies]
 # Core dependency
 gv-core = { path = "../core" }
+gv-ui = { path = "../gv-ui" }
 gv-sql = { path = "../gv-sql", default-features = false, features = ["sqlite"] }
 futures-core = "0.3"
+futures-util = "0.3"
 async-stream = "0.3"
 
 # Workspace deps
 sqlx = { workspace = true }
 tracing = { workspace = true }
 itertools = { workspace = true }
+chrono = { workspace = true }
 
 # Binary dependencies
 tokio = { workspace = true }
 dotenvy = { workspace = true }
 uuid = { workspace = true }
+

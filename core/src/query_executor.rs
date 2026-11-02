@@ -1,5 +1,6 @@
 use crate::{
     error::Result,
+    forest::Forest,
     queries::{
         AllActivities, AllActorIds, AllAttributes, AllEntries, DistinctTextValuesForAttribute,
         EntriesRootedInTimeInterval, FindActivityById, FindActivityTemplateRoot, FindAncestors,
@@ -12,15 +13,27 @@ use crate::{
 /// Executes queries against some backing store. Implementations include database-backed executors
 /// (wrapping a connection or transaction), in-memory model executors, mock executors, and recording
 /// executors.
-
 #[allow(async_fn_in_trait)]
 pub trait QueryExecutor<Q: Query> {
     async fn execute(&mut self, query: Q) -> Result<Q::Response>;
 }
 
-/// Marker trait for executors that can run all queries. Used as a convenient single bound
-/// for mutators; callers can narrow to specific query bounds later if desired.
-pub trait AnyQueryExecutor:
+/// Answers questions from an in-memory [`Forest`]. Its answers never suspend or fail, but it has
+/// the same shape as any other backing, so a query set can treat them alike
+/// (`gv_client::queries::ClientQuery::execute`).
+pub struct ForestExecutor<'f> {
+    pub forest: &'f Forest,
+}
+
+impl<'f> ForestExecutor<'f> {
+    pub fn new(forest: &'f Forest) -> Self {
+        ForestExecutor { forest }
+    }
+}
+
+/// Executors that answer every member of [`DomainQuery`](crate::queries::DomainQuery). A single
+/// bound for mutators: `&mut impl DomainQueryExecutor`.
+pub trait DomainQueryExecutor:
     QueryExecutor<IsEmailRegistered>
     + QueryExecutor<FindUserById>
     + QueryExecutor<FindUserByUsername>
@@ -45,7 +58,7 @@ pub trait AnyQueryExecutor:
 {
 }
 
-impl<T> AnyQueryExecutor for T where
+impl<T> DomainQueryExecutor for T where
     T: QueryExecutor<IsEmailRegistered>
         + QueryExecutor<FindUserById>
         + QueryExecutor<FindUserByUsername>

@@ -112,51 +112,18 @@ If using `cargo-swift`, add the generated package as a local package dependency 
 ## Basic usage
 
 ```swift
-import Foundation
-
-// 1. Implement the change-notification protocol.
-class MyListener: CoreListener {
-    weak var viewModel: ActivitiesViewModel?
-
-    func onDataChanged() {
-        Task { @MainActor in
-            viewModel?.refresh()
-        }
-    }
-}
-
-// 2. Initialise the core (once, at app startup).
 let dbURL = FileManager.default
     .urls(for: .documentDirectory, in: .userDomainMask)[0]
     .appendingPathComponent("gainzville.sqlite")
 
-let listener = MyListener()
+// Initialise the core once, at app startup.
 let core = try! GainzvilleCore(
     dbPath: "sqlite://\(dbURL.path)",
-    actorId: myUser.actorId.uuidString,
-    listener: listener
+    actorId: myUser.actorId.uuidString
 )
-listener.viewModel = activitiesViewModel
-
-// 3. Read data.
-@Observable @MainActor
-class ActivitiesViewModel {
-    var activities: [FfiActivity] = []
-
-    func refresh() {
-        activities = core.getActivities()
-    }
-}
-
-// 4. Write data.
-let newActivity = FfiCreateActivity(
-    id: UUID().uuidString,
-    name: "Pull Up",
-    description: nil
-)
-try core.runAction(action: .createActivity(newActivity))
-// onDataChanged() fires → refresh() is called → activities updates → SwiftUI re-renders
 ```
+
+Views then read and write through GvKit (`swift-app/Gainzville/GvKit/`), which registers the batch listener and owns subscriptions. See `swift-app/SWIFT-APP.md`.
 
 ---
 

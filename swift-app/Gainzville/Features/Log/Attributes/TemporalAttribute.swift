@@ -29,7 +29,7 @@ private enum TemporalField { case start, end, duration }
 struct TemporalAttribute: View {
     let entry: Entry
 
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
     @State private var isExpanded = false
     @State private var editStart: Date?
     @State private var editEnd: Date?
@@ -194,7 +194,7 @@ struct TemporalAttribute: View {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                forestVM.updateEntryTemporal(entry: entry, temporal: buildTemporal())
+                gv?.updateEntryTemporal(entry: entry, temporal: buildTemporal())
             }
         }
     }
@@ -204,7 +204,7 @@ struct TemporalAttribute: View {
         debounceTask = nil
         let newTemporal = buildTemporal()
         guard newTemporal != entry.temporal else { return }
-        forestVM.updateEntryTemporal(entry: entry, temporal: newTemporal)
+        gv?.updateEntryTemporal(entry: entry, temporal: newTemporal)
     }
 }
 
@@ -225,7 +225,7 @@ struct TemporalAttribute: View {
 struct DurationAttribute: View {
     let entry: Entry
 
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
     @State private var editDurationMs: UInt32?
 
     var body: some View {
@@ -242,7 +242,7 @@ struct DurationAttribute: View {
             // only a genuine user edit differs from what's already shown.
             guard newValue != displayDurationMs(of: entry.temporal) else { return }
             let newTemporal: Temporal = newValue.map { .duration(duration: $0) } ?? .none
-            forestVM.updateEntryTemporal(entry: entry, temporal: newTemporal)
+            gv?.updateEntryTemporal(entry: entry, temporal: newTemporal)
         }
     }
 }

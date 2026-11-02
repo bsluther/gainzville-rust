@@ -24,35 +24,49 @@ extension EnvironmentValues {
     }
 }
 
-// We take the full Entry rather than just an id even though `vm.entryJoin`
-// will provide its own copy of the entry. The forest gives us the entry as
-// the unit of iteration, and rendering needs structural/temporal fields
-// (position, temporal, isSequence, etc.) immediately on first render —
-// before the per-entry subscription has populated the cache. Passing the
-// full struct avoids a flash of empty layout while the EntryJoin loads,
-// and EntryJoin then supplies the joined data (activity, attributes) that
-// the forest doesn't carry.
+/// Cards that should mount expanded: an action that swaps a card's identity (e.g.
+/// ConvertToSets replacing an entry with its new sets sequence) marks the new id,
+/// and the new card consumes the mark once when it appears, whenever that is.
+@MainActor
+@Observable
+final class EntryExpansion {
+    private var pending: Set<String> = []
+
+    func mark(_ entryId: String) {
+        pending.insert(entryId)
+    }
+
+    func consume(_ entryId: String) -> Bool {
+        pending.remove(entryId) != nil
+    }
+}
+
+// We take the full Entry (from the parent's slot list or the day's roots) as
+// the unit of iteration; `join` adds what the forest doesn't carry (activity,
+// attributes, display name). Its first value arrives synchronously on the
+// first render, so there is no empty frame to paper over.
 struct EntryView: View {
     let entry: Entry
     // Only root EntryViews receive this from LogView; child EntryViews omit it
     // so EntryDropDelegate falls into its forbidding mode and blocks the
     // day-root drop indicator from activating over their bodies.
-    var onDayRootDrop: ((Entry) -> Void)? = nil
-    @EnvironmentObject var forestVM: ForestViewModel
-    @EnvironmentObject var coreEnv: CoreEnv
-    @EnvironmentObject var dataChange: DataChange
+    let onDayRootDrop: ((Entry) -> Void)?
+    @Environment(EntryExpansion.self) private var expansion: EntryExpansion?
     @EnvironmentObject var dragState: DragState
-    @StateObject private var vm = EntryViewModel()
-    // For sets cards: joined data of the selected member, whose identity and
-    // attributes are what the card displays (the sequence level is hidden).
-    @StateObject private var selectedMemberVM = EntryViewModel()
+    // Sets cards show their selected member instead (SetsCardContent), so each
+    // card holds one of these two.
+    @GvQuery private var join: EntryJoin?
+    @GvQuery private var setsMembers: [Entry]
     @State private var isExpanded = false
     // nil tracks the last member, so a "+" duplicate (appended at the end)
-    // becomes selected automatically when the forest refreshes.
+    // becomes selected automatically when the members update.
     @State private var selectedMemberId: String?
 
-    private var setsMembers: [Entry] {
-        entry.displayAsSets ? forestVM.children(of: entry.id) : []
+    init(entry: Entry, onDayRootDrop: ((Entry) -> Void)? = nil) {
+        self.entry = entry
+        self.onDayRootDrop = onDayRootDrop
+        _join = GvQuery(.entryJoin(entry.displayAsSets ? nil : entry.id))
+        _setsMembers = GvQuery(.setsMembers(of: entry.displayAsSets ? entry.id : nil))
     }
 
     private var selectedMember: Entry? {
@@ -66,36 +80,28 @@ struct EntryView: View {
         entry.displayAsSets ? setsMembers.contains { $0.isSequence } : entry.isSequence
     }
 
-    // Single source of truth lives in core (`EntryJoin::display_name`),
-    // surfaced via `EntryJoin.displayName`. Empty string covers the
-    // single render frame between view appear and the subscription
-    // populating the cache; SwiftUI swaps in the real value immediately.
-    // Sets sequences are anonymous; their cards title as the selected member.
-    var displayName: String {
-        (entry.displayAsSets ? selectedMemberVM : vm).entryJoin?.displayName ?? ""
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            EntryHeader(
-                entry: entry,
-                attributeTarget: entry.displayAsSets ? (selectedMember ?? entry) : entry,
-                displayName: displayName,
-                activityName: (entry.displayAsSets ? selectedMemberVM : vm).entryJoin?.activity?.name,
-                isExpanded: isExpanded,
-                onToggle: { isExpanded.toggle() }
-            )
-            if isExpanded {
-                if entry.displayAsSets {
-                    SetsBody(
-                        sequence: entry,
-                        members: setsMembers,
-                        selectedMember: selectedMember,
-                        selectedMemberId: $selectedMemberId,
-                        memberAttributes: selectedMemberVM.entryJoin?.attributes ?? []
-                    )
-                } else {
-                    EntryBody(entry: entry, attributes: vm.entryJoin?.attributes ?? [])
+            if entry.displayAsSets {
+                SetsCardContent(
+                    sequence: entry,
+                    members: setsMembers,
+                    selectedMember: selectedMember,
+                    selectedMemberId: $selectedMemberId,
+                    isExpanded: $isExpanded
+                )
+            } else {
+                EntryHeader(
+                    entry: entry,
+                    attributeTarget: entry,
+                    // Single source of truth lives in core (`EntryJoin::display_name`).
+                    displayName: join?.displayName ?? "",
+                    activityName: join?.activity?.name,
+                    isExpanded: isExpanded,
+                    onToggle: { isExpanded.toggle() }
+                )
+                if isExpanded {
+                    EntryBody(entry: entry, attributes: join?.attributes ?? [])
                 }
             }
         }
@@ -121,16 +127,8 @@ struct EntryView: View {
         .onAppear {
             // Pre-marked by actions that swap this card's identity (e.g.
             // ConvertToSets replacing an entry with its new sets sequence).
-            if forestVM.consumePendingExpanded(entry.id) {
+            if expansion?.consume(entry.id) == true {
                 isExpanded = true
-            }
-            vm.start(core: coreEnv.core, dataChange: dataChange, entryId: entry.id)
-        }
-        // Runs on appear and whenever the selection (or membership) changes;
-        // start is idempotent per id and re-targets across ids.
-        .task(id: selectedMember?.id) {
-            if let memberId = selectedMember?.id {
-                selectedMemberVM.start(core: coreEnv.core, dataChange: dataChange, entryId: memberId)
             }
         }
     }
@@ -163,7 +161,7 @@ private struct EntryHeader: View {
     let isExpanded: Bool
     let onToggle: () -> Void
     @State private var isMenuPresented = false
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
     @EnvironmentObject private var dragState: DragState
     @Environment(\.entryContext) private var entryContext
 
@@ -196,7 +194,7 @@ private struct EntryHeader: View {
                 }
             } else {
                 FillCheckbox(checked: entry.isComplete, onToggle: {
-                    forestVM.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
+                    gv?.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
                 })
             }
         }
@@ -246,64 +244,80 @@ private struct EntryBody: View {
 
 // MARK: - Children
 
+// Rust lays out "drop, child, drop, …, drop" (gv-ui `child_slots`): positions,
+// and slot ids derived from each gap's neighbours, so isTargeted @State never
+// transfers to a different gap after a drop.
 private struct ChildrenSection: View {
-    let parent: Entry
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @GvQuery private var slots: [ChildSlot]
+
+    init(parent: Entry) {
+        _slots = GvQuery(.childSlots(of: parent.id))
+    }
 
     var body: some View {
-        let children = forestVM.children(of: parent.id)
-        let slots = buildSlots(parentId: parent.id, children: children)
         if !slots.isEmpty {
             VStack(spacing: 0) {
                 ForEach(slots) { slot in
-                    if let position = slot.position {
-                        DropTarget(position: position, predId: slot.predId, succId: slot.succId)
-                    }
-                    if let child = slot.child {
+                    switch slot {
+                    case .drop(_, let position, let predId, let succId):
+                        DropTarget(position: position, predId: predId, succId: succId)
+                    case .entry(let child):
                         EntryView(entry: child)
                     }
                 }
             }
         }
     }
-
-    // Identity is pred/succ-based for drop targets, entry-id-based for children.
-    // This prevents SwiftUI from transferring isTargeted @State across slots that
-    // shift positions after a drop + forest refresh.
-    private struct Slot: Identifiable {
-        let id: String
-        let position: Position?
-        let predId: String?
-        let succId: String?
-        let child: Entry?
-
-        static func dropTarget(position: Position, predId: String?, succId: String?) -> Slot {
-            Slot(id: "drop-\(predId ?? "start")-\(succId ?? "end")", position: position, predId: predId, succId: succId, child: nil)
-        }
-
-        static func childSlot(_ entry: Entry) -> Slot {
-            Slot(id: "child-\(entry.id)", position: nil, predId: nil, succId: nil, child: entry)
-        }
-    }
-
-    private func buildSlots(parentId: String, children: [Entry]) -> [Slot] {
-        var slots: [Slot] = []
-        let count = children.count
-        for i in 0...count {
-            let predId = i > 0 ? children[i - 1].id : nil
-            let succId = i < count ? children[i].id : nil
-            if let position = forestVM.positionBetween(parentId: parentId, predId: predId, succId: succId) {
-                slots.append(.dropTarget(position: position, predId: predId, succId: succId))
-            }
-            if i < count {
-                slots.append(.childSlot(children[i]))
-            }
-        }
-        return slots
-    }
 }
 
 // MARK: - Sets
+
+// A sets card's header and body. Sets sequences are anonymous, so the card shows
+// its selected member's identity and attributes. Declaring that member's join in
+// init means it is there on the first frame, and the hook follows the selection.
+private struct SetsCardContent: View {
+    let sequence: Entry
+    let members: [Entry]
+    let selectedMember: Entry?
+    @Binding var selectedMemberId: String?
+    @Binding var isExpanded: Bool
+    @GvQuery private var memberJoin: EntryJoin?
+
+    init(
+        sequence: Entry,
+        members: [Entry],
+        selectedMember: Entry?,
+        selectedMemberId: Binding<String?>,
+        isExpanded: Binding<Bool>
+    ) {
+        self.sequence = sequence
+        self.members = members
+        self.selectedMember = selectedMember
+        _selectedMemberId = selectedMemberId
+        _isExpanded = isExpanded
+        _memberJoin = GvQuery(.entryJoin(selectedMember?.id))
+    }
+
+    var body: some View {
+        EntryHeader(
+            entry: sequence,
+            attributeTarget: selectedMember ?? sequence,
+            displayName: memberJoin?.displayName ?? "",
+            activityName: memberJoin?.activity?.name,
+            isExpanded: isExpanded,
+            onToggle: { isExpanded.toggle() }
+        )
+        if isExpanded {
+            SetsBody(
+                sequence: sequence,
+                members: members,
+                selectedMember: selectedMember,
+                selectedMemberId: $selectedMemberId,
+                memberAttributes: memberJoin?.attributes ?? []
+            )
+        }
+    }
+}
 
 // Body for a display_as_sets sequence. The sequence level is hidden: the card
 // shows the Sets picker, the sequence's one Time row (the sequence owns the
@@ -375,7 +389,7 @@ private struct SetsBody: View {
 private struct SetsControl: View {
     let members: [Entry]
     @Binding var selectedMemberId: String?
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
 
     private var selectedIndex: Int {
         members.firstIndex { $0.id == selectedMemberId } ?? members.count - 1
@@ -421,7 +435,7 @@ private struct SetsControl: View {
 
     private func addSet() {
         guard let last = members.last else { return }
-        forestVM.duplicateEntry(entry: last)
+        gv?.duplicateEntry(entry: last)
         // nil tracks the last member, which is the new copy after refresh.
         selectedMemberId = nil
     }
@@ -430,7 +444,7 @@ private struct SetsControl: View {
         guard members.count > 1 else { return }
         let index = selectedIndex
         selectedMemberId = index > 0 ? members[index - 1].id : members[1].id
-        forestVM.deleteEntry(entry: members[index])
+        gv?.deleteEntry(entry: members[index])
     }
 }
 
@@ -438,9 +452,15 @@ private struct SetsControl: View {
 
 private struct EntryFooter: View {
     let entry: Entry
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
     @Environment(\.entryContext) private var entryContext
+    @GvQuery private var appendPosition: Position?
     @State private var isCreatePresented = false
+
+    init(entry: Entry) {
+        self.entry = entry
+        _appendPosition = GvQuery(.appendPosition(in: entry.isSequence ? entry.id : nil))
+    }
 
     var body: some View {
         if entry.isSequence {
@@ -467,7 +487,9 @@ private struct EntryFooter: View {
             .padding(.bottom, GvSpacing.entrySpacing)
             .sheet(isPresented: $isCreatePresented) {
                 CreateEntrySheet(isPresented: $isCreatePresented) { activityId, name, isSeq in
-                    forestVM.createChildEntry(in: entry, activityId: activityId, name: name, isSequence: isSeq)
+                    if let appendPosition {
+                        gv?.createChildEntry(in: entry, at: appendPosition, activityId: activityId, name: name, isSequence: isSeq)
+                    }
                     isCreatePresented = false
                 }
             }
@@ -475,7 +497,7 @@ private struct EntryFooter: View {
             HStack {
                 Spacer()
                 FillCheckbox(checked: entry.isComplete, onToggle: {
-                    forestVM.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
+                    gv?.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
                 })
             }
             .padding(.trailing, -GvSpacing.entrySpacing)
@@ -519,7 +541,8 @@ private struct EntryMenuContent: View {
     let entryName: String
     let activityName: String?
     @Binding var isPresented: Bool
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(EntryExpansion.self) private var expansion: EntryExpansion?
+    @Environment(\.gvClient) private var gv
 
     var body: some View {
         let isRoot = entry.position == nil
@@ -532,15 +555,22 @@ private struct EntryMenuContent: View {
                     // Group 1 — workflow
                     if !isTemplateRoot {
                         GvMenuRow("Duplicate", icon: "doc.on.doc") {
-                            forestVM.duplicateEntry(entry: entry)
+                            gv?.duplicateEntry(entry: entry)
                         }
                         if entry.displayAsSets {
                             GvMenuRow("Break out", icon: "rectangle.stack") {
-                                forestVM.setDisplayAsSets(entryId: entry.id, displayAsSets: false)
+                                gv?.setDisplayAsSets(entryId: entry.id, displayAsSets: false)
                             }
                         } else {
                             GvMenuRow("With sets", icon: "rectangle.stack.badge.plus") {
-                                forestVM.convertToSets(entry: entry)
+                                // The sequence id is minted here so the replacement card can
+                                // be marked expanded before it mounts: the entry's card
+                                // unmounts and the sequence's mounts with a fresh identity,
+                                // which would otherwise collapse it. Lowercased to match ids
+                                // as core emits them.
+                                let sequenceId = UUID().uuidString.lowercased()
+                                expansion?.mark(sequenceId)
+                                gv?.convertToSets(entry: entry, sequenceId: sequenceId)
                             }
                         }
                     }
@@ -585,12 +615,12 @@ private struct EntryMenuContent: View {
                     // Group 4 — destructive
                     if entry.isSequence {
                         GvMenuRow("Delete recursive", icon: "trash.fill", isDestructive: true) {
-                            forestVM.deleteEntry(entry: entry)
+                            gv?.deleteEntry(entry: entry)
                         }
                         GvMenuRow("Delete unbox", icon: "arrow.up.backward.and.arrow.down.forward", isDestructive: true)
                     } else {
                         GvMenuRow("Delete", icon: "trash", isDestructive: true) {
-                            forestVM.deleteEntry(entry: entry)
+                            gv?.deleteEntry(entry: entry)
                         }
                     }
                 }

@@ -54,27 +54,29 @@ GainzvilleCore (uniffi::Object)
     ▼
 SqliteClient  ──►  SQLite (tokio + sqlx)
     │
-    └──► listener.on_data_changed()  ──►  Swift callback
+    └──► LiveStore  ──►  listener.on_batch(batch)  ──►  Swift callback
 ```
 
 ## API surface
 
 ```swift
-// Initialise with path to SQLite file and a change-notification listener.
-GainzvilleCore(dbPath: String, actorId: String, listener: CoreListener)
+// Initialise with path to SQLite file.
+GainzvilleCore(dbPath: String, actorId: String)
 
-// Write — fire and forget; triggers on_data_changed() on success.
-func runAction(action: FfiAction) throws
+// Register the one batch listener, before the first subscribe.
+func setLiveListener(listener: LiveListener)
 
-// Read — synchronous snapshot, no DB round-trip cache yet.
-func getActivities() -> [FfiActivity]
+// Subscribe: the first value now, later values in batches. Releasing the handle unsubscribes.
+func liveSubscribe(query: ClientQuery) throws -> LiveSubscribed
+
+// Answer once against the latest version.
+func liveRead(query: ClientQuery) throws -> ClientQueryResponse
+
+// Write. Returns at commit; the batch reflecting it arrives afterward.
+func runAction(action: Action) throws
 ```
 
-Swift implements the `CoreListener` protocol to receive change notifications:
-
-```swift
-func onDataChanged()   // called after every successful runAction
-```
+The app doesn't use these directly: `swift-app/Gainzville/GvKit/` wraps them in `@GvQuery` hooks and write helpers. See `swift-app/SWIFT-APP.md`.
 
 ## FFI types
 

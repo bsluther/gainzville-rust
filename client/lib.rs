@@ -1,2 +1,3 @@
 pub mod client;
-pub mod query_store;
+pub mod live;
+pub mod queries;

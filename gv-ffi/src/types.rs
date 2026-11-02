@@ -1,5 +1,9 @@
 use chrono::{DateTime, Utc};
 use fractional_index::FractionalIndex;
+use gv_client::{
+    live::{LiveBatch, LiveResult, LiveUpdate},
+    queries::{ClientQuery, ClientQueryResponse},
+};
 use gv_core::{
     actions::{
         Action, AttachValue, AttributeChange, ConvertToSets, CreateActivity, CreateAttribute,
@@ -24,15 +28,12 @@ use gv_core::{
         entry_join::EntryJoin,
         user::User,
     },
-    queries::{
-        AllActivities, AllActorIds, AllAttributes, AllEntries, AnyQuery, AnyQueryResponse,
-        DistinctTextValuesForAttribute, EntriesRootedInTimeInterval, FindActivityById,
-        FindActivityTemplateRoot, FindAncestors, FindAttributeById, FindAttributePairsForEntry,
-        FindAttributesByOwner, FindDescendants, FindEntryById, FindEntryJoinById, FindUserById,
-        FindUserByUsername, FindValueByKey, FindValuesForEntries, FindValuesForEntry,
-        IsEmailRegistered,
-    },
+    queries::*,
     validation::{Email, Username},
+};
+use gv_ui::{
+    ChildSlot,
+    queries::{ChildSlots, SetsMembers, SuggestedRootInsertionTime, WouldCreateCycle},
 };
 use uuid::Uuid;
 
@@ -419,65 +420,39 @@ pub struct EntryJoin {
     pub display_name: String,
 }
 
-// --- Queries ---
-
-#[uniffi::remote(Record)]
-pub struct IsEmailRegistered {
-    pub email: Email,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindUserById {
-    pub actor_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindUserByUsername {
-    pub username: Username,
-}
-
-#[uniffi::remote(Record)]
-pub struct AllActorIds;
-
-#[uniffi::remote(Record)]
-pub struct FindActivityById {
-    pub id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindActivityTemplateRoot {
-    pub activity_id: Uuid,
-}
+// --- Questions ---
+//
+// One remote Record per question, restating the structs in `gv_core::queries` and
+// `gv_ui::queries`, like the action records below.
+//
+// Doc comments here reach Swift, so they describe what a caller needs. Implementation notes stay on
+// the Rust definitions.
 
 #[uniffi::remote(Record)]
 pub struct AllActivities;
 
 #[uniffi::remote(Record)]
-pub struct AllEntries;
+/// The root template entry for an activity (parentless, `is_template`, matching
+/// `activity_id`). `CreateActivity` guarantees exactly one.
+pub struct FindActivityTemplateRoot {
+    pub activity_id: Uuid,
+}
 
 #[uniffi::remote(Record)]
-pub struct EntriesRootedInTimeInterval {
+/// Log roots (parentless, non-template entries) whose canonical instant falls in the
+/// half-open interval `[from, to)`, sorted by canonical instant (ties by id). This is what a
+/// log day shows.
+///
+/// Returns roots only (no descendants). An entry at the next day's midnight is not on this
+/// day, and end-anchored entries (`End`, `DurationAndEnd`) are placed by their canonical
+/// instant.
+pub struct RootEntriesInInterval {
     pub from: DateTime<Utc>,
     pub to: DateTime<Utc>,
 }
 
 #[uniffi::remote(Record)]
-pub struct FindAncestors {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindEntryById {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
 pub struct FindEntryJoinById {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindDescendants {
     pub entry_id: Uuid,
 }
 
@@ -490,94 +465,128 @@ pub struct FindAttributeById {
 pub struct AllAttributes;
 
 #[uniffi::remote(Record)]
+/// `owner_id` is the query dimension: returns all attributes owned by this actor.
 pub struct FindAttributesByOwner {
     pub owner_id: Uuid,
 }
 
 #[uniffi::remote(Record)]
-pub struct FindValueByKey {
-    pub entry_id: Uuid,
-    pub attribute_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindValuesForEntry {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindValuesForEntries {
-    pub entry_ids: Vec<Uuid>,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindAttributePairsForEntry {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
+/// Distinct text values previously entered for an attribute (plan ∪ actual), sorted — the
+/// source for a text attribute's input autocomplete.
 pub struct DistinctTextValuesForAttribute {
     pub attribute_id: Uuid,
 }
 
+#[uniffi::remote(Record)]
+/// A sequence's children laid out for display: drop, child, drop, ..., drop.
+pub struct ChildSlots {
+    pub parent_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+/// The members of a sets sequence, in order; none if it doesn't display as sets.
+pub struct SetsMembers {
+    pub sequence_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+/// An activity's template root with its activity and attributes.
+pub struct ActivityTemplateJoin {
+    pub activity_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+/// Would moving `entry_id` under `proposed_parent_id` create a cycle? (Drag-time check.)
+pub struct WouldCreateCycle {
+    pub entry_id: Uuid,
+    pub proposed_parent_id: Uuid,
+}
+
+#[uniffi::remote(Record)]
+/// When a new log root on the day starting at `day_start` should be placed: now if the
+/// day is today, else just after the day's last root, else noon.
+///
+/// Depends on the current time, which no data version captures: read it once at the
+/// moment of use; a subscription would go stale between writes.
+pub struct SuggestedRootInsertionTime {
+    pub day_start: DateTime<Utc>,
+}
+
+// --- The client's query set ---
+//
+// Swift sees one flat enum. The backing doesn't cross: it's invisible.
+
 #[uniffi::remote(Enum)]
-pub enum AnyQuery {
-    // Auth
-    IsEmailRegistered(IsEmailRegistered),
-    FindUserById(FindUserById),
-    FindUserByUsername(FindUserByUsername),
-    AllActorIds(AllActorIds),
-    // Activity
-    FindActivityById(FindActivityById),
+/// A question the client can subscribe to or read once. The variant says *what* is
+/// asked, never how it is answered.
+pub enum ClientQuery {
+    ChildSlots(ChildSlots),
+    SetsMembers(SetsMembers),
+    WouldCreateCycle(WouldCreateCycle),
+    SuggestedRootInsertionTime(SuggestedRootInsertionTime),
+    RootEntriesInInterval(RootEntriesInInterval),
+    ActivityTemplateJoin(ActivityTemplateJoin),
+    FindEntryJoinById(FindEntryJoinById),
     AllActivities(AllActivities),
     FindActivityTemplateRoot(FindActivityTemplateRoot),
-    // Entry
-    AllEntries(AllEntries),
-    EntriesRootedInTimeInterval(EntriesRootedInTimeInterval),
-    FindAncestors(FindAncestors),
-    FindEntryById(FindEntryById),
-    FindEntryJoinById(FindEntryJoinById),
-    FindDescendants(FindDescendants),
-    // Attribute
     FindAttributeById(FindAttributeById),
     AllAttributes(AllAttributes),
     FindAttributesByOwner(FindAttributesByOwner),
-    // Value
-    FindValueByKey(FindValueByKey),
-    FindValuesForEntry(FindValuesForEntry),
-    FindValuesForEntries(FindValuesForEntries),
-    FindAttributePairsForEntry(FindAttributePairsForEntry),
     DistinctTextValuesForAttribute(DistinctTextValuesForAttribute),
 }
 
 #[uniffi::remote(Enum)]
-pub enum AnyQueryResponse {
-    // Auth
-    IsEmailRegistered(bool),
-    FindUserById(Option<User>),
-    FindUserByUsername(Option<User>),
-    AllActorIds(Vec<Uuid>),
-    // Activity
-    FindActivityById(Option<Activity>),
-    FindActivityTemplateRoot(Option<Entry>),
-    AllActivities(Vec<Activity>),
-    // Entry
-    AllEntries(Vec<Entry>),
-    EntriesRootedInTimeInterval(Vec<Entry>),
-    FindAncestors(Vec<Uuid>),
-    FindEntryById(Option<Entry>),
+pub enum ClientQueryResponse {
+    ChildSlots(Vec<ChildSlot>),
+    SetsMembers(Vec<Entry>),
+    WouldCreateCycle(bool),
+    SuggestedRootInsertionTime(DateTime<Utc>),
+    RootEntriesInInterval(Vec<Entry>),
+    ActivityTemplateJoin(Option<EntryJoin>),
     FindEntryJoinById(Option<EntryJoin>),
-    FindDescendants(Vec<Entry>),
-    // Attribute
+    AllActivities(Vec<Activity>),
+    FindActivityTemplateRoot(Option<Entry>),
     FindAttributeById(Option<Attribute>),
     AllAttributes(Vec<Attribute>),
     FindAttributesByOwner(Vec<Attribute>),
-    // Value
-    FindValueByKey(Option<Value>),
-    FindValuesForEntry(Vec<Value>),
-    FindValuesForEntries(Vec<Value>),
-    FindAttributePairsForEntry(Vec<AttributePair>),
     DistinctTextValuesForAttribute(Vec<String>),
+}
+
+// --- Live queries (gv-client) ---
+//
+// The live envelope around `ClientQuery`/`ClientQueryResponse`: what comes back per subscription
+// (`LiveResult`), delivered in `LiveBatch`es. Nothing here says how a query is answered; that is
+// declared in `gv_client::queries`.
+
+#[uniffi::remote(Enum)]
+pub enum ChildSlot {
+    Drop {
+        id: String,
+        position: Position,
+        pred_id: Option<Uuid>,
+        succ_id: Option<Uuid>,
+    },
+    Entry {
+        entry: Entry,
+    },
+}
+
+#[uniffi::remote(Enum)]
+pub enum LiveResult {
+    Response(ClientQueryResponse),
+    Failed { message: String },
+}
+
+#[uniffi::remote(Record)]
+pub struct LiveUpdate {
+    pub subscription_id: u64,
+    pub value: LiveResult,
+}
+
+#[uniffi::remote(Record)]
+pub struct LiveBatch {
+    pub version: u64,
+    pub updates: Vec<LiveUpdate>,
 }
 
 // --- Actions ---

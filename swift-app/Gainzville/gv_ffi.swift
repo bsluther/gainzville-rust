@@ -441,6 +441,22 @@ fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
     typealias FfiType = Int64
     typealias SwiftType = Int64
@@ -539,319 +555,6 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 /**
- * Swift implements this protocol to receive change notifications.
- */
-public protocol CoreListener: AnyObject, Sendable {
-    
-    /**
-     * Called after any successful `run_action`. Swift reads from the cache
-     * synchronously via `read_query` after receiving this callback.
-     */
-    func onDataChanged() 
-    
-}
-/**
- * Swift implements this protocol to receive change notifications.
- */
-open class CoreListenerImpl: CoreListener, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_gv_ffi_fn_clone_corelistener(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_gv_ffi_fn_free_corelistener(handle, $0) }
-    }
-
-    
-
-    
-    /**
-     * Called after any successful `run_action`. Swift reads from the cache
-     * synchronously via `read_query` after receiving this callback.
-     */
-open func onDataChanged()  {try! rustCall() {
-    uniffi_gv_ffi_fn_method_corelistener_on_data_changed(
-            self.uniffiCloneHandle(),$0
-    )
-}
-}
-    
-
-    
-}
-
-
-
-// Put the implementation in a struct so we don't pollute the top-level namespace
-fileprivate struct UniffiCallbackInterfaceCoreListener {
-
-    // Create the VTable using a series of closures.
-    // Swift automatically converts these into C callback functions.
-    //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceCoreListener] = [UniffiVTableCallbackInterfaceCoreListener(
-        uniffiFree: { (uniffiHandle: UInt64) -> () in
-            do {
-                try FfiConverterTypeCoreListener.handleMap.remove(handle: uniffiHandle)
-            } catch {
-                print("Uniffi callback interface CoreListener: handle missing in uniffiFree")
-            }
-        },
-        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
-            do {
-                return try FfiConverterTypeCoreListener.handleMap.clone(handle: uniffiHandle)
-            } catch {
-                fatalError("Uniffi callback interface CoreListener: handle missing in uniffiClone")
-            }
-        },
-        onDataChanged: { (
-            uniffiHandle: UInt64,
-            uniffiOutReturn: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
-        ) in
-            let makeCall = {
-                () throws -> () in
-                guard let uniffiObj = try? FfiConverterTypeCoreListener.handleMap.get(handle: uniffiHandle) else {
-                    throw UniffiInternalError.unexpectedStaleHandle
-                }
-                return uniffiObj.onDataChanged(
-                )
-            }
-
-            
-            let writeReturn = { () }
-            uniffiTraitInterfaceCall(
-                callStatus: uniffiCallStatus,
-                makeCall: makeCall,
-                writeReturn: writeReturn
-            )
-        }
-    )]
-}
-
-private func uniffiCallbackInitCoreListener() {
-    uniffi_gv_ffi_fn_init_callback_vtable_corelistener(UniffiCallbackInterfaceCoreListener.vtable)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCoreListener: FfiConverter {
-    fileprivate static let handleMap = UniffiHandleMap<CoreListener>()
-
-    typealias FfiType = UInt64
-    typealias SwiftType = CoreListener
-
-    public static func lift(_ handle: UInt64) throws -> CoreListener {
-        if ((handle & 1) == 0) {
-            // Rust-generated handle, construct a new class that uses the handle to implement the
-            // interface
-            return CoreListenerImpl(unsafeFromHandle: handle)
-        } else {
-            // Swift-generated handle, get the object from the handle map
-            return try handleMap.remove(handle: handle)
-        }
-    }
-
-    public static func lower(_ value: CoreListener) -> UInt64 {
-         if let rustImpl = value as? CoreListenerImpl {
-             // Rust-implemented object.  Clone the handle and return it
-            return rustImpl.uniffiCloneHandle()
-         } else {
-            // Swift object, generate a new vtable handle and return that.
-            return handleMap.insert(obj: value)
-         }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CoreListener {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: CoreListener, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCoreListener_lift(_ handle: UInt64) throws -> CoreListener {
-    return try FfiConverterTypeCoreListener.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCoreListener_lower(_ value: CoreListener) -> UInt64 {
-    return FfiConverterTypeCoreListener.lower(value)
-}
-
-
-
-
-
-
-/**
- * UniFFI-compatible wrapper around `QuerySubscription`. Dropping this value
- * (when Swift releases its reference) automatically unsubscribes the query.
- * The inner Arc is held only for its Drop side-effect.
- */
-public protocol FfiQuerySubscriptionProtocol: AnyObject, Sendable {
-    
-}
-/**
- * UniFFI-compatible wrapper around `QuerySubscription`. Dropping this value
- * (when Swift releases its reference) automatically unsubscribes the query.
- * The inner Arc is held only for its Drop side-effect.
- */
-open class FfiQuerySubscription: FfiQuerySubscriptionProtocol, @unchecked Sendable {
-    fileprivate let handle: UInt64
-
-    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoHandle {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromHandle handle: UInt64) {
-        self.handle = handle
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noHandle: NoHandle) {
-        self.handle = 0
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiCloneHandle() -> UInt64 {
-        return try! rustCall { uniffi_gv_ffi_fn_clone_ffiquerysubscription(self.handle, $0) }
-    }
-    // No primary constructor declared for this class.
-
-    deinit {
-        if handle == 0 {
-            // Mock objects have handle=0 don't try to free them
-            return
-        }
-
-        try! rustCall { uniffi_gv_ffi_fn_free_ffiquerysubscription(handle, $0) }
-    }
-
-    
-
-    
-
-    
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFfiQuerySubscription: FfiConverter {
-    typealias FfiType = UInt64
-    typealias SwiftType = FfiQuerySubscription
-
-    public static func lift(_ handle: UInt64) throws -> FfiQuerySubscription {
-        return FfiQuerySubscription(unsafeFromHandle: handle)
-    }
-
-    public static func lower(_ value: FfiQuerySubscription) -> UInt64 {
-        return value.uniffiCloneHandle()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiQuerySubscription {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    public static func write(_ value: FfiQuerySubscription, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiQuerySubscription_lift(_ handle: UInt64) throws -> FfiQuerySubscription {
-    return try FfiConverterTypeFfiQuerySubscription.lift(handle)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFfiQuerySubscription_lower(_ value: FfiQuerySubscription) -> UInt64 {
-    return FfiConverterTypeFfiQuerySubscription.lower(value)
-}
-
-
-
-
-
-
-/**
  * The main entry point for Swift. Wraps `SqliteClient` with a static tokio
  * runtime and synchronous UniFFI-exported methods.
  */
@@ -878,93 +581,35 @@ public protocol GainzvilleCoreProtocol: AnyObject, Sendable {
     func devSeedStdLib() throws 
     
     /**
-     * The root template entry for an activity, if present in the forest cache.
-     * Backs the library's activity-template editing: the activity detail view
-     * resolves the root here, then reuses the existing forest traversal +
-     * per-entry join subscriptions to render and edit the template.
+     * Answer a live query once against the latest version, without subscribing.
      */
-    func forestActivityTemplateRoot(activityId: Uuid)  -> Entry?
+    func liveRead(query: ClientQuery) throws  -> ClientQueryResponse
     
     /**
-     * Ancestors of `entry_id` from immediate parent up to the root.
+     * Subscribe to a live query. Returns the first value immediately.
      */
-    func forestAncestors(entryId: Uuid)  -> [Entry]
+    func liveSubscribe(query: ClientQuery) throws  -> LiveSubscribed
     
     /**
-     * Direct children of `parent_id`, sorted by fractional index.
-     */
-    func forestChildren(parentId: Uuid)  -> [Entry]
-    
-    /**
-     * Position immediately after the last child of `parent_id`.
-     * Returns `None` if the parent is not found in the current snapshot.
-     * Caller must ensure `parent_id` refers to a sequence entry.
-     */
-    func forestPositionAfterChildren(parentId: Uuid)  -> Position?
-    
-    /**
-     * Position between two adjacent children of a sequence.
-     * `pred_id` and `succ_id` are the IDs of the predecessor and successor entries;
-     * pass `None` for the start or end of the child list.
-     * Caller must ensure `parent_id` refers to a sequence entry.
-     */
-    func forestPositionBetween(parentId: Uuid, predId: Uuid?, succId: Uuid?)  -> Position?
-    
-    /**
-     * All root entries (no parent), sorted by canonical instant.
-     */
-    func forestRoots()  -> [Entry]
-    
-    /**
-     * Root entries whose canonical instant falls within `[from, to)`, sorted by time.
-     */
-    func forestRootsIn(from: UtcDateTime, to: UtcDateTime)  -> [Entry]
-    
-    /**
-     * Suggested start time for a new root-level entry on the given day.
-     * Returns now if today, one minute after the last existing root entry
-     * otherwise, or noon as a fallback.
-     */
-    func forestSuggestedRootDayInsertionTime(dayStart: UtcDateTime)  -> UtcDateTime
-    
-    /**
-     * Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
-     */
-    func forestWouldCreateCycle(entryId: Uuid, proposedParentId: Uuid)  -> Bool
-    
-    /**
-     * Read the current cached result for a query. Returns `None` if the query
-     * is not subscribed. Swift calls this synchronously from the main thread
-     * after receiving `on_data_changed()`.
-     */
-    func readQuery(query: AnyQuery)  -> AnyQueryResponse?
-    
-    /**
-     * Execute a write action. Returns once the write has committed; the cache
-     * refresh and `on_data_changed()` callback happen asynchronously afterward.
+     * Execute a write action. Returns once the write has committed; the batch
+     * reflecting it arrives asynchronously afterward.
      */
     func runAction(action: Action) throws 
     
     /**
+     * Register the batch listener. Call once, before the first `live_subscribe`: batches are
+     * deltas on top of first values, so a subscriber that misses one stays stale. `on_batch` runs
+     * inside the step that publishes the version, so it must only enqueue: it must not block or
+     * call back into this object.
+     */
+    func setLiveListener(listener: LiveListener) 
+    
+    /**
      * Spawn a background task that creates a new activity every 10 seconds.
-     * Cache refresh and `on_data_changed()` fire automatically via the change
-     * broadcast — no manual wiring needed here.
+     * Live queries update automatically via the change broadcast — no manual
+     * wiring needed here.
      */
     func startBackgroundTicker() 
-    
-    /**
-     * Subscribe to the forest cache. Internally subscribes to AllEntries.
-     * Hold the returned token for the lifetime of the subscriber; dropping it
-     * unsubscribes automatically, same as `subscribe_query`.
-     */
-    func subscribeForest() throws  -> FfiQuerySubscription
-    
-    /**
-     * Subscribe to a query. Runs the initial query immediately, populates the
-     * cache, and returns a `FfiQuerySubscription` handle. Dropping the handle
-     * (Swift releasing the reference) auto-removes the query from the cache.
-     */
-    func subscribeQuery(query: AnyQuery) throws  -> FfiQuerySubscription
     
 }
 /**
@@ -1015,15 +660,13 @@ open class GainzvilleCore: GainzvilleCoreProtocol, @unchecked Sendable {
      *
      * - `db_path`: SQLite connection string, e.g. `"sqlite:///path/to/db.sqlite"`.
      * - `actor_id`: UUID identifying the current user's actor.
-     * - `listener`: Swift-side callback object for change notifications.
      */
-public convenience init(dbPath: String, actorId: Uuid, listener: CoreListener)throws  {
+public convenience init(dbPath: String, actorId: Uuid)throws  {
     let handle =
         try rustCallWithError(FfiConverterTypeFfiError_lift) {
     uniffi_gv_ffi_fn_constructor_gainzvillecore_new(
         FfiConverterString.lower(dbPath),
-        FfiConverterTypeUuid_lower(actorId),
-        FfiConverterTypeCoreListener_lower(listener),$0
+        FfiConverterTypeUuid_lower(actorId),$0
     )
 }
     self.init(unsafeFromHandle: handle)
@@ -1079,143 +722,32 @@ open func devSeedStdLib()throws   {try rustCallWithError(FfiConverterTypeFfiErro
 }
     
     /**
-     * The root template entry for an activity, if present in the forest cache.
-     * Backs the library's activity-template editing: the activity detail view
-     * resolves the root here, then reuses the existing forest traversal +
-     * per-entry join subscriptions to render and edit the template.
+     * Answer a live query once against the latest version, without subscribing.
      */
-open func forestActivityTemplateRoot(activityId: Uuid) -> Entry?  {
-    return try!  FfiConverterOptionTypeEntry.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_activity_template_root(
+open func liveRead(query: ClientQuery)throws  -> ClientQueryResponse  {
+    return try  FfiConverterTypeClientQueryResponse_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+    uniffi_gv_ffi_fn_method_gainzvillecore_live_read(
             self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(activityId),$0
+        FfiConverterTypeClientQuery_lower(query),$0
     )
 })
 }
     
     /**
-     * Ancestors of `entry_id` from immediate parent up to the root.
+     * Subscribe to a live query. Returns the first value immediately.
      */
-open func forestAncestors(entryId: Uuid) -> [Entry]  {
-    return try!  FfiConverterSequenceTypeEntry.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_ancestors(
+open func liveSubscribe(query: ClientQuery)throws  -> LiveSubscribed  {
+    return try  FfiConverterTypeLiveSubscribed_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+    uniffi_gv_ffi_fn_method_gainzvillecore_live_subscribe(
             self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(entryId),$0
+        FfiConverterTypeClientQuery_lower(query),$0
     )
 })
 }
     
     /**
-     * Direct children of `parent_id`, sorted by fractional index.
-     */
-open func forestChildren(parentId: Uuid) -> [Entry]  {
-    return try!  FfiConverterSequenceTypeEntry.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_children(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(parentId),$0
-    )
-})
-}
-    
-    /**
-     * Position immediately after the last child of `parent_id`.
-     * Returns `None` if the parent is not found in the current snapshot.
-     * Caller must ensure `parent_id` refers to a sequence entry.
-     */
-open func forestPositionAfterChildren(parentId: Uuid) -> Position?  {
-    return try!  FfiConverterOptionTypePosition.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_position_after_children(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(parentId),$0
-    )
-})
-}
-    
-    /**
-     * Position between two adjacent children of a sequence.
-     * `pred_id` and `succ_id` are the IDs of the predecessor and successor entries;
-     * pass `None` for the start or end of the child list.
-     * Caller must ensure `parent_id` refers to a sequence entry.
-     */
-open func forestPositionBetween(parentId: Uuid, predId: Uuid?, succId: Uuid?) -> Position?  {
-    return try!  FfiConverterOptionTypePosition.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_position_between(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(parentId),
-        FfiConverterOptionTypeUuid.lower(predId),
-        FfiConverterOptionTypeUuid.lower(succId),$0
-    )
-})
-}
-    
-    /**
-     * All root entries (no parent), sorted by canonical instant.
-     */
-open func forestRoots() -> [Entry]  {
-    return try!  FfiConverterSequenceTypeEntry.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_roots(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-    /**
-     * Root entries whose canonical instant falls within `[from, to)`, sorted by time.
-     */
-open func forestRootsIn(from: UtcDateTime, to: UtcDateTime) -> [Entry]  {
-    return try!  FfiConverterSequenceTypeEntry.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_roots_in(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUtcDateTime_lower(from),
-        FfiConverterTypeUtcDateTime_lower(to),$0
-    )
-})
-}
-    
-    /**
-     * Suggested start time for a new root-level entry on the given day.
-     * Returns now if today, one minute after the last existing root entry
-     * otherwise, or noon as a fallback.
-     */
-open func forestSuggestedRootDayInsertionTime(dayStart: UtcDateTime) -> UtcDateTime  {
-    return try!  FfiConverterTypeUtcDateTime_lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_suggested_root_day_insertion_time(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUtcDateTime_lower(dayStart),$0
-    )
-})
-}
-    
-    /**
-     * Returns true if moving `entry_id` under `proposed_parent_id` would create a cycle.
-     */
-open func forestWouldCreateCycle(entryId: Uuid, proposedParentId: Uuid) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_forest_would_create_cycle(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(entryId),
-        FfiConverterTypeUuid_lower(proposedParentId),$0
-    )
-})
-}
-    
-    /**
-     * Read the current cached result for a query. Returns `None` if the query
-     * is not subscribed. Swift calls this synchronously from the main thread
-     * after receiving `on_data_changed()`.
-     */
-open func readQuery(query: AnyQuery) -> AnyQueryResponse?  {
-    return try!  FfiConverterOptionTypeAnyQueryResponse.lift(try! rustCall() {
-    uniffi_gv_ffi_fn_method_gainzvillecore_read_query(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeAnyQuery_lower(query),$0
-    )
-})
-}
-    
-    /**
-     * Execute a write action. Returns once the write has committed; the cache
-     * refresh and `on_data_changed()` callback happen asynchronously afterward.
+     * Execute a write action. Returns once the write has committed; the batch
+     * reflecting it arrives asynchronously afterward.
      */
 open func runAction(action: Action)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
     uniffi_gv_ffi_fn_method_gainzvillecore_run_action(
@@ -1226,42 +758,29 @@ open func runAction(action: Action)throws   {try rustCallWithError(FfiConverterT
 }
     
     /**
+     * Register the batch listener. Call once, before the first `live_subscribe`: batches are
+     * deltas on top of first values, so a subscriber that misses one stays stale. `on_batch` runs
+     * inside the step that publishes the version, so it must only enqueue: it must not block or
+     * call back into this object.
+     */
+open func setLiveListener(listener: LiveListener)  {try! rustCall() {
+    uniffi_gv_ffi_fn_method_gainzvillecore_set_live_listener(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeLiveListener_lower(listener),$0
+    )
+}
+}
+    
+    /**
      * Spawn a background task that creates a new activity every 10 seconds.
-     * Cache refresh and `on_data_changed()` fire automatically via the change
-     * broadcast — no manual wiring needed here.
+     * Live queries update automatically via the change broadcast — no manual
+     * wiring needed here.
      */
 open func startBackgroundTicker()  {try! rustCall() {
     uniffi_gv_ffi_fn_method_gainzvillecore_start_background_ticker(
             self.uniffiCloneHandle(),$0
     )
 }
-}
-    
-    /**
-     * Subscribe to the forest cache. Internally subscribes to AllEntries.
-     * Hold the returned token for the lifetime of the subscriber; dropping it
-     * unsubscribes automatically, same as `subscribe_query`.
-     */
-open func subscribeForest()throws  -> FfiQuerySubscription  {
-    return try  FfiConverterTypeFfiQuerySubscription_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
-    uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_forest(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-    /**
-     * Subscribe to a query. Runs the initial query immediately, populates the
-     * cache, and returns a `FfiQuerySubscription` handle. Dropping the handle
-     * (Swift releasing the reference) auto-removes the query from the cache.
-     */
-open func subscribeQuery(query: AnyQuery)throws  -> FfiQuerySubscription  {
-    return try  FfiConverterTypeFfiQuerySubscription_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
-    uniffi_gv_ffi_fn_method_gainzvillecore_subscribe_query(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeAnyQuery_lower(query),$0
-    )
-})
 }
     
 
@@ -1307,6 +826,316 @@ public func FfiConverterTypeGainzvilleCore_lift(_ handle: UInt64) throws -> Gain
 #endif
 public func FfiConverterTypeGainzvilleCore_lower(_ value: GainzvilleCore) -> UInt64 {
     return FfiConverterTypeGainzvilleCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Swift implements this to receive live-query batches: one call per data version, carrying only
+ * the subscriptions whose result changed. Called on a Rust thread, in version order, before any
+ * `live_subscribe` can report that version. The implementation must only enqueue the batch, then
+ * apply it on the main actor in one step.
+ */
+public protocol LiveListener: AnyObject, Sendable {
+    
+    func onBatch(batch: LiveBatch) 
+    
+}
+/**
+ * Swift implements this to receive live-query batches: one call per data version, carrying only
+ * the subscriptions whose result changed. Called on a Rust thread, in version order, before any
+ * `live_subscribe` can report that version. The implementation must only enqueue the batch, then
+ * apply it on the main actor in one step.
+ */
+open class LiveListenerImpl: LiveListener, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_gv_ffi_fn_clone_livelistener(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_gv_ffi_fn_free_livelistener(handle, $0) }
+    }
+
+    
+
+    
+open func onBatch(batch: LiveBatch)  {try! rustCall() {
+    uniffi_gv_ffi_fn_method_livelistener_on_batch(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeLiveBatch_lower(batch),$0
+    )
+}
+}
+    
+
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceLiveListener {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceLiveListener] = [UniffiVTableCallbackInterfaceLiveListener(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeLiveListener.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface LiveListener: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeLiveListener.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface LiveListener: handle missing in uniffiClone")
+            }
+        },
+        onBatch: { (
+            uniffiHandle: UInt64,
+            batch: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeLiveListener.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onBatch(
+                     batch: try FfiConverterTypeLiveBatch_lift(batch)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )]
+}
+
+private func uniffiCallbackInitLiveListener() {
+    uniffi_gv_ffi_fn_init_callback_vtable_livelistener(UniffiCallbackInterfaceLiveListener.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLiveListener: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<LiveListener>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = LiveListener
+
+    public static func lift(_ handle: UInt64) throws -> LiveListener {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return LiveListenerImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: LiveListener) -> UInt64 {
+         if let rustImpl = value as? LiveListenerImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LiveListener {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: LiveListener, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveListener_lift(_ handle: UInt64) throws -> LiveListener {
+    return try FfiConverterTypeLiveListener.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveListener_lower(_ value: LiveListener) -> UInt64 {
+    return FfiConverterTypeLiveListener.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Keeps a live subscription alive; releasing it unsubscribes (refcounted per identical query).
+ */
+public protocol LiveSubscriptionHandleProtocol: AnyObject, Sendable {
+    
+}
+/**
+ * Keeps a live subscription alive; releasing it unsubscribes (refcounted per identical query).
+ */
+open class LiveSubscriptionHandle: LiveSubscriptionHandleProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_gv_ffi_fn_clone_livesubscriptionhandle(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_gv_ffi_fn_free_livesubscriptionhandle(handle, $0) }
+    }
+
+    
+
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLiveSubscriptionHandle: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = LiveSubscriptionHandle
+
+    public static func lift(_ handle: UInt64) throws -> LiveSubscriptionHandle {
+        return LiveSubscriptionHandle(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: LiveSubscriptionHandle) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LiveSubscriptionHandle {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: LiveSubscriptionHandle, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveSubscriptionHandle_lift(_ handle: UInt64) throws -> LiveSubscriptionHandle {
+    return try FfiConverterTypeLiveSubscriptionHandle.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveSubscriptionHandle_lower(_ value: LiveSubscriptionHandle) -> UInt64 {
+    return FfiConverterTypeLiveSubscriptionHandle.lower(value)
 }
 
 
@@ -1378,6 +1207,59 @@ public func FfiConverterTypeActivity_lower(_ value: Activity) -> RustBuffer {
 }
 
 
+/**
+ * An activity's template root with its activity and attributes.
+ */
+public struct ActivityTemplateJoin: Equatable, Hashable {
+    public var activityId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(activityId: Uuid) {
+        self.activityId = activityId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ActivityTemplateJoin: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeActivityTemplateJoin: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ActivityTemplateJoin {
+        return
+            try ActivityTemplateJoin(
+                activityId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ActivityTemplateJoin, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.activityId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActivityTemplateJoin_lift(_ buf: RustBuffer) throws -> ActivityTemplateJoin {
+    return try FfiConverterTypeActivityTemplateJoin.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActivityTemplateJoin_lower(_ value: ActivityTemplateJoin) -> RustBuffer {
+    return FfiConverterTypeActivityTemplateJoin.lower(value)
+}
+
+
 public struct AllActivities: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
@@ -1423,51 +1305,6 @@ public func FfiConverterTypeAllActivities_lower(_ value: AllActivities) -> RustB
 }
 
 
-public struct AllActorIds: Equatable, Hashable {
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init() {
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension AllActorIds: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAllActorIds: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllActorIds {
-        return
-            AllActorIds()
-    }
-
-    public static func write(_ value: AllActorIds, into buf: inout [UInt8]) {
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAllActorIds_lift(_ buf: RustBuffer) throws -> AllActorIds {
-    return try FfiConverterTypeAllActorIds.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAllActorIds_lower(_ value: AllActorIds) -> RustBuffer {
-    return FfiConverterTypeAllActorIds.lower(value)
-}
-
-
 public struct AllAttributes: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
@@ -1510,51 +1347,6 @@ public func FfiConverterTypeAllAttributes_lift(_ buf: RustBuffer) throws -> AllA
 #endif
 public func FfiConverterTypeAllAttributes_lower(_ value: AllAttributes) -> RustBuffer {
     return FfiConverterTypeAllAttributes.lower(value)
-}
-
-
-public struct AllEntries: Equatable, Hashable {
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init() {
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension AllEntries: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAllEntries: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllEntries {
-        return
-            AllEntries()
-    }
-
-    public static func write(_ value: AllEntries, into buf: inout [UInt8]) {
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAllEntries_lift(_ buf: RustBuffer) throws -> AllEntries {
-    return try FfiConverterTypeAllEntries.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAllEntries_lower(_ value: AllEntries) -> RustBuffer {
-    return FfiConverterTypeAllEntries.lower(value)
 }
 
 
@@ -1679,6 +1471,59 @@ public func FfiConverterTypeAttribute_lift(_ buf: RustBuffer) throws -> Attribut
 #endif
 public func FfiConverterTypeAttribute_lower(_ value: Attribute) -> RustBuffer {
     return FfiConverterTypeAttribute.lower(value)
+}
+
+
+/**
+ * A sequence's children laid out for display: drop, child, drop, ..., drop.
+ */
+public struct ChildSlots: Equatable, Hashable {
+    public var parentId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(parentId: Uuid) {
+        self.parentId = parentId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ChildSlots: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChildSlots: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChildSlots {
+        return
+            try ChildSlots(
+                parentId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChildSlots, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.parentId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChildSlots_lift(_ buf: RustBuffer) throws -> ChildSlots {
+    return try FfiConverterTypeChildSlots.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChildSlots_lower(_ value: ChildSlots) -> RustBuffer {
+    return FfiConverterTypeChildSlots.lower(value)
 }
 
 
@@ -2188,6 +2033,10 @@ public func FfiConverterTypeDeleteEntryRecursive_lower(_ value: DeleteEntryRecur
 }
 
 
+/**
+ * Distinct text values previously entered for an attribute (plan ∪ actual), sorted — the
+ * source for a text attribute's input autocomplete.
+ */
 public struct DistinctTextValuesForAttribute: Equatable, Hashable {
     public var attributeId: Uuid
 
@@ -2289,60 +2138,6 @@ public func FfiConverterTypeDuplicateEntry_lift(_ buf: RustBuffer) throws -> Dup
 #endif
 public func FfiConverterTypeDuplicateEntry_lower(_ value: DuplicateEntry) -> RustBuffer {
     return FfiConverterTypeDuplicateEntry.lower(value)
-}
-
-
-public struct EntriesRootedInTimeInterval: Equatable, Hashable {
-    public var from: UtcDateTime
-    public var to: UtcDateTime
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(from: UtcDateTime, to: UtcDateTime) {
-        self.from = from
-        self.to = to
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension EntriesRootedInTimeInterval: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeEntriesRootedInTimeInterval: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EntriesRootedInTimeInterval {
-        return
-            try EntriesRootedInTimeInterval(
-                from: FfiConverterTypeUtcDateTime.read(from: &buf), 
-                to: FfiConverterTypeUtcDateTime.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: EntriesRootedInTimeInterval, into buf: inout [UInt8]) {
-        FfiConverterTypeUtcDateTime.write(value.from, into: &buf)
-        FfiConverterTypeUtcDateTime.write(value.to, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEntriesRootedInTimeInterval_lift(_ buf: RustBuffer) throws -> EntriesRootedInTimeInterval {
-    return try FfiConverterTypeEntriesRootedInTimeInterval.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEntriesRootedInTimeInterval_lower(_ value: EntriesRootedInTimeInterval) -> RustBuffer {
-    return FfiConverterTypeEntriesRootedInTimeInterval.lower(value)
 }
 
 
@@ -2494,56 +2289,10 @@ public func FfiConverterTypeEntryJoin_lower(_ value: EntryJoin) -> RustBuffer {
 }
 
 
-public struct FindActivityById: Equatable, Hashable {
-    public var id: Uuid
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(id: Uuid) {
-        self.id = id
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FindActivityById: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFindActivityById: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindActivityById {
-        return
-            try FindActivityById(
-                id: FfiConverterTypeUuid.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FindActivityById, into buf: inout [UInt8]) {
-        FfiConverterTypeUuid.write(value.id, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindActivityById_lift(_ buf: RustBuffer) throws -> FindActivityById {
-    return try FfiConverterTypeFindActivityById.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindActivityById_lower(_ value: FindActivityById) -> RustBuffer {
-    return FfiConverterTypeFindActivityById.lower(value)
-}
-
-
+/**
+ * The root template entry for an activity (parentless, `is_template`, matching
+ * `activity_id`). `CreateActivity` guarantees exactly one.
+ */
 public struct FindActivityTemplateRoot: Equatable, Hashable {
     public var activityId: Uuid
 
@@ -2591,56 +2340,6 @@ public func FfiConverterTypeFindActivityTemplateRoot_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeFindActivityTemplateRoot_lower(_ value: FindActivityTemplateRoot) -> RustBuffer {
     return FfiConverterTypeFindActivityTemplateRoot.lower(value)
-}
-
-
-public struct FindAncestors: Equatable, Hashable {
-    public var entryId: Uuid
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(entryId: Uuid) {
-        self.entryId = entryId
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FindAncestors: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFindAncestors: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindAncestors {
-        return
-            try FindAncestors(
-                entryId: FfiConverterTypeUuid.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FindAncestors, into buf: inout [UInt8]) {
-        FfiConverterTypeUuid.write(value.entryId, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindAncestors_lift(_ buf: RustBuffer) throws -> FindAncestors {
-    return try FfiConverterTypeFindAncestors.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindAncestors_lower(_ value: FindAncestors) -> RustBuffer {
-    return FfiConverterTypeFindAncestors.lower(value)
 }
 
 
@@ -2694,56 +2393,9 @@ public func FfiConverterTypeFindAttributeById_lower(_ value: FindAttributeById) 
 }
 
 
-public struct FindAttributePairsForEntry: Equatable, Hashable {
-    public var entryId: Uuid
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(entryId: Uuid) {
-        self.entryId = entryId
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FindAttributePairsForEntry: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFindAttributePairsForEntry: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindAttributePairsForEntry {
-        return
-            try FindAttributePairsForEntry(
-                entryId: FfiConverterTypeUuid.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FindAttributePairsForEntry, into buf: inout [UInt8]) {
-        FfiConverterTypeUuid.write(value.entryId, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindAttributePairsForEntry_lift(_ buf: RustBuffer) throws -> FindAttributePairsForEntry {
-    return try FfiConverterTypeFindAttributePairsForEntry.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindAttributePairsForEntry_lower(_ value: FindAttributePairsForEntry) -> RustBuffer {
-    return FfiConverterTypeFindAttributePairsForEntry.lower(value)
-}
-
-
+/**
+ * `owner_id` is the query dimension: returns all attributes owned by this actor.
+ */
 public struct FindAttributesByOwner: Equatable, Hashable {
     public var ownerId: Uuid
 
@@ -2794,106 +2446,6 @@ public func FfiConverterTypeFindAttributesByOwner_lower(_ value: FindAttributesB
 }
 
 
-public struct FindDescendants: Equatable, Hashable {
-    public var entryId: Uuid
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(entryId: Uuid) {
-        self.entryId = entryId
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FindDescendants: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFindDescendants: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindDescendants {
-        return
-            try FindDescendants(
-                entryId: FfiConverterTypeUuid.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FindDescendants, into buf: inout [UInt8]) {
-        FfiConverterTypeUuid.write(value.entryId, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindDescendants_lift(_ buf: RustBuffer) throws -> FindDescendants {
-    return try FfiConverterTypeFindDescendants.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindDescendants_lower(_ value: FindDescendants) -> RustBuffer {
-    return FfiConverterTypeFindDescendants.lower(value)
-}
-
-
-public struct FindEntryById: Equatable, Hashable {
-    public var entryId: Uuid
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(entryId: Uuid) {
-        self.entryId = entryId
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FindEntryById: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFindEntryById: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindEntryById {
-        return
-            try FindEntryById(
-                entryId: FfiConverterTypeUuid.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FindEntryById, into buf: inout [UInt8]) {
-        FfiConverterTypeUuid.write(value.entryId, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindEntryById_lift(_ buf: RustBuffer) throws -> FindEntryById {
-    return try FfiConverterTypeFindEntryById.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindEntryById_lower(_ value: FindEntryById) -> RustBuffer {
-    return FfiConverterTypeFindEntryById.lower(value)
-}
-
-
 public struct FindEntryJoinById: Equatable, Hashable {
     public var entryId: Uuid
 
@@ -2941,310 +2493,6 @@ public func FfiConverterTypeFindEntryJoinById_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeFindEntryJoinById_lower(_ value: FindEntryJoinById) -> RustBuffer {
     return FfiConverterTypeFindEntryJoinById.lower(value)
-}
-
-
-public struct FindUserById: Equatable, Hashable {
-    public var actorId: Uuid
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(actorId: Uuid) {
-        self.actorId = actorId
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FindUserById: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFindUserById: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindUserById {
-        return
-            try FindUserById(
-                actorId: FfiConverterTypeUuid.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FindUserById, into buf: inout [UInt8]) {
-        FfiConverterTypeUuid.write(value.actorId, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindUserById_lift(_ buf: RustBuffer) throws -> FindUserById {
-    return try FfiConverterTypeFindUserById.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindUserById_lower(_ value: FindUserById) -> RustBuffer {
-    return FfiConverterTypeFindUserById.lower(value)
-}
-
-
-public struct FindUserByUsername: Equatable, Hashable {
-    public var username: Username
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(username: Username) {
-        self.username = username
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FindUserByUsername: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFindUserByUsername: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindUserByUsername {
-        return
-            try FindUserByUsername(
-                username: FfiConverterTypeUsername.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FindUserByUsername, into buf: inout [UInt8]) {
-        FfiConverterTypeUsername.write(value.username, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindUserByUsername_lift(_ buf: RustBuffer) throws -> FindUserByUsername {
-    return try FfiConverterTypeFindUserByUsername.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindUserByUsername_lower(_ value: FindUserByUsername) -> RustBuffer {
-    return FfiConverterTypeFindUserByUsername.lower(value)
-}
-
-
-public struct FindValueByKey: Equatable, Hashable {
-    public var entryId: Uuid
-    public var attributeId: Uuid
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(entryId: Uuid, attributeId: Uuid) {
-        self.entryId = entryId
-        self.attributeId = attributeId
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FindValueByKey: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFindValueByKey: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindValueByKey {
-        return
-            try FindValueByKey(
-                entryId: FfiConverterTypeUuid.read(from: &buf), 
-                attributeId: FfiConverterTypeUuid.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FindValueByKey, into buf: inout [UInt8]) {
-        FfiConverterTypeUuid.write(value.entryId, into: &buf)
-        FfiConverterTypeUuid.write(value.attributeId, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindValueByKey_lift(_ buf: RustBuffer) throws -> FindValueByKey {
-    return try FfiConverterTypeFindValueByKey.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindValueByKey_lower(_ value: FindValueByKey) -> RustBuffer {
-    return FfiConverterTypeFindValueByKey.lower(value)
-}
-
-
-public struct FindValuesForEntries: Equatable, Hashable {
-    public var entryIds: [Uuid]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(entryIds: [Uuid]) {
-        self.entryIds = entryIds
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FindValuesForEntries: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFindValuesForEntries: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindValuesForEntries {
-        return
-            try FindValuesForEntries(
-                entryIds: FfiConverterSequenceTypeUuid.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FindValuesForEntries, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeUuid.write(value.entryIds, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindValuesForEntries_lift(_ buf: RustBuffer) throws -> FindValuesForEntries {
-    return try FfiConverterTypeFindValuesForEntries.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindValuesForEntries_lower(_ value: FindValuesForEntries) -> RustBuffer {
-    return FfiConverterTypeFindValuesForEntries.lower(value)
-}
-
-
-public struct FindValuesForEntry: Equatable, Hashable {
-    public var entryId: Uuid
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(entryId: Uuid) {
-        self.entryId = entryId
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension FindValuesForEntry: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeFindValuesForEntry: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FindValuesForEntry {
-        return
-            try FindValuesForEntry(
-                entryId: FfiConverterTypeUuid.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: FindValuesForEntry, into buf: inout [UInt8]) {
-        FfiConverterTypeUuid.write(value.entryId, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindValuesForEntry_lift(_ buf: RustBuffer) throws -> FindValuesForEntry {
-    return try FfiConverterTypeFindValuesForEntry.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeFindValuesForEntry_lower(_ value: FindValuesForEntry) -> RustBuffer {
-    return FfiConverterTypeFindValuesForEntry.lower(value)
-}
-
-
-public struct IsEmailRegistered: Equatable, Hashable {
-    public var email: Email
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(email: Email) {
-        self.email = email
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension IsEmailRegistered: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeIsEmailRegistered: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsEmailRegistered {
-        return
-            try IsEmailRegistered(
-                email: FfiConverterTypeEmail.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: IsEmailRegistered, into buf: inout [UInt8]) {
-        FfiConverterTypeEmail.write(value.email, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeIsEmailRegistered_lift(_ buf: RustBuffer) throws -> IsEmailRegistered {
-    return try FfiConverterTypeIsEmailRegistered.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeIsEmailRegistered_lower(_ value: IsEmailRegistered) -> RustBuffer {
-    return FfiConverterTypeIsEmailRegistered.lower(value)
 }
 
 
@@ -3427,6 +2675,179 @@ public func FfiConverterTypeLengthMeasurement_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeLengthMeasurement_lower(_ value: LengthMeasurement) -> RustBuffer {
     return FfiConverterTypeLengthMeasurement.lower(value)
+}
+
+
+public struct LiveBatch: Equatable, Hashable {
+    public var version: UInt64
+    public var updates: [LiveUpdate]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(version: UInt64, updates: [LiveUpdate]) {
+        self.version = version
+        self.updates = updates
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LiveBatch: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLiveBatch: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LiveBatch {
+        return
+            try LiveBatch(
+                version: FfiConverterUInt64.read(from: &buf), 
+                updates: FfiConverterSequenceTypeLiveUpdate.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LiveBatch, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.version, into: &buf)
+        FfiConverterSequenceTypeLiveUpdate.write(value.updates, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveBatch_lift(_ buf: RustBuffer) throws -> LiveBatch {
+    return try FfiConverterTypeLiveBatch.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveBatch_lower(_ value: LiveBatch) -> RustBuffer {
+    return FfiConverterTypeLiveBatch.lower(value)
+}
+
+
+/**
+ * Result of `live_subscribe`: the first value now, the version it belongs to, and the handle.
+ */
+public struct LiveSubscribed {
+    public var subscriptionId: UInt64
+    public var version: UInt64
+    public var value: LiveResult
+    public var handle: LiveSubscriptionHandle
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(subscriptionId: UInt64, version: UInt64, value: LiveResult, handle: LiveSubscriptionHandle) {
+        self.subscriptionId = subscriptionId
+        self.version = version
+        self.value = value
+        self.handle = handle
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LiveSubscribed: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLiveSubscribed: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LiveSubscribed {
+        return
+            try LiveSubscribed(
+                subscriptionId: FfiConverterUInt64.read(from: &buf), 
+                version: FfiConverterUInt64.read(from: &buf), 
+                value: FfiConverterTypeLiveResult.read(from: &buf), 
+                handle: FfiConverterTypeLiveSubscriptionHandle.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LiveSubscribed, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.subscriptionId, into: &buf)
+        FfiConverterUInt64.write(value.version, into: &buf)
+        FfiConverterTypeLiveResult.write(value.value, into: &buf)
+        FfiConverterTypeLiveSubscriptionHandle.write(value.handle, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveSubscribed_lift(_ buf: RustBuffer) throws -> LiveSubscribed {
+    return try FfiConverterTypeLiveSubscribed.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveSubscribed_lower(_ value: LiveSubscribed) -> RustBuffer {
+    return FfiConverterTypeLiveSubscribed.lower(value)
+}
+
+
+public struct LiveUpdate: Equatable, Hashable {
+    public var subscriptionId: UInt64
+    public var value: LiveResult
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(subscriptionId: UInt64, value: LiveResult) {
+        self.subscriptionId = subscriptionId
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LiveUpdate: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLiveUpdate: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LiveUpdate {
+        return
+            try LiveUpdate(
+                subscriptionId: FfiConverterUInt64.read(from: &buf), 
+                value: FfiConverterTypeLiveResult.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LiveUpdate, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.subscriptionId, into: &buf)
+        FfiConverterTypeLiveResult.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveUpdate_lift(_ buf: RustBuffer) throws -> LiveUpdate {
+    return try FfiConverterTypeLiveUpdate.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveUpdate_lower(_ value: LiveUpdate) -> RustBuffer {
+    return FfiConverterTypeLiveUpdate.lower(value)
 }
 
 
@@ -4000,6 +3421,69 @@ public func FfiConverterTypePosition_lower(_ value: Position) -> RustBuffer {
 }
 
 
+/**
+ * Log roots (parentless, non-template entries) whose canonical instant falls in the
+ * half-open interval `[from, to)`, sorted by canonical instant (ties by id). This is what a
+ * log day shows.
+ *
+ * Returns roots only (no descendants). An entry at the next day's midnight is not on this
+ * day, and end-anchored entries (`End`, `DurationAndEnd`) are placed by their canonical
+ * instant.
+ */
+public struct RootEntriesInInterval: Equatable, Hashable {
+    public var from: UtcDateTime
+    public var to: UtcDateTime
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(from: UtcDateTime, to: UtcDateTime) {
+        self.from = from
+        self.to = to
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RootEntriesInInterval: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRootEntriesInInterval: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootEntriesInInterval {
+        return
+            try RootEntriesInInterval(
+                from: FfiConverterTypeUtcDateTime.read(from: &buf), 
+                to: FfiConverterTypeUtcDateTime.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RootEntriesInInterval, into buf: inout [UInt8]) {
+        FfiConverterTypeUtcDateTime.write(value.from, into: &buf)
+        FfiConverterTypeUtcDateTime.write(value.to, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootEntriesInInterval_lift(_ buf: RustBuffer) throws -> RootEntriesInInterval {
+    return try FfiConverterTypeRootEntriesInInterval.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootEntriesInInterval_lower(_ value: RootEntriesInInterval) -> RustBuffer {
+    return FfiConverterTypeRootEntriesInInterval.lower(value)
+}
+
+
 public struct SelectAttributePair: Equatable, Hashable {
     public var attrId: Uuid
     public var entryId: Uuid
@@ -4133,6 +3617,116 @@ public func FfiConverterTypeSelectConfig_lift(_ buf: RustBuffer) throws -> Selec
 #endif
 public func FfiConverterTypeSelectConfig_lower(_ value: SelectConfig) -> RustBuffer {
     return FfiConverterTypeSelectConfig.lower(value)
+}
+
+
+/**
+ * The members of a sets sequence, in order; none if it doesn't display as sets.
+ */
+public struct SetsMembers: Equatable, Hashable {
+    public var sequenceId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sequenceId: Uuid) {
+        self.sequenceId = sequenceId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SetsMembers: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSetsMembers: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SetsMembers {
+        return
+            try SetsMembers(
+                sequenceId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SetsMembers, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.sequenceId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSetsMembers_lift(_ buf: RustBuffer) throws -> SetsMembers {
+    return try FfiConverterTypeSetsMembers.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSetsMembers_lower(_ value: SetsMembers) -> RustBuffer {
+    return FfiConverterTypeSetsMembers.lower(value)
+}
+
+
+/**
+ * When a new log root on the day starting at `day_start` should be placed: now if the
+ * day is today, else just after the day's last root, else noon.
+ *
+ * Depends on the current time, which no data version captures: read it once at the
+ * moment of use; a subscription would go stale between writes.
+ */
+public struct SuggestedRootInsertionTime: Equatable, Hashable {
+    public var dayStart: UtcDateTime
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(dayStart: UtcDateTime) {
+        self.dayStart = dayStart
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SuggestedRootInsertionTime: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSuggestedRootInsertionTime: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SuggestedRootInsertionTime {
+        return
+            try SuggestedRootInsertionTime(
+                dayStart: FfiConverterTypeUtcDateTime.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SuggestedRootInsertionTime, into buf: inout [UInt8]) {
+        FfiConverterTypeUtcDateTime.write(value.dayStart, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSuggestedRootInsertionTime_lift(_ buf: RustBuffer) throws -> SuggestedRootInsertionTime {
+    return try FfiConverterTypeSuggestedRootInsertionTime.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSuggestedRootInsertionTime_lower(_ value: SuggestedRootInsertionTime) -> RustBuffer {
+    return FfiConverterTypeSuggestedRootInsertionTime.lower(value)
 }
 
 
@@ -4635,6 +4229,63 @@ public func FfiConverterTypeValue_lower(_ value: Value) -> RustBuffer {
     return FfiConverterTypeValue.lower(value)
 }
 
+
+/**
+ * Would moving `entry_id` under `proposed_parent_id` create a cycle? (Drag-time check.)
+ */
+public struct WouldCreateCycle: Equatable, Hashable {
+    public var entryId: Uuid
+    public var proposedParentId: Uuid
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entryId: Uuid, proposedParentId: Uuid) {
+        self.entryId = entryId
+        self.proposedParentId = proposedParentId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension WouldCreateCycle: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWouldCreateCycle: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WouldCreateCycle {
+        return
+            try WouldCreateCycle(
+                entryId: FfiConverterTypeUuid.read(from: &buf), 
+                proposedParentId: FfiConverterTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WouldCreateCycle, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.entryId, into: &buf)
+        FfiConverterTypeUuid.write(value.proposedParentId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWouldCreateCycle_lift(_ buf: RustBuffer) throws -> WouldCreateCycle {
+    return try FfiConverterTypeWouldCreateCycle.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWouldCreateCycle_lower(_ value: WouldCreateCycle) -> RustBuffer {
+    return FfiConverterTypeWouldCreateCycle.lower(value)
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -4845,532 +4496,6 @@ public func FfiConverterTypeAction_lift(_ buf: RustBuffer) throws -> Action {
 #endif
 public func FfiConverterTypeAction_lower(_ value: Action) -> RustBuffer {
     return FfiConverterTypeAction.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum AnyQuery: Equatable, Hashable {
-    
-    case isEmailRegistered(IsEmailRegistered
-    )
-    case findUserById(FindUserById
-    )
-    case findUserByUsername(FindUserByUsername
-    )
-    case allActorIds(AllActorIds
-    )
-    case findActivityById(FindActivityById
-    )
-    case allActivities(AllActivities
-    )
-    case findActivityTemplateRoot(FindActivityTemplateRoot
-    )
-    case allEntries(AllEntries
-    )
-    case entriesRootedInTimeInterval(EntriesRootedInTimeInterval
-    )
-    case findAncestors(FindAncestors
-    )
-    case findEntryById(FindEntryById
-    )
-    case findEntryJoinById(FindEntryJoinById
-    )
-    case findDescendants(FindDescendants
-    )
-    case findAttributeById(FindAttributeById
-    )
-    case allAttributes(AllAttributes
-    )
-    case findAttributesByOwner(FindAttributesByOwner
-    )
-    case findValueByKey(FindValueByKey
-    )
-    case findValuesForEntry(FindValuesForEntry
-    )
-    case findValuesForEntries(FindValuesForEntries
-    )
-    case findAttributePairsForEntry(FindAttributePairsForEntry
-    )
-    case distinctTextValuesForAttribute(DistinctTextValuesForAttribute
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension AnyQuery: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAnyQuery: FfiConverterRustBuffer {
-    typealias SwiftType = AnyQuery
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AnyQuery {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .isEmailRegistered(try FfiConverterTypeIsEmailRegistered.read(from: &buf)
-        )
-        
-        case 2: return .findUserById(try FfiConverterTypeFindUserById.read(from: &buf)
-        )
-        
-        case 3: return .findUserByUsername(try FfiConverterTypeFindUserByUsername.read(from: &buf)
-        )
-        
-        case 4: return .allActorIds(try FfiConverterTypeAllActorIds.read(from: &buf)
-        )
-        
-        case 5: return .findActivityById(try FfiConverterTypeFindActivityById.read(from: &buf)
-        )
-        
-        case 6: return .allActivities(try FfiConverterTypeAllActivities.read(from: &buf)
-        )
-        
-        case 7: return .findActivityTemplateRoot(try FfiConverterTypeFindActivityTemplateRoot.read(from: &buf)
-        )
-        
-        case 8: return .allEntries(try FfiConverterTypeAllEntries.read(from: &buf)
-        )
-        
-        case 9: return .entriesRootedInTimeInterval(try FfiConverterTypeEntriesRootedInTimeInterval.read(from: &buf)
-        )
-        
-        case 10: return .findAncestors(try FfiConverterTypeFindAncestors.read(from: &buf)
-        )
-        
-        case 11: return .findEntryById(try FfiConverterTypeFindEntryById.read(from: &buf)
-        )
-        
-        case 12: return .findEntryJoinById(try FfiConverterTypeFindEntryJoinById.read(from: &buf)
-        )
-        
-        case 13: return .findDescendants(try FfiConverterTypeFindDescendants.read(from: &buf)
-        )
-        
-        case 14: return .findAttributeById(try FfiConverterTypeFindAttributeById.read(from: &buf)
-        )
-        
-        case 15: return .allAttributes(try FfiConverterTypeAllAttributes.read(from: &buf)
-        )
-        
-        case 16: return .findAttributesByOwner(try FfiConverterTypeFindAttributesByOwner.read(from: &buf)
-        )
-        
-        case 17: return .findValueByKey(try FfiConverterTypeFindValueByKey.read(from: &buf)
-        )
-        
-        case 18: return .findValuesForEntry(try FfiConverterTypeFindValuesForEntry.read(from: &buf)
-        )
-        
-        case 19: return .findValuesForEntries(try FfiConverterTypeFindValuesForEntries.read(from: &buf)
-        )
-        
-        case 20: return .findAttributePairsForEntry(try FfiConverterTypeFindAttributePairsForEntry.read(from: &buf)
-        )
-        
-        case 21: return .distinctTextValuesForAttribute(try FfiConverterTypeDistinctTextValuesForAttribute.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: AnyQuery, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .isEmailRegistered(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterTypeIsEmailRegistered.write(v1, into: &buf)
-            
-        
-        case let .findUserById(v1):
-            writeInt(&buf, Int32(2))
-            FfiConverterTypeFindUserById.write(v1, into: &buf)
-            
-        
-        case let .findUserByUsername(v1):
-            writeInt(&buf, Int32(3))
-            FfiConverterTypeFindUserByUsername.write(v1, into: &buf)
-            
-        
-        case let .allActorIds(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterTypeAllActorIds.write(v1, into: &buf)
-            
-        
-        case let .findActivityById(v1):
-            writeInt(&buf, Int32(5))
-            FfiConverterTypeFindActivityById.write(v1, into: &buf)
-            
-        
-        case let .allActivities(v1):
-            writeInt(&buf, Int32(6))
-            FfiConverterTypeAllActivities.write(v1, into: &buf)
-            
-        
-        case let .findActivityTemplateRoot(v1):
-            writeInt(&buf, Int32(7))
-            FfiConverterTypeFindActivityTemplateRoot.write(v1, into: &buf)
-            
-        
-        case let .allEntries(v1):
-            writeInt(&buf, Int32(8))
-            FfiConverterTypeAllEntries.write(v1, into: &buf)
-            
-        
-        case let .entriesRootedInTimeInterval(v1):
-            writeInt(&buf, Int32(9))
-            FfiConverterTypeEntriesRootedInTimeInterval.write(v1, into: &buf)
-            
-        
-        case let .findAncestors(v1):
-            writeInt(&buf, Int32(10))
-            FfiConverterTypeFindAncestors.write(v1, into: &buf)
-            
-        
-        case let .findEntryById(v1):
-            writeInt(&buf, Int32(11))
-            FfiConverterTypeFindEntryById.write(v1, into: &buf)
-            
-        
-        case let .findEntryJoinById(v1):
-            writeInt(&buf, Int32(12))
-            FfiConverterTypeFindEntryJoinById.write(v1, into: &buf)
-            
-        
-        case let .findDescendants(v1):
-            writeInt(&buf, Int32(13))
-            FfiConverterTypeFindDescendants.write(v1, into: &buf)
-            
-        
-        case let .findAttributeById(v1):
-            writeInt(&buf, Int32(14))
-            FfiConverterTypeFindAttributeById.write(v1, into: &buf)
-            
-        
-        case let .allAttributes(v1):
-            writeInt(&buf, Int32(15))
-            FfiConverterTypeAllAttributes.write(v1, into: &buf)
-            
-        
-        case let .findAttributesByOwner(v1):
-            writeInt(&buf, Int32(16))
-            FfiConverterTypeFindAttributesByOwner.write(v1, into: &buf)
-            
-        
-        case let .findValueByKey(v1):
-            writeInt(&buf, Int32(17))
-            FfiConverterTypeFindValueByKey.write(v1, into: &buf)
-            
-        
-        case let .findValuesForEntry(v1):
-            writeInt(&buf, Int32(18))
-            FfiConverterTypeFindValuesForEntry.write(v1, into: &buf)
-            
-        
-        case let .findValuesForEntries(v1):
-            writeInt(&buf, Int32(19))
-            FfiConverterTypeFindValuesForEntries.write(v1, into: &buf)
-            
-        
-        case let .findAttributePairsForEntry(v1):
-            writeInt(&buf, Int32(20))
-            FfiConverterTypeFindAttributePairsForEntry.write(v1, into: &buf)
-            
-        
-        case let .distinctTextValuesForAttribute(v1):
-            writeInt(&buf, Int32(21))
-            FfiConverterTypeDistinctTextValuesForAttribute.write(v1, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAnyQuery_lift(_ buf: RustBuffer) throws -> AnyQuery {
-    return try FfiConverterTypeAnyQuery.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAnyQuery_lower(_ value: AnyQuery) -> RustBuffer {
-    return FfiConverterTypeAnyQuery.lower(value)
-}
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum AnyQueryResponse: Equatable, Hashable {
-    
-    case isEmailRegistered(Bool
-    )
-    case findUserById(User?
-    )
-    case findUserByUsername(User?
-    )
-    case allActorIds([Uuid]
-    )
-    case findActivityById(Activity?
-    )
-    case findActivityTemplateRoot(Entry?
-    )
-    case allActivities([Activity]
-    )
-    case allEntries([Entry]
-    )
-    case entriesRootedInTimeInterval([Entry]
-    )
-    case findAncestors([Uuid]
-    )
-    case findEntryById(Entry?
-    )
-    case findEntryJoinById(EntryJoin?
-    )
-    case findDescendants([Entry]
-    )
-    case findAttributeById(Attribute?
-    )
-    case allAttributes([Attribute]
-    )
-    case findAttributesByOwner([Attribute]
-    )
-    case findValueByKey(Value?
-    )
-    case findValuesForEntry([Value]
-    )
-    case findValuesForEntries([Value]
-    )
-    case findAttributePairsForEntry([AttributePair]
-    )
-    case distinctTextValuesForAttribute([String]
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension AnyQueryResponse: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAnyQueryResponse: FfiConverterRustBuffer {
-    typealias SwiftType = AnyQueryResponse
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AnyQueryResponse {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .isEmailRegistered(try FfiConverterBool.read(from: &buf)
-        )
-        
-        case 2: return .findUserById(try FfiConverterOptionTypeUser.read(from: &buf)
-        )
-        
-        case 3: return .findUserByUsername(try FfiConverterOptionTypeUser.read(from: &buf)
-        )
-        
-        case 4: return .allActorIds(try FfiConverterSequenceTypeUuid.read(from: &buf)
-        )
-        
-        case 5: return .findActivityById(try FfiConverterOptionTypeActivity.read(from: &buf)
-        )
-        
-        case 6: return .findActivityTemplateRoot(try FfiConverterOptionTypeEntry.read(from: &buf)
-        )
-        
-        case 7: return .allActivities(try FfiConverterSequenceTypeActivity.read(from: &buf)
-        )
-        
-        case 8: return .allEntries(try FfiConverterSequenceTypeEntry.read(from: &buf)
-        )
-        
-        case 9: return .entriesRootedInTimeInterval(try FfiConverterSequenceTypeEntry.read(from: &buf)
-        )
-        
-        case 10: return .findAncestors(try FfiConverterSequenceTypeUuid.read(from: &buf)
-        )
-        
-        case 11: return .findEntryById(try FfiConverterOptionTypeEntry.read(from: &buf)
-        )
-        
-        case 12: return .findEntryJoinById(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
-        )
-        
-        case 13: return .findDescendants(try FfiConverterSequenceTypeEntry.read(from: &buf)
-        )
-        
-        case 14: return .findAttributeById(try FfiConverterOptionTypeAttribute.read(from: &buf)
-        )
-        
-        case 15: return .allAttributes(try FfiConverterSequenceTypeAttribute.read(from: &buf)
-        )
-        
-        case 16: return .findAttributesByOwner(try FfiConverterSequenceTypeAttribute.read(from: &buf)
-        )
-        
-        case 17: return .findValueByKey(try FfiConverterOptionTypeValue.read(from: &buf)
-        )
-        
-        case 18: return .findValuesForEntry(try FfiConverterSequenceTypeValue.read(from: &buf)
-        )
-        
-        case 19: return .findValuesForEntries(try FfiConverterSequenceTypeValue.read(from: &buf)
-        )
-        
-        case 20: return .findAttributePairsForEntry(try FfiConverterSequenceTypeAttributePair.read(from: &buf)
-        )
-        
-        case 21: return .distinctTextValuesForAttribute(try FfiConverterSequenceString.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: AnyQueryResponse, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .isEmailRegistered(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterBool.write(v1, into: &buf)
-            
-        
-        case let .findUserById(v1):
-            writeInt(&buf, Int32(2))
-            FfiConverterOptionTypeUser.write(v1, into: &buf)
-            
-        
-        case let .findUserByUsername(v1):
-            writeInt(&buf, Int32(3))
-            FfiConverterOptionTypeUser.write(v1, into: &buf)
-            
-        
-        case let .allActorIds(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterSequenceTypeUuid.write(v1, into: &buf)
-            
-        
-        case let .findActivityById(v1):
-            writeInt(&buf, Int32(5))
-            FfiConverterOptionTypeActivity.write(v1, into: &buf)
-            
-        
-        case let .findActivityTemplateRoot(v1):
-            writeInt(&buf, Int32(6))
-            FfiConverterOptionTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .allActivities(v1):
-            writeInt(&buf, Int32(7))
-            FfiConverterSequenceTypeActivity.write(v1, into: &buf)
-            
-        
-        case let .allEntries(v1):
-            writeInt(&buf, Int32(8))
-            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .entriesRootedInTimeInterval(v1):
-            writeInt(&buf, Int32(9))
-            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .findAncestors(v1):
-            writeInt(&buf, Int32(10))
-            FfiConverterSequenceTypeUuid.write(v1, into: &buf)
-            
-        
-        case let .findEntryById(v1):
-            writeInt(&buf, Int32(11))
-            FfiConverterOptionTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .findEntryJoinById(v1):
-            writeInt(&buf, Int32(12))
-            FfiConverterOptionTypeEntryJoin.write(v1, into: &buf)
-            
-        
-        case let .findDescendants(v1):
-            writeInt(&buf, Int32(13))
-            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .findAttributeById(v1):
-            writeInt(&buf, Int32(14))
-            FfiConverterOptionTypeAttribute.write(v1, into: &buf)
-            
-        
-        case let .allAttributes(v1):
-            writeInt(&buf, Int32(15))
-            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
-            
-        
-        case let .findAttributesByOwner(v1):
-            writeInt(&buf, Int32(16))
-            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
-            
-        
-        case let .findValueByKey(v1):
-            writeInt(&buf, Int32(17))
-            FfiConverterOptionTypeValue.write(v1, into: &buf)
-            
-        
-        case let .findValuesForEntry(v1):
-            writeInt(&buf, Int32(18))
-            FfiConverterSequenceTypeValue.write(v1, into: &buf)
-            
-        
-        case let .findValuesForEntries(v1):
-            writeInt(&buf, Int32(19))
-            FfiConverterSequenceTypeValue.write(v1, into: &buf)
-            
-        
-        case let .findAttributePairsForEntry(v1):
-            writeInt(&buf, Int32(20))
-            FfiConverterSequenceTypeAttributePair.write(v1, into: &buf)
-            
-        
-        case let .distinctTextValuesForAttribute(v1):
-            writeInt(&buf, Int32(21))
-            FfiConverterSequenceString.write(v1, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAnyQueryResponse_lift(_ buf: RustBuffer) throws -> AnyQueryResponse {
-    return try FfiConverterTypeAnyQueryResponse.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAnyQueryResponse_lower(_ value: AnyQueryResponse) -> RustBuffer {
-    return FfiConverterTypeAnyQueryResponse.lower(value)
 }
 
 
@@ -5839,6 +4964,452 @@ public func FfiConverterTypeAttributeValue_lower(_ value: AttributeValue) -> Rus
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum ChildSlot: Equatable, Hashable {
+    
+    case drop(id: String, position: Position, predId: Uuid?, succId: Uuid?
+    )
+    case entry(entry: Entry
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ChildSlot: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChildSlot: FfiConverterRustBuffer {
+    typealias SwiftType = ChildSlot
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChildSlot {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .drop(id: try FfiConverterString.read(from: &buf), position: try FfiConverterTypePosition.read(from: &buf), predId: try FfiConverterOptionTypeUuid.read(from: &buf), succId: try FfiConverterOptionTypeUuid.read(from: &buf)
+        )
+        
+        case 2: return .entry(entry: try FfiConverterTypeEntry.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ChildSlot, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .drop(id,position,predId,succId):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(id, into: &buf)
+            FfiConverterTypePosition.write(position, into: &buf)
+            FfiConverterOptionTypeUuid.write(predId, into: &buf)
+            FfiConverterOptionTypeUuid.write(succId, into: &buf)
+            
+        
+        case let .entry(entry):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeEntry.write(entry, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChildSlot_lift(_ buf: RustBuffer) throws -> ChildSlot {
+    return try FfiConverterTypeChildSlot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChildSlot_lower(_ value: ChildSlot) -> RustBuffer {
+    return FfiConverterTypeChildSlot.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * A question the client can subscribe to or read once. The variant says *what* is
+ * asked, never how it is answered.
+ */
+
+public enum ClientQuery: Equatable, Hashable {
+    
+    case childSlots(ChildSlots
+    )
+    case setsMembers(SetsMembers
+    )
+    case wouldCreateCycle(WouldCreateCycle
+    )
+    case suggestedRootInsertionTime(SuggestedRootInsertionTime
+    )
+    case rootEntriesInInterval(RootEntriesInInterval
+    )
+    case activityTemplateJoin(ActivityTemplateJoin
+    )
+    case findEntryJoinById(FindEntryJoinById
+    )
+    case allActivities(AllActivities
+    )
+    case findActivityTemplateRoot(FindActivityTemplateRoot
+    )
+    case findAttributeById(FindAttributeById
+    )
+    case allAttributes(AllAttributes
+    )
+    case findAttributesByOwner(FindAttributesByOwner
+    )
+    case distinctTextValuesForAttribute(DistinctTextValuesForAttribute
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ClientQuery: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClientQuery: FfiConverterRustBuffer {
+    typealias SwiftType = ClientQuery
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClientQuery {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .childSlots(try FfiConverterTypeChildSlots.read(from: &buf)
+        )
+        
+        case 2: return .setsMembers(try FfiConverterTypeSetsMembers.read(from: &buf)
+        )
+        
+        case 3: return .wouldCreateCycle(try FfiConverterTypeWouldCreateCycle.read(from: &buf)
+        )
+        
+        case 4: return .suggestedRootInsertionTime(try FfiConverterTypeSuggestedRootInsertionTime.read(from: &buf)
+        )
+        
+        case 5: return .rootEntriesInInterval(try FfiConverterTypeRootEntriesInInterval.read(from: &buf)
+        )
+        
+        case 6: return .activityTemplateJoin(try FfiConverterTypeActivityTemplateJoin.read(from: &buf)
+        )
+        
+        case 7: return .findEntryJoinById(try FfiConverterTypeFindEntryJoinById.read(from: &buf)
+        )
+        
+        case 8: return .allActivities(try FfiConverterTypeAllActivities.read(from: &buf)
+        )
+        
+        case 9: return .findActivityTemplateRoot(try FfiConverterTypeFindActivityTemplateRoot.read(from: &buf)
+        )
+        
+        case 10: return .findAttributeById(try FfiConverterTypeFindAttributeById.read(from: &buf)
+        )
+        
+        case 11: return .allAttributes(try FfiConverterTypeAllAttributes.read(from: &buf)
+        )
+        
+        case 12: return .findAttributesByOwner(try FfiConverterTypeFindAttributesByOwner.read(from: &buf)
+        )
+        
+        case 13: return .distinctTextValuesForAttribute(try FfiConverterTypeDistinctTextValuesForAttribute.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ClientQuery, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .childSlots(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeChildSlots.write(v1, into: &buf)
+            
+        
+        case let .setsMembers(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeSetsMembers.write(v1, into: &buf)
+            
+        
+        case let .wouldCreateCycle(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeWouldCreateCycle.write(v1, into: &buf)
+            
+        
+        case let .suggestedRootInsertionTime(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeSuggestedRootInsertionTime.write(v1, into: &buf)
+            
+        
+        case let .rootEntriesInInterval(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeRootEntriesInInterval.write(v1, into: &buf)
+            
+        
+        case let .activityTemplateJoin(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeActivityTemplateJoin.write(v1, into: &buf)
+            
+        
+        case let .findEntryJoinById(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeFindEntryJoinById.write(v1, into: &buf)
+            
+        
+        case let .allActivities(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeAllActivities.write(v1, into: &buf)
+            
+        
+        case let .findActivityTemplateRoot(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterTypeFindActivityTemplateRoot.write(v1, into: &buf)
+            
+        
+        case let .findAttributeById(v1):
+            writeInt(&buf, Int32(10))
+            FfiConverterTypeFindAttributeById.write(v1, into: &buf)
+            
+        
+        case let .allAttributes(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterTypeAllAttributes.write(v1, into: &buf)
+            
+        
+        case let .findAttributesByOwner(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterTypeFindAttributesByOwner.write(v1, into: &buf)
+            
+        
+        case let .distinctTextValuesForAttribute(v1):
+            writeInt(&buf, Int32(13))
+            FfiConverterTypeDistinctTextValuesForAttribute.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClientQuery_lift(_ buf: RustBuffer) throws -> ClientQuery {
+    return try FfiConverterTypeClientQuery.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClientQuery_lower(_ value: ClientQuery) -> RustBuffer {
+    return FfiConverterTypeClientQuery.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ClientQueryResponse: Equatable, Hashable {
+    
+    case childSlots([ChildSlot]
+    )
+    case setsMembers([Entry]
+    )
+    case wouldCreateCycle(Bool
+    )
+    case suggestedRootInsertionTime(UtcDateTime
+    )
+    case rootEntriesInInterval([Entry]
+    )
+    case activityTemplateJoin(EntryJoin?
+    )
+    case findEntryJoinById(EntryJoin?
+    )
+    case allActivities([Activity]
+    )
+    case findActivityTemplateRoot(Entry?
+    )
+    case findAttributeById(Attribute?
+    )
+    case allAttributes([Attribute]
+    )
+    case findAttributesByOwner([Attribute]
+    )
+    case distinctTextValuesForAttribute([String]
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ClientQueryResponse: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClientQueryResponse: FfiConverterRustBuffer {
+    typealias SwiftType = ClientQueryResponse
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClientQueryResponse {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .childSlots(try FfiConverterSequenceTypeChildSlot.read(from: &buf)
+        )
+        
+        case 2: return .setsMembers(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        )
+        
+        case 3: return .wouldCreateCycle(try FfiConverterBool.read(from: &buf)
+        )
+        
+        case 4: return .suggestedRootInsertionTime(try FfiConverterTypeUtcDateTime.read(from: &buf)
+        )
+        
+        case 5: return .rootEntriesInInterval(try FfiConverterSequenceTypeEntry.read(from: &buf)
+        )
+        
+        case 6: return .activityTemplateJoin(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
+        )
+        
+        case 7: return .findEntryJoinById(try FfiConverterOptionTypeEntryJoin.read(from: &buf)
+        )
+        
+        case 8: return .allActivities(try FfiConverterSequenceTypeActivity.read(from: &buf)
+        )
+        
+        case 9: return .findActivityTemplateRoot(try FfiConverterOptionTypeEntry.read(from: &buf)
+        )
+        
+        case 10: return .findAttributeById(try FfiConverterOptionTypeAttribute.read(from: &buf)
+        )
+        
+        case 11: return .allAttributes(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        )
+        
+        case 12: return .findAttributesByOwner(try FfiConverterSequenceTypeAttribute.read(from: &buf)
+        )
+        
+        case 13: return .distinctTextValuesForAttribute(try FfiConverterSequenceString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ClientQueryResponse, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .childSlots(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterSequenceTypeChildSlot.write(v1, into: &buf)
+            
+        
+        case let .setsMembers(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .wouldCreateCycle(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterBool.write(v1, into: &buf)
+            
+        
+        case let .suggestedRootInsertionTime(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeUtcDateTime.write(v1, into: &buf)
+            
+        
+        case let .rootEntriesInInterval(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterSequenceTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .activityTemplateJoin(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterOptionTypeEntryJoin.write(v1, into: &buf)
+            
+        
+        case let .findEntryJoinById(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterOptionTypeEntryJoin.write(v1, into: &buf)
+            
+        
+        case let .allActivities(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterSequenceTypeActivity.write(v1, into: &buf)
+            
+        
+        case let .findActivityTemplateRoot(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterOptionTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .findAttributeById(v1):
+            writeInt(&buf, Int32(10))
+            FfiConverterOptionTypeAttribute.write(v1, into: &buf)
+            
+        
+        case let .allAttributes(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
+            
+        
+        case let .findAttributesByOwner(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterSequenceTypeAttribute.write(v1, into: &buf)
+            
+        
+        case let .distinctTextValuesForAttribute(v1):
+            writeInt(&buf, Int32(13))
+            FfiConverterSequenceString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClientQueryResponse_lift(_ buf: RustBuffer) throws -> ClientQueryResponse {
+    return try FfiConverterTypeClientQueryResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClientQueryResponse_lower(_ value: ClientQueryResponse) -> RustBuffer {
+    return FfiConverterTypeClientQueryResponse.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum EntryChange: Equatable, Hashable {
     
     case setIsSequence(Bool
@@ -6227,6 +5798,79 @@ public func FfiConverterTypeLengthValue_lift(_ buf: RustBuffer) throws -> Length
 #endif
 public func FfiConverterTypeLengthValue_lower(_ value: LengthValue) -> RustBuffer {
     return FfiConverterTypeLengthValue.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum LiveResult: Equatable, Hashable {
+    
+    case response(ClientQueryResponse
+    )
+    case failed(message: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LiveResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLiveResult: FfiConverterRustBuffer {
+    typealias SwiftType = LiveResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LiveResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .response(try FfiConverterTypeClientQueryResponse.read(from: &buf)
+        )
+        
+        case 2: return .failed(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LiveResult, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .response(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeClientQueryResponse.write(v1, into: &buf)
+            
+        
+        case let .failed(message):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(message, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveResult_lift(_ buf: RustBuffer) throws -> LiveResult {
+    return try FfiConverterTypeLiveResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLiveResult_lower(_ value: LiveResult) -> RustBuffer {
+    return FfiConverterTypeLiveResult.lower(value)
 }
 
 
@@ -7150,78 +6794,6 @@ fileprivate struct FfiConverterOptionTypePosition: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeUser: FfiConverterRustBuffer {
-    typealias SwiftType = User?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeUser.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeUser.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionTypeValue: FfiConverterRustBuffer {
-    typealias SwiftType = Value?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeValue.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeValue.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionTypeAnyQueryResponse: FfiConverterRustBuffer {
-    typealias SwiftType = AnyQueryResponse?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeAnyQueryResponse.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeAnyQueryResponse.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeAttributeValue: FfiConverterRustBuffer {
     typealias SwiftType = AttributeValue?
 
@@ -7490,23 +7062,23 @@ fileprivate struct FfiConverterSequenceTypeEntry: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeValue: FfiConverterRustBuffer {
-    typealias SwiftType = [Value]
+fileprivate struct FfiConverterSequenceTypeLiveUpdate: FfiConverterRustBuffer {
+    typealias SwiftType = [LiveUpdate]
 
-    public static func write(_ value: [Value], into buf: inout [UInt8]) {
+    public static func write(_ value: [LiveUpdate], into buf: inout [UInt8]) {
         let len = Int32(value.count)
         writeInt(&buf, len)
         for item in value {
-            FfiConverterTypeValue.write(item, into: &buf)
+            FfiConverterTypeLiveUpdate.write(item, into: &buf)
         }
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Value] {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LiveUpdate] {
         let len: Int32 = try readInt(&buf)
-        var seq = [Value]()
+        var seq = [LiveUpdate]()
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeValue.read(from: &buf))
+            seq.append(try FfiConverterTypeLiveUpdate.read(from: &buf))
         }
         return seq
     }
@@ -7540,23 +7112,23 @@ fileprivate struct FfiConverterSequenceTypeAttributePair: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeUuid: FfiConverterRustBuffer {
-    typealias SwiftType = [Uuid]
+fileprivate struct FfiConverterSequenceTypeChildSlot: FfiConverterRustBuffer {
+    typealias SwiftType = [ChildSlot]
 
-    public static func write(_ value: [Uuid], into buf: inout [UInt8]) {
+    public static func write(_ value: [ChildSlot], into buf: inout [UInt8]) {
         let len = Int32(value.count)
         writeInt(&buf, len)
         for item in value {
-            FfiConverterTypeUuid.write(item, into: &buf)
+            FfiConverterTypeChildSlot.write(item, into: &buf)
         }
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Uuid] {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ChildSlot] {
         let len: Int32 = try readInt(&buf)
-        var seq = [Uuid]()
+        var seq = [ChildSlot]()
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeUuid.read(from: &buf))
+            seq.append(try FfiConverterTypeChildSlot.read(from: &buf))
         }
         return seq
     }
@@ -7874,9 +7446,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_func_mass_value_converted_to() != 39437) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_corelistener_on_data_changed() != 48934) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_create_arbitrary_entries() != 25273) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7886,53 +7455,29 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gv_ffi_checksum_method_gainzvillecore_dev_seed_std_lib() != 27833) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_activity_template_root() != 27869) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_live_read() != 2144) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_ancestors() != 33280) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_live_subscribe() != 47170) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_children() != 12500) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_run_action() != 12266) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_after_children() != 62380) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_set_live_listener() != 10945) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_position_between() != 25130) {
+    if (uniffi_gv_ffi_checksum_method_gainzvillecore_start_background_ticker() != 13685) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots() != 1668) {
+    if (uniffi_gv_ffi_checksum_method_livelistener_on_batch() != 3528) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_roots_in() != 17182) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_suggested_root_day_insertion_time() != 47778) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_forest_would_create_cycle() != 50699) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_read_query() != 52436) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_run_action() != 9666) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_start_background_ticker() != 12896) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_forest() != 23042) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_method_gainzvillecore_subscribe_query() != 33632) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_gv_ffi_checksum_constructor_gainzvillecore_new() != 24515) {
+    if (uniffi_gv_ffi_checksum_constructor_gainzvillecore_new() != 59310) {
         return InitializationResult.apiChecksumMismatch
     }
 
-    uniffiCallbackInitCoreListener()
+    uniffiCallbackInitLiveListener()
     return InitializationResult.ok
 }()
 

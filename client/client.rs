@@ -10,28 +10,41 @@ use gv_core::{
         user::User,
     },
     mutators,
-    queries::{
-        AnyQuery, AnyQueryResponse, FindActivityById, FindAttributeById, FindUserById, Query,
-    },
+    queries::{FindActivityById, FindAttributeById, FindUserById, Query},
     query_executor::QueryExecutor,
     std_lib::StandardLibrary,
 };
-use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
-use std::{sync::Arc, time::Duration};
+use sqlx::{
+    SqlitePool,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
+};
+use std::{str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use gv_sql::sqlite::{SqliteDeltaExecutor, SqliteQueryExecutor};
 
-use crate::query_store::{QueryStore, QuerySubscription};
+use crate::live::LiveStore;
+
+/// How the app opens its database.
+///
+/// WAL, so a live-query build's read transaction neither blocks writers nor is blocked by them.
+/// `synchronous = FULL` rather than WAL's usual `NORMAL`: a commit survives a power cut, at a small
+/// cost per write. WAL also means `-wal` and `-shm` files sit beside the database, so a backup must
+/// go through SQLite (the backup API or `VACUUM INTO`), not copy the file.
+pub(crate) fn connect_options(db_path: &str) -> Result<SqliteConnectOptions> {
+    Ok(SqliteConnectOptions::from_str(db_path)
+        .db_err()?
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Full))
+}
 
 #[derive(Debug, Clone)]
 pub struct SqliteClient {
     pub pool: SqlitePool,
     change_transmitter: broadcast::Sender<()>,
-    cache_ready_transmitter: broadcast::Sender<()>,
-    query_store: QueryStore,
+    live: LiveStore,
     io: Arc<dyn Io>,
 }
 
@@ -39,7 +52,7 @@ impl SqliteClient {
     pub async fn init(db_path: &str) -> Result<Self> {
         let pool = SqlitePoolOptions::new()
             .max_connections(20)
-            .connect(db_path)
+            .connect_with(connect_options(db_path)?)
             .await
             .db_err()?;
         let client = Self::from_pool(pool, Arc::new(SystemIo::default()));
@@ -119,20 +132,11 @@ impl SqliteClient {
 
     pub fn from_pool(pool: SqlitePool, io: Arc<dyn Io>) -> Self {
         let (change_transmitter, _rx) = broadcast::channel::<()>(16);
-        let (cache_ready_transmitter, _rx2) = broadcast::channel::<()>(16);
-        let cache_ready_tx = cache_ready_transmitter.clone();
-        let query_store = QueryStore::new(
-            pool.clone(),
-            change_transmitter.clone(),
-            Arc::new(move || {
-                let _ = cache_ready_tx.send(());
-            }),
-        );
+        let live = LiveStore::new(pool.clone(), change_transmitter.subscribe());
         SqliteClient {
             pool,
             change_transmitter,
-            cache_ready_transmitter,
-            query_store,
+            live,
             io,
         }
     }
@@ -154,8 +158,10 @@ impl SqliteClient {
             self.change_transmitter.receiver_count()
         );
 
-        // Begin Sqlite transaction.
-        let mut tx = self.pool.begin().await.db_err()?;
+        // Begin Sqlite transaction. IMMEDIATE takes the write lock now: a mutator reads before it
+        // writes, and under WAL a deferred transaction that started reading before another writer
+        // committed fails at its first write, without waiting for the busy timeout.
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.db_err()?;
         let mut executor = SqliteQueryExecutor::new(&mut tx);
 
         // Create mutation.
@@ -246,36 +252,17 @@ impl SqliteClient {
     where
         for<'c> SqliteQueryExecutor<'c>: QueryExecutor<Q>,
     {
-        self.query_store.run_query(query).await
+        let mut conn = self.pool.acquire().await.db_err()?;
+        SqliteQueryExecutor::new(&mut conn).execute(query).await
     }
 
-    pub async fn run_any_query(&self, query: AnyQuery) -> Result<AnyQueryResponse> {
-        self.query_store.run_any_query(query).await
-    }
-
-    pub async fn subscribe_query(&self, query: AnyQuery) -> Result<Arc<QuerySubscription>> {
-        self.query_store.subscribe_query(query).await
-    }
-
-    pub fn read_cached_query(&self, query: AnyQuery) -> Option<AnyQueryResponse> {
-        self.query_store.read_cached_query(query)
-    }
-
-    /// Subscribe to cache-ready notifications. Fires after each database change
-    /// has been propagated through all subscribed queries.
-    ///
-    /// FFI boundary contract: write-then-notify. On every change the client
-    /// refreshes every subscribed query in the cache, *then* fires this signal.
-    /// Consumers (Swift, etc.) should treat the notification as "the latest
-    /// values are already in the cache — read at your leisure". Don't pass
-    /// payloads on this channel; readers fan out to whichever cached queries
-    /// they care about.
-    pub fn subscribe_cache_ready(&self) -> broadcast::Receiver<()> {
-        self.cache_ready_transmitter.subscribe()
+    /// Live queries: subscriptions with ids and one consistent batch per data version.
+    pub fn live(&self) -> &LiveStore {
+        &self.live
     }
 
     /// Spawn a background task that creates a new activity every 10 seconds.
-    /// Cache refresh and notifications happen automatically via the change broadcast.
+    /// Live queries update automatically via the change broadcast.
     pub fn start_background_ticker(&self, actor_id: Uuid) {
         let client = self.clone();
         let _ = tokio::spawn(async move {
@@ -303,37 +290,8 @@ impl SqliteClient {
 pub mod tests {
     pub use super::*;
     pub use gv_core::SYSTEM_ACTOR_ID;
-    pub use gv_core::queries::{AnyQuery, FindActivityById, FindEntryJoinById, SnapshotAll};
+    pub use gv_core::queries::{FindEntryJoinById, SnapshotAll};
     pub use uuid::Uuid;
-
-    /// Two subscriptions to the same query key share one cache entry; the entry
-    /// must survive until the *last* handle drops. Regression for a refcount bug
-    /// where the first drop evicted the key, starving the other subscriber's
-    /// refreshes (stale reads until restart).
-    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
-    fn test_query_subscription_refcount(pool: SqlitePool) {
-        let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
-        let query = AnyQuery::FindEntryJoinById(FindEntryJoinById {
-            entry_id: Uuid::new_v4(),
-        });
-
-        let sub1 = client.subscribe_query(query.clone()).await.unwrap();
-        let sub2 = client.subscribe_query(query.clone()).await.unwrap();
-
-        // Dropping one of two subscribers must NOT evict the shared key.
-        drop(sub2);
-        assert!(
-            client.read_cached_query(query.clone()).is_some(),
-            "cache key must survive while another subscriber is alive"
-        );
-
-        // Dropping the last subscriber evicts it.
-        drop(sub1);
-        assert!(
-            client.read_cached_query(query).is_none(),
-            "cache key must be evicted once the last subscriber drops"
-        );
-    }
 
     /// Std-lib seeding runs on every launch, so it must converge rather than
     /// duplicate. This also exercises the seed path itself — template-tree
@@ -362,5 +320,69 @@ pub mod tests {
         assert_eq!(first.activities.len(), second.activities.len());
         assert_eq!(first.entries.len(), second.entries.len());
         assert_eq!(first.values.len(), second.values.len());
+    }
+
+    #[cfg(test)]
+    fn lag_test_entry() -> gv_core::models::entry::Entry {
+        gv_core::models::entry::Entry {
+            id: Uuid::new_v4(),
+            activity_id: None,
+            owner_id: gv_core::DEFAULT_USER_ID,
+            name: None,
+            position: None,
+            is_template: false,
+            display_as_sets: false,
+            is_sequence: false,
+            is_complete: false,
+            temporal: gv_core::models::entry::Temporal::None,
+        }
+    }
+
+    /// Overflow the change broadcast (capacity 16) so every listener is `Lagged`.
+    #[cfg(test)]
+    fn flood_change_channel(client: &SqliteClient) {
+        for _ in 0..100 {
+            let _ = client.change_transmitter.send(());
+        }
+    }
+
+    /// Regression: a refresh loop of `while let Ok(()) = rx.recv().await` exits on `Err(Lagged)`, so
+    /// after a burst of writes it would silently stop refreshing until restart.
+    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
+    async fn test_live_store_survives_lagged_change_channel(pool: SqlitePool) {
+        use crate::live::LiveResult;
+        use crate::queries::{ClientQuery, ClientQueryResponse};
+        let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
+        client.seed_default_user().await.unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        client.live().set_batch_sink(Arc::new(move |batch| {
+            let _ = tx.send(batch);
+        }));
+        let entry = lag_test_entry();
+        let sub = client
+            .live()
+            .subscribe(ClientQuery::FindEntryJoinById(FindEntryJoinById {
+                entry_id: entry.id,
+            }))
+            .await
+            .unwrap();
+        // Settle: no build in flight may mask the lag.
+        client.live().sync().await.unwrap();
+
+        flood_change_channel(&client);
+        client
+            .run_action(gv_core::actions::CreateEntry::from(entry.clone()).into())
+            .await
+            .unwrap();
+
+        let batch = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("live store must keep publishing after Lagged")
+            .unwrap();
+        assert_eq!(batch.updates[0].subscription_id, sub.subscription_id);
+        assert!(matches!(
+            &batch.updates[0].value,
+            LiveResult::Response(ClientQueryResponse::FindEntryJoinById(Some(j))) if j.entry.id == entry.id
+        ));
     }
 }
