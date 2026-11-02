@@ -24,6 +24,23 @@ extension EnvironmentValues {
     }
 }
 
+/// Cards that should mount expanded: an action that swaps a card's identity (e.g.
+/// ConvertToSets replacing an entry with its new sets sequence) marks the new id,
+/// and the new card consumes the mark once when it appears, whenever that is.
+@MainActor
+@Observable
+final class EntryExpansion {
+    private var pending: Set<String> = []
+
+    func mark(_ entryId: String) {
+        pending.insert(entryId)
+    }
+
+    func consume(_ entryId: String) -> Bool {
+        pending.remove(entryId) != nil
+    }
+}
+
 // We take the full Entry (from the parent's slot list or the day's roots) as
 // the unit of iteration; `join` adds what the forest doesn't carry (activity,
 // attributes, display name). Its first value arrives synchronously on the
@@ -34,28 +51,22 @@ struct EntryView: View {
     // so EntryDropDelegate falls into its forbidding mode and blocks the
     // day-root drop indicator from activating over their bodies.
     let onDayRootDrop: ((Entry) -> Void)?
-    @EnvironmentObject var forestVM: ForestViewModel
+    @Environment(EntryExpansion.self) private var expansion: EntryExpansion?
     @EnvironmentObject var dragState: DragState
+    // Sets cards show their selected member instead (SetsCardContent), so each
+    // card holds one of these two.
     @GvQuery private var join: EntryJoin?
-    // For sets cards: joined data of the selected member, whose identity and
-    // attributes are what the card displays (the sequence level is hidden).
-    // Its target depends on @State (the selection), so it can't be declared in
-    // init; it starts inactive and is re-targeted with `load` below.
-    @GvQuery private var selectedMemberJoin: EntryJoin?
+    @GvQuery private var setsMembers: [Entry]
     @State private var isExpanded = false
     // nil tracks the last member, so a "+" duplicate (appended at the end)
-    // becomes selected automatically when the forest refreshes.
+    // becomes selected automatically when the members update.
     @State private var selectedMemberId: String?
 
     init(entry: Entry, onDayRootDrop: ((Entry) -> Void)? = nil) {
         self.entry = entry
         self.onDayRootDrop = onDayRootDrop
-        _join = GvQuery(.entryJoin(entry.id))
-        _selectedMemberJoin = GvQuery(.entryJoin(nil))
-    }
-
-    private var setsMembers: [Entry] {
-        entry.displayAsSets ? forestVM.children(of: entry.id) : []
+        _join = GvQuery(.entryJoin(entry.displayAsSets ? nil : entry.id))
+        _setsMembers = GvQuery(.setsMembers(of: entry.displayAsSets ? entry.id : nil))
     }
 
     private var selectedMember: Entry? {
@@ -69,38 +80,27 @@ struct EntryView: View {
         entry.displayAsSets ? setsMembers.contains { $0.isSequence } : entry.isSequence
     }
 
-    // Sets sequences are anonymous; their cards title as the selected member.
-    private var displayedJoin: EntryJoin? {
-        entry.displayAsSets ? selectedMemberJoin : join
-    }
-
-    // Single source of truth lives in core (`EntryJoin::display_name`),
-    // surfaced via `EntryJoin.displayName`. Empty only for a sets card's
-    // first frame, before its selected member's join is loaded.
-    var displayName: String {
-        displayedJoin?.displayName ?? ""
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            EntryHeader(
-                entry: entry,
-                attributeTarget: entry.displayAsSets ? (selectedMember ?? entry) : entry,
-                displayName: displayName,
-                activityName: displayedJoin?.activity?.name,
-                isExpanded: isExpanded,
-                onToggle: { isExpanded.toggle() }
-            )
-            if isExpanded {
-                if entry.displayAsSets {
-                    SetsBody(
-                        sequence: entry,
-                        members: setsMembers,
-                        selectedMember: selectedMember,
-                        selectedMemberId: $selectedMemberId,
-                        memberAttributes: selectedMemberJoin?.attributes ?? []
-                    )
-                } else {
+            if entry.displayAsSets {
+                SetsCardContent(
+                    sequence: entry,
+                    members: setsMembers,
+                    selectedMember: selectedMember,
+                    selectedMemberId: $selectedMemberId,
+                    isExpanded: $isExpanded
+                )
+            } else {
+                EntryHeader(
+                    entry: entry,
+                    attributeTarget: entry,
+                    // Single source of truth lives in core (`EntryJoin::display_name`).
+                    displayName: join?.displayName ?? "",
+                    activityName: join?.activity?.name,
+                    isExpanded: isExpanded,
+                    onToggle: { isExpanded.toggle() }
+                )
+                if isExpanded {
                     EntryBody(entry: entry, attributes: join?.attributes ?? [])
                 }
             }
@@ -127,14 +127,9 @@ struct EntryView: View {
         .onAppear {
             // Pre-marked by actions that swap this card's identity (e.g.
             // ConvertToSets replacing an entry with its new sets sequence).
-            if forestVM.consumePendingExpanded(entry.id) {
+            if expansion?.consume(entry.id) == true {
                 isExpanded = true
             }
-        }
-        // Runs on appear and whenever the selection (or membership) changes;
-        // load is a no-op for the same id (and nil for non-sets cards).
-        .onChange(of: selectedMember?.id, initial: true) { _, memberId in
-            $selectedMemberJoin.load(.entryJoin(memberId))
         }
     }
 }
@@ -276,6 +271,53 @@ private struct ChildrenSection: View {
 }
 
 // MARK: - Sets
+
+// A sets card's header and body. Sets sequences are anonymous, so the card shows
+// its selected member's identity and attributes. Declaring that member's join in
+// init means it is there on the first frame, and the hook follows the selection.
+private struct SetsCardContent: View {
+    let sequence: Entry
+    let members: [Entry]
+    let selectedMember: Entry?
+    @Binding var selectedMemberId: String?
+    @Binding var isExpanded: Bool
+    @GvQuery private var memberJoin: EntryJoin?
+
+    init(
+        sequence: Entry,
+        members: [Entry],
+        selectedMember: Entry?,
+        selectedMemberId: Binding<String?>,
+        isExpanded: Binding<Bool>
+    ) {
+        self.sequence = sequence
+        self.members = members
+        self.selectedMember = selectedMember
+        _selectedMemberId = selectedMemberId
+        _isExpanded = isExpanded
+        _memberJoin = GvQuery(.entryJoin(selectedMember?.id))
+    }
+
+    var body: some View {
+        EntryHeader(
+            entry: sequence,
+            attributeTarget: selectedMember ?? sequence,
+            displayName: memberJoin?.displayName ?? "",
+            activityName: memberJoin?.activity?.name,
+            isExpanded: isExpanded,
+            onToggle: { isExpanded.toggle() }
+        )
+        if isExpanded {
+            SetsBody(
+                sequence: sequence,
+                members: members,
+                selectedMember: selectedMember,
+                selectedMemberId: $selectedMemberId,
+                memberAttributes: memberJoin?.attributes ?? []
+            )
+        }
+    }
+}
 
 // Body for a display_as_sets sequence. The sequence level is hidden: the card
 // shows the Sets picker, the sequence's one Time row (the sequence owns the
@@ -499,7 +541,7 @@ private struct EntryMenuContent: View {
     let entryName: String
     let activityName: String?
     @Binding var isPresented: Bool
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(EntryExpansion.self) private var expansion: EntryExpansion?
     @Environment(\.gvClient) private var gv
 
     var body: some View {
@@ -527,7 +569,7 @@ private struct EntryMenuContent: View {
                                 // which would otherwise collapse it. Lowercased to match ids
                                 // as core emits them.
                                 let sequenceId = UUID().uuidString.lowercased()
-                                forestVM.markPendingExpanded(sequenceId)
+                                expansion?.mark(sequenceId)
                                 gv?.convertToSets(entry: entry, sequenceId: sequenceId)
                             }
                         }

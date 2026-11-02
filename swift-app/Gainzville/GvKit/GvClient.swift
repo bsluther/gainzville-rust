@@ -124,7 +124,10 @@ final class GvClient {
     /// imperative checks such as drag-time validation. Returns the key's
     /// default if the query is inactive or fails.
     func read<Value>(_ key: GvKey<Value>) -> Value {
-        core.read(key)
+        guard let query = key.query, let response = try? core.liveRead(query: query) else {
+            return key.defaultValue
+        }
+        return key.decode(response) ?? key.defaultValue
     }
 
     private func applyQueued(upTo version: UInt64? = nil) {
@@ -153,20 +156,6 @@ final class GvClient {
             let live = entries.filter { $0.subscriber != nil }
             return live.isEmpty ? nil : live
         }
-    }
-}
-
-// MARK: - Read once outside views
-
-extension GainzvilleCore {
-    /// `GvClient.read` for code that holds the core but no `GvClient` (e.g.
-    /// `ForestViewModel`). Same semantics: latest version, no subscription,
-    /// the key's default if the query is inactive or fails.
-    func read<Value>(_ key: GvKey<Value>) -> Value {
-        guard let query = key.query, let response = try? liveRead(query: query) else {
-            return key.defaultValue
-        }
-        return key.decode(response) ?? key.defaultValue
     }
 }
 

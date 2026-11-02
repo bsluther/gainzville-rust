@@ -1,4 +1,3 @@
-internal import Combine
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
@@ -17,14 +16,11 @@ import AppKit
 // Autocomplete (when `config.autocomplete`): a focus-scoped subscription to
 // `DistinctTextValuesForAttribute` (plan ∪ actual). The subscription is held
 // only while the field is focused — it re-runs on every app-wide write, so
-// scoping it to the edit session keeps that cost to a single field. See
-// `TextSuggestionsModel`.
+// scoping it to the edit session keeps that cost to a single field.
 struct TextAttribute: View {
     let entry: Entry
     let pair: TextAttributePair
     @Environment(\.gvClient) private var gv
-    @EnvironmentObject private var coreEnv: CoreEnv
-    @EnvironmentObject private var dataChange: DataChange
     @EnvironmentObject private var autocomplete: AutocompleteCoordinator
 
     @State private var text: String = ""
@@ -32,7 +28,8 @@ struct TextAttribute: View {
     // Set by Remove so the blur handler skips the commit (it would write against
     // the just-deleted row).
     @State private var pendingRemoval = false
-    @StateObject private var suggestions = TextSuggestionsModel()
+    // A box rather than a hook: it exists only while the field is focused.
+    @State private var suggestions: GvLiveQuery<[String]>?
 
     private var focusToken: String { "\(entry.id)/\(pair.attrId)" }
 
@@ -50,7 +47,7 @@ struct TextAttribute: View {
         let query = text.trimmingCharacters(in: .whitespaces)
         // Exclude the in-progress text and this field's own committed value —
         // suggesting the value you're already editing is just noise.
-        let pool = suggestions.all.filter { $0 != text && $0 != pair.actual }
+        let pool = (suggestions?.value ?? []).filter { $0 != text && $0 != pair.actual }
         let matches =
             query.isEmpty ? pool : pool.filter { $0.localizedCaseInsensitiveContains(query) }
         // Capped, but generous enough that the box scrolls (see its max height).
@@ -100,11 +97,10 @@ struct TextAttribute: View {
         .onChange(of: focused) { _, isFocused in
             if isFocused {
                 if pair.config.autocomplete {
-                    suggestions.start(
-                        core: coreEnv.core, dataChange: dataChange, attributeId: pair.attrId)
+                    suggestions = GvLiveQuery(.distinctTextValues(pair.attrId), client: gv)
                 }
             } else {
-                suggestions.stop()
+                suggestions = nil
                 if pendingRemoval {
                     pendingRemoval = false
                 } else if !flushNow() {
@@ -254,48 +250,5 @@ struct TextAttribute: View {
         }
         guard pair.actual != text else { return nil }
         return .set(text)
-    }
-}
-
-/// Backs a text attribute's autocomplete. Focus-scoped: `start()` on focus,
-/// `stop()` on blur. Holds the `FfiQuerySubscription` only while editing, so
-/// the query (which re-runs on every app-wide write) is live for one field at a
-/// time. Mirrors the per-component subscription pattern of
-/// `AttributeDetailViewModel`, but torn down on blur rather than on disappear.
-@MainActor
-final class TextSuggestionsModel: ObservableObject {
-    @Published var all: [String] = []
-    private var core: GainzvilleCore?
-    private var attributeId: String = ""
-    private var subscription: FfiQuerySubscription?
-    private var cancellable: AnyCancellable?
-
-    func start(core: GainzvilleCore?, dataChange: DataChange, attributeId: String) {
-        guard subscription == nil, let core else { return }
-        self.core = core
-        self.attributeId = attributeId
-        subscription = try? core.subscribeQuery(
-            query: .distinctTextValuesForAttribute(
-                DistinctTextValuesForAttribute(attributeId: attributeId)))
-        refresh()
-        cancellable = dataChange.didChange.sink { [weak self] in self?.refresh() }
-    }
-
-    func stop() {
-        // Releasing the handle drops the Rust-side subscription (refcount
-        // evict); clearing the sink stops refreshes.
-        subscription = nil
-        cancellable = nil
-        all = []
-    }
-
-    private func refresh() {
-        guard let core else { return }
-        if case .distinctTextValuesForAttribute(let values) = core.readQuery(
-            query: .distinctTextValuesForAttribute(
-                DistinctTextValuesForAttribute(attributeId: attributeId)))
-        {
-            all = values
-        }
     }
 }

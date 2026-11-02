@@ -246,7 +246,6 @@ private struct LogCalendarPickerContent: View {
 #Preview {
     NavigationStack {
         LogView()
-            .environmentObject(ForestViewModel())
             .environmentObject(LogDayStore())
             .environmentObject(DragState())
             .environmentObject(AutocompleteCoordinator())

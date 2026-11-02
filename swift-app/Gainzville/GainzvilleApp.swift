@@ -13,7 +13,7 @@ struct GainzvilleApp: App {
     let gvClient: GvClient
     let coreEnv: CoreEnv
     let dataChange: DataChange
-    let forestVM: ForestViewModel
+    let entryExpansion: EntryExpansion
     let logDayStore: LogDayStore
     let dragState: DragState
     let attributeFocus: AttributeFocusModel
@@ -23,21 +23,13 @@ struct GainzvilleApp: App {
         let listener = AppListener()
         let c = try! makeCore(listener: listener)
         // Live queries (GvKit). Registers the batch listener, so it must exist
-        // before any @GvQuery subscribes. Views migrated to hooks use this;
-        // the view models below are the old ping-and-pull path.
+        // before any @GvQuery subscribes.
         let gv = GvClient(core: c)
-
-        let fvm = ForestViewModel()
-        fvm.subscribe(to: c)
 
         let dc = DataChange()
 
-        // Wire the listener callback after all view models exist.
-        // The singleton VM refreshes first, then dataChange fans out to per-view
-        // VMs (e.g. TextSuggestionsModel) so they re-read the cache too.
-        listener.onChanged = { [weak fvm, weak dc] in
-            Task { @MainActor [weak fvm, weak dc] in
-                fvm?.refresh(from: c)
+        listener.onChanged = { [weak dc] in
+            Task { @MainActor [weak dc] in
                 dc?.bump()
             }
         }
@@ -52,7 +44,7 @@ struct GainzvilleApp: App {
         gvClient = gv
         coreEnv = CoreEnv(core: c)
         dataChange = dc
-        forestVM = fvm
+        entryExpansion = EntryExpansion()
         logDayStore = LogDayStore()
         dragState = DragState()
         attributeFocus = AttributeFocusModel()
@@ -65,7 +57,7 @@ struct GainzvilleApp: App {
                 .environment(\.gvClient, gvClient)
                 .environmentObject(coreEnv)
                 .environmentObject(dataChange)
-                .environmentObject(forestVM)
+                .environment(entryExpansion)
                 .environmentObject(logDayStore)
                 .environmentObject(dragState)
                 .environmentObject(attributeFocus)

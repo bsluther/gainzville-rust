@@ -46,50 +46,6 @@ final class DataChange: ObservableObject {
     func bump() { didChange.send(()) }
 }
 
-// View model for the forest. Subscribes via subscribeForest (backed by AllEntries cache).
-// Exposes root entries as a @Published property; children are read synchronously on demand.
-@MainActor
-class ForestViewModel: ObservableObject {
-    @Published var roots: [Entry] = []
-    private var subscription: FfiQuerySubscription?
-    private var core: GainzvilleCore?
-
-    func subscribe(to core: GainzvilleCore) {
-        self.core = core
-        subscription = try? core.subscribeForest()
-        refresh(from: core)
-    }
-
-    func refresh(from core: GainzvilleCore) {
-        roots = core.forestRoots()
-    }
-
-    // Synchronous reads from the forest cache — always fresh on each render.
-    // (Everything else moved to GvKit: see GvQueries and GvWrites.)
-
-    func children(of parentId: String) -> [Entry] {
-        core?.forestChildren(parentId: parentId) ?? []
-    }
-
-    /// The root template entry for an activity, read from the same forest cache
-    /// the log uses. Backs activity-template editing in the library.
-    func templateRoot(activityId: String) -> Entry? {
-        _ = roots  // establish a SwiftUI dependency so views re-render on change
-        return core?.forestActivityTemplateRoot(activityId: activityId)
-    }
-
-    // Cards that should mount expanded, consumed once by EntryView.onAppear.
-    private var pendingExpandedEntryIds: Set<String> = []
-
-    func markPendingExpanded(_ entryId: String) {
-        pendingExpandedEntryIds.insert(entryId)
-    }
-
-    func consumePendingExpanded(_ entryId: String) -> Bool {
-        pendingExpandedEntryIds.remove(entryId) != nil
-    }
-}
-
 func makeCore(listener: AppListener) throws -> GainzvilleCore {
     let dbURL = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
