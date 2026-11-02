@@ -9,16 +9,16 @@ struct CreateEntrySheet: View {
     /// activityId: set when picking from library; name: set for anonymous entries.
     var onCommit: (_ activityId: String?, _ name: String?, _ isSequence: Bool) -> Void
 
-    @EnvironmentObject private var activitiesVM: ActivitiesViewModel
+    @GvQuery(.allActivities) private var activities: [Activity]
 
     @State private var searchText = ""
     @State private var scratchName = ""
     @State private var scratchIsSequence = false
 
     private var filteredActivities: [Activity] {
-        guard !searchText.isEmpty else { return activitiesVM.activities }
+        guard !searchText.isEmpty else { return activities }
         let q = searchText.lowercased()
-        return activitiesVM.activities.filter { $0.name.lowercased().contains(q) }
+        return activities.filter { $0.name.lowercased().contains(q) }
     }
 
     var body: some View {

@@ -46,58 +46,6 @@ final class DataChange: ObservableObject {
     func bump() { didChange.send(()) }
 }
 
-// View model for the activity list. Subscribes once via subscribe_query;
-// stays live for the app's lifetime. Dropping `subscription` auto-unsubscribes.
-@MainActor
-class ActivitiesViewModel: ObservableObject {
-    @Published var activities: [Activity] = []
-    private var subscription: FfiQuerySubscription?
-    private var core: GainzvilleCore?
-
-    func subscribe(to core: GainzvilleCore) {
-        self.core = core
-        subscription = try? core.subscribeQuery(query: .allActivities(AllActivities()))
-        refresh(from: core)
-    }
-
-    func refresh(from core: GainzvilleCore) {
-        if case .allActivities(let list) = core.readQuery(query: .allActivities(AllActivities())) {
-            activities = list
-        }
-    }
-
-    func createActivity(name: String, description: String?) {
-        guard let core else { return }
-        let activityId = UUID().uuidString
-        let activity = Activity(
-            id: activityId,
-            ownerId: SYSTEM_ACTOR_ID,
-            sourceActivityId: nil,
-            name: name,
-            description: description
-        )
-        let template = Entry(
-            id: UUID().uuidString,
-            activityId: activityId,
-            ownerId: SYSTEM_ACTOR_ID,
-            name: nil,
-            position: nil,
-            isTemplate: true,
-            displayAsSets: false,
-            isSequence: false,
-            isComplete: false,
-            temporal: .none
-        )
-        try? core.runAction(action: .createActivity(CreateActivity(
-            actorId: SYSTEM_ACTOR_ID,
-            activity: activity,
-            template: [template]
-        )))
-        // No manual refresh needed — runAction refreshes the cache and fires
-        // on_data_changed, which triggers refresh via AppListener.
-    }
-}
-
 // View model for the forest. Subscribes via subscribeForest (backed by AllEntries cache).
 // Exposes root entries as a @Published property; children are read synchronously on demand.
 @MainActor
@@ -139,29 +87,6 @@ class ForestViewModel: ObservableObject {
 
     func consumePendingExpanded(_ entryId: String) -> Bool {
         pendingExpandedEntryIds.remove(entryId) != nil
-    }
-}
-
-// TODO: AttributesViewModel does not subscribe to DataChange.didChange, so the
-// library attribute list (AttributesListView) won't live-refresh when an
-// attribute is created or edited — it only reflects what was cached at subscribe
-// time. Wire a DataChange sink that calls refresh(from:) like
-// EditAttributesViewModel does (or move it to @GvQuery). Surfaces once name/description editing lands (the
-// list shows those fields); not visible while only config defaults are editable.
-@MainActor
-class AttributesViewModel: ObservableObject {
-    @Published var attributes: [Attribute] = []
-    private var subscription: FfiQuerySubscription?
-
-    func subscribe(to core: GainzvilleCore) {
-        subscription = try? core.subscribeQuery(query: .allAttributes(AllAttributes()))
-        refresh(from: core)
-    }
-
-    func refresh(from core: GainzvilleCore) {
-        if case .allAttributes(let list) = core.readQuery(query: .allAttributes(AllAttributes())) {
-            attributes = list
-        }
     }
 }
 

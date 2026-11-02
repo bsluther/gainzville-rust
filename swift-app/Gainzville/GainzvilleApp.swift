@@ -13,8 +13,6 @@ struct GainzvilleApp: App {
     let gvClient: GvClient
     let coreEnv: CoreEnv
     let dataChange: DataChange
-    let activitiesVM: ActivitiesViewModel
-    let attributesVM: AttributesViewModel
     let forestVM: ForestViewModel
     let logDayStore: LogDayStore
     let dragState: DragState
@@ -29,24 +27,16 @@ struct GainzvilleApp: App {
         // the view models below are the old ping-and-pull path.
         let gv = GvClient(core: c)
 
-        let avm = ActivitiesViewModel()
-        avm.subscribe(to: c)
-
-        let atvm = AttributesViewModel()
-        atvm.subscribe(to: c)
-
         let fvm = ForestViewModel()
         fvm.subscribe(to: c)
 
         let dc = DataChange()
 
         // Wire the listener callback after all view models exist.
-        // Singleton VMs refresh first, then dataChange fans out to per-view
+        // The singleton VM refreshes first, then dataChange fans out to per-view
         // VMs (e.g. TextSuggestionsModel) so they re-read the cache too.
-        listener.onChanged = { [weak avm, weak atvm, weak fvm, weak dc] in
-            Task { @MainActor [weak avm, weak atvm, weak fvm, weak dc] in
-                avm?.refresh(from: c)
-                atvm?.refresh(from: c)
+        listener.onChanged = { [weak fvm, weak dc] in
+            Task { @MainActor [weak fvm, weak dc] in
                 fvm?.refresh(from: c)
                 dc?.bump()
             }
@@ -62,8 +52,6 @@ struct GainzvilleApp: App {
         gvClient = gv
         coreEnv = CoreEnv(core: c)
         dataChange = dc
-        activitiesVM = avm
-        attributesVM = atvm
         forestVM = fvm
         logDayStore = LogDayStore()
         dragState = DragState()
@@ -77,8 +65,6 @@ struct GainzvilleApp: App {
                 .environment(\.gvClient, gvClient)
                 .environmentObject(coreEnv)
                 .environmentObject(dataChange)
-                .environmentObject(activitiesVM)
-                .environmentObject(attributesVM)
                 .environmentObject(forestVM)
                 .environmentObject(logDayStore)
                 .environmentObject(dragState)
