@@ -48,7 +48,7 @@ modalities.
     <img src="docs/2026-07-16-action-query-architecture.excalidraw.svg" width="1000" alt="Read-write architecture">
 </p>
 
-A `Query` is a reified request to read from the database that encodes its return type as a `QueryResponse`. Mutators and the `QueryStore` execute queries to read and subscribe to database state.
+A `Query` is a reified request to read from the database that encodes its return type as a `QueryResponse`. Mutators execute queries to read database state, and the client's `LiveStore` answers them as live subscriptions for the UI.
 
 All durable writes are initiated by `Actions`, a description of a user intent such as `MoveEntry { actor_id, entry_id, position, temporal }`. Every action has a corresponding `Mutator` which reads the current database state (via queries) and returns a `Mutation` containing a set of `Deltas`, or an error if invariants would be violated. A delta is a normalized insert, update, or delete to a database table. A mutation contains the original action (user intent), computed deltas, and additional metadata.
 

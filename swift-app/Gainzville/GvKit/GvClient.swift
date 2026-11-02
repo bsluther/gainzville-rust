@@ -26,9 +26,8 @@ import SwiftUI
 
 // MARK: - Listener
 
-/// Receives batches on a Rust thread and forwards them. Like `AppListener`,
-/// but the handler is fixed at init (never mutated while Rust may call it) and
-/// the entry point is explicitly `nonisolated`: it does not run on the main
+/// Receives batches on a Rust thread and forwards them. The handler is fixed at
+/// init (never mutated while Rust may call it) and the entry point is explicitly `nonisolated`: it does not run on the main
 /// actor, whatever the module's default isolation says.
 final class GvBatchListener: LiveListener {
     private let handler: @Sendable (LiveBatch) -> Void

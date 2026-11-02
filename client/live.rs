@@ -17,9 +17,6 @@
 //! the version they're tagged with, in either direction. The rule, which needs no knowledge of the
 //! backing: a first value never moves backwards, and a later build is already guaranteed to bring
 //! it in line. See `subscribe` and `swap_in`.
-//!
-//! This sits beside `QueryStore` (the older ping-and-pull cache) during migration; both listen to
-//! the same change broadcast.
 
 use std::{
     collections::HashMap,
@@ -43,7 +40,6 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::queries::{ClientQuery, ClientQueryResponse};
-use crate::query_store::next_change;
 
 pub type SubscriptionId = u64;
 pub type Version = u64;
@@ -130,6 +126,27 @@ fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
         .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
         .unwrap_or("no message");
     format!("panicked: {detail}")
+}
+
+/// Wait for the next change notification on a broadcast channel. Returns `false` only when the
+/// channel is closed.
+///
+/// `Lagged` means the receiver fell behind and missed notifications; for a "something changed"
+/// signal that is still a change, so it returns `true` instead of ending the caller's loop. Any further notifications already queued are drained, so a burst coalesces into
+/// one refresh. Modeled on convex-rs, which skips lagged messages on purpose.
+async fn next_change(rx: &mut broadcast::Receiver<()>) -> bool {
+    match rx.recv().await {
+        Ok(()) | Err(broadcast::error::RecvError::Lagged(_)) => {}
+        Err(broadcast::error::RecvError::Closed) => return false,
+    }
+    loop {
+        match rx.try_recv() {
+            Ok(()) | Err(broadcast::error::TryRecvError::Lagged(_)) => continue,
+            Err(broadcast::error::TryRecvError::Empty) => return true,
+            // Closed after delivering a change: report the change; the next call returns false.
+            Err(broadcast::error::TryRecvError::Closed) => return true,
+        }
+    }
 }
 
 // --- Store -----------------------------------------------------------------------------------
@@ -312,7 +329,7 @@ impl LiveStore {
 
     /// Subscribe to a query and get its first value now.
     ///
-    /// Identical queries share one subscription id (refcounted, like `QueryStore`); the id is
+    /// Identical queries share one subscription id (refcounted); the id is
     /// never reused after the last handle drops.
     ///
     /// Coherence: the first value is inserted only if it can be placed cleanly against builds,
@@ -640,10 +657,7 @@ mod tests {
             entry::{Entry, Position, Temporal},
             user::User,
         },
-        queries::{
-            ActivityTemplateJoin, FindAncestors, FindDescendants, FindEntryJoinById,
-            RootEntriesInInterval,
-        },
+        queries::{ActivityTemplateJoin, AllAttributes, FindEntryJoinById, RootEntriesInInterval},
         std_lib::StandardLibrary,
     };
     use gv_ui::{ChildSlot, ChildSlots, SuggestedRootInsertionTime, WouldCreateCycle, child_slots};
@@ -738,17 +752,37 @@ mod tests {
             .unwrap();
     }
 
-    fn find_entry(entry_id: Uuid) -> ClientQuery {
-        ClientQuery::FindEntryById(gv_core::queries::FindEntryById { entry_id })
+    fn entry_join(entry_id: Uuid) -> ClientQuery {
+        ClientQuery::FindEntryJoinById(FindEntryJoinById { entry_id })
     }
 
-    fn found_id(value: &LiveResult) -> Option<Uuid> {
+    fn joined_id(value: &LiveResult) -> Option<Uuid> {
         match value {
-            LiveResult::Response(ClientQueryResponse::FindEntryById(found)) => {
-                found.as_ref().map(|e| e.id)
+            LiveResult::Response(ClientQueryResponse::FindEntryJoinById(join)) => {
+                join.as_ref().map(|j| j.entry.id)
             }
             other => panic!("unexpected value {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn next_change_survives_lag_and_coalesces() {
+        let (tx, mut rx) = broadcast::channel::<()>(2);
+        // Overflow the channel so the receiver is lagged.
+        for _ in 0..10 {
+            tx.send(()).unwrap();
+        }
+        assert!(next_change(&mut rx).await, "Lagged must read as a change");
+        // The burst was drained into that one wake-up.
+        assert!(matches!(
+            rx.try_recv(),
+            Err(broadcast::error::TryRecvError::Empty)
+        ));
+        // Still listening after the lag.
+        tx.send(()).unwrap();
+        assert!(next_change(&mut rx).await);
+        drop(tx);
+        assert!(!next_change(&mut rx).await, "Closed ends the loop");
     }
 
     fn day_roots() -> ClientQuery {
@@ -805,38 +839,33 @@ mod tests {
             1,
             "empty sequence: one drop slot"
         );
-        let position = first_drop_position(&slots_sub.value);
+        let child = entry(
+            Some(first_drop_position(&slots_sub.value)),
+            Temporal::None,
+            false,
+        );
         // SQL-backed:
         let roots = store.subscribe(day_roots()).await.unwrap();
         assert_eq!(root_ids(&roots.value), vec![other.id, parent.id]);
-        let descendants = store
-            .subscribe(ClientQuery::FindDescendants(FindDescendants {
-                entry_id: parent.id,
-            }))
-            .await
-            .unwrap();
-        let _unrelated = store
-            .subscribe(ClientQuery::FindEntryJoinById(FindEntryJoinById {
-                entry_id: other.id,
-            }))
-            .await
-            .unwrap();
+        let child_join = store.subscribe(entry_join(child.id)).await.unwrap();
+        assert_eq!(joined_id(&child_join.value), None);
+        let parent_join = store.subscribe(entry_join(parent.id)).await.unwrap();
+        let _unrelated = store.subscribe(entry_join(other.id)).await.unwrap();
 
         // Drain any batches from versions racing the subscribes.
         store.sync().await.unwrap();
         while rx.try_recv().is_ok() {}
         let before = store.version();
 
-        // Add a child at the drop slot's position: changes the slots (forest) and descendants
-        // (SQL), not the day's roots or the unrelated entry.
-        let child = entry(Some(position), Temporal::None, false);
+        // Add the child: changes the slots (forest) and its own join (SQL), not the day's roots,
+        // the parent's join or the unrelated entry.
         create(&client, &child).await;
         let batch = next_batch(&mut rx).await;
         assert!(batch.version > before);
         let changed: HashSet<_> = batch.updates.iter().map(|u| u.subscription_id).collect();
         assert_eq!(
             changed,
-            HashSet::from([slots_sub.subscription_id, descendants.subscription_id])
+            HashSet::from([slots_sub.subscription_id, child_join.subscription_id])
         );
         let slots_value = &batch
             .updates
@@ -848,8 +877,8 @@ mod tests {
         assert_eq!(after.len(), 3);
         assert!(matches!(&after[1], ChildSlot::Entry { entry } if entry.id == child.id));
 
-        // Move the parent to the next day: the day's roots change, and so do its descendants
-        // (FindDescendants includes the entry itself); its child slots don't.
+        // Move the parent to the next day: the day's roots change, and so does its join; its child
+        // slots don't.
         client
             .run_action(
                 MoveEntry {
@@ -866,7 +895,7 @@ mod tests {
         let changed: HashSet<_> = batch.updates.iter().map(|u| u.subscription_id).collect();
         assert_eq!(
             changed,
-            HashSet::from([roots.subscription_id, descendants.subscription_id])
+            HashSet::from([roots.subscription_id, parent_join.subscription_id])
         );
         let roots_value = &batch
             .updates
@@ -978,9 +1007,9 @@ mod tests {
         create(&client, &w).await;
 
         let before = store.version();
-        let sub = store.subscribe(find_entry(w.id)).await.unwrap();
+        let sub = store.subscribe(entry_join(w.id)).await.unwrap();
         assert_eq!(sub.version, before);
-        assert_eq!(found_id(&sub.value), Some(w.id));
+        assert_eq!(joined_id(&sub.value), Some(w.id));
         while rx.try_recv().is_ok() {}
 
         resume.send(()).unwrap();
@@ -996,8 +1025,8 @@ mod tests {
                 "the first value already had W: nothing should touch it"
             );
         }
-        let again = store.subscribe(find_entry(w.id)).await.unwrap();
-        assert_eq!(found_id(&again.value), Some(w.id));
+        let again = store.subscribe(entry_join(w.id)).await.unwrap();
+        assert_eq!(joined_id(&again.value), Some(w.id));
     }
 
     /// A first value read before a build started and inserted during it fits neither case: it
@@ -1011,7 +1040,7 @@ mod tests {
         let (read_done, finish_subscribe) = store.pause_next_subscribe();
         let subscribing = tokio::spawn({
             let store = store.clone();
-            let query = find_entry(w.id);
+            let query = entry_join(w.id);
             async move { store.subscribe(query).await.unwrap().value }
         });
         reach(read_done).await; // first read done, before W exists
@@ -1023,7 +1052,7 @@ mod tests {
         finish_subscribe.send(()).unwrap();
 
         let value = subscribing.await.unwrap();
-        assert_eq!(found_id(&value), Some(w.id));
+        assert_eq!(joined_id(&value), Some(w.id));
         resume.send(()).unwrap();
     }
 
@@ -1342,13 +1371,14 @@ mod tests {
     /// A query that errors is delivered as `Failed` instead of stalling the version for others.
     #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
     async fn failing_query_does_not_stall_others(pool: SqlitePool) {
-        let (client, mut rx) = client(pool).await;
+        let (client, mut rx) = client(pool.clone()).await;
         let store = client.live();
-        // FindAncestors errors (NotFound) for a missing entry.
+        sqlx::query("ALTER TABLE attributes RENAME TO attributes_gone")
+            .execute(&pool)
+            .await
+            .unwrap();
         let failing = store
-            .subscribe(ClientQuery::FindAncestors(FindAncestors {
-                entry_id: Uuid::new_v4(),
-            }))
+            .subscribe(ClientQuery::AllAttributes(AllAttributes))
             .await
             .unwrap();
         assert!(matches!(failing.value, LiveResult::Failed { .. }));

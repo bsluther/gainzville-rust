@@ -5,13 +5,11 @@ use gv_client::{
     client::SqliteClient,
     live::{LiveBatch, LiveResult, LiveSubscription},
     queries::{ClientQuery, ClientQueryResponse},
-    query_store::{QuerySubscription, next_change},
 };
 use gv_core::{
     actions::{Action, CreateAttribute, CreateEntry, CreateValue},
-    forest::Forest,
-    models::entry::{Entry, Position},
-    queries::{AllEntries, DomainQuery, DomainQueryResponse, SnapshotAll},
+    models::entry::Entry,
+    queries::SnapshotAll,
     std_lib::StandardLibrary,
 };
 use tokio::runtime::Runtime;
@@ -41,14 +39,6 @@ static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
         .expect("failed to build tokio runtime")
 });
 
-/// Swift implements this protocol to receive change notifications.
-#[uniffi::export(with_foreign)]
-pub trait CoreListener: Send + Sync {
-    /// Called after any successful `run_action`. Swift reads from the cache
-    /// synchronously via `read_query` after receiving this callback.
-    fn on_data_changed(&self);
-}
-
 /// Swift implements this to receive live-query batches: one call per data version, carrying only
 /// the subscriptions whose result changed. Called on a Rust thread, in version order, before any
 /// `live_subscribe` can report that version. The implementation must only enqueue the batch, then
@@ -71,12 +61,6 @@ pub struct LiveSubscribed {
     pub handle: Arc<LiveSubscriptionHandle>,
 }
 
-/// UniFFI-compatible wrapper around `QuerySubscription`. Dropping this value
-/// (when Swift releases its reference) automatically unsubscribes the query.
-/// The inner Arc is held only for its Drop side-effect.
-#[derive(uniffi::Object)]
-pub struct FfiQuerySubscription(#[allow(dead_code)] Arc<QuerySubscription>);
-
 /// The main entry point for Swift. Wraps `SqliteClient` with a static tokio
 /// runtime and synchronous UniFFI-exported methods.
 #[derive(uniffi::Object)]
@@ -91,27 +75,12 @@ impl GainzvilleCore {
     ///
     /// - `db_path`: SQLite connection string, e.g. `"sqlite:///path/to/db.sqlite"`.
     /// - `actor_id`: UUID identifying the current user's actor.
-    /// - `listener`: Swift-side callback object for change notifications.
     #[uniffi::constructor]
-    pub fn new(
-        db_path: String,
-        actor_id: Uuid,
-        listener: Arc<dyn CoreListener>,
-    ) -> Result<Arc<Self>, FfiError> {
+    pub fn new(db_path: String, actor_id: Uuid) -> Result<Arc<Self>, FfiError> {
         init_logging();
         let client = RUNTIME
             .block_on(SqliteClient::init(&db_path))
             .map_err(FfiError::from)?;
-
-        // Wire the CoreListener: subscribe to cache-ready events and call
-        // on_data_changed() from a background task each time the cache updates.
-        let mut cache_ready_rx = client.subscribe_cache_ready();
-        RUNTIME.spawn(async move {
-            // `next_change`: Lagged is a (coalesced) change, not the end of the loop.
-            while next_change(&mut cache_ready_rx).await {
-                listener.on_data_changed();
-            }
-        });
 
         // Load the forest off the caller's thread, so the first forest-backed subscribe doesn't.
         let live = client.live().clone();
@@ -124,8 +93,8 @@ impl GainzvilleCore {
         Ok(Arc::new(GainzvilleCore { client, actor_id }))
     }
 
-    /// Execute a write action. Returns once the write has committed; the cache
-    /// refresh and `on_data_changed()` callback happen asynchronously afterward.
+    /// Execute a write action. Returns once the write has committed; the batch
+    /// reflecting it arrives asynchronously afterward.
     pub fn run_action(&self, action: Action) -> Result<(), FfiError> {
         RUNTIME
             .block_on(self.client.run_action(action))
@@ -136,38 +105,13 @@ impl GainzvilleCore {
             })
     }
 
-    /// Subscribe to a query. Runs the initial query immediately, populates the
-    /// cache, and returns a `FfiQuerySubscription` handle. Dropping the handle
-    /// (Swift releasing the reference) auto-removes the query from the cache.
-    ///
-    /// Legacy (ping-and-pull) path, keyed by the domain set; superseded by
-    /// `live_subscribe` over the client set and retired screen by screen.
-    pub fn subscribe_query(
-        &self,
-        query: DomainQuery,
-    ) -> Result<Arc<FfiQuerySubscription>, FfiError> {
-        let subscription = RUNTIME
-            .block_on(self.client.subscribe_query(query))
-            .map_err(FfiError::from)?;
-        Ok(Arc::new(FfiQuerySubscription(subscription)))
-    }
-
-    /// Read the current cached result for a query. Returns `None` if the query
-    /// is not subscribed. Swift calls this synchronously from the main thread
-    /// after receiving `on_data_changed()`.
-    pub fn read_query(&self, query: DomainQuery) -> Option<DomainQueryResponse> {
-        self.client.read_cached_query(query)
-    }
-
     // -------------------------------------------------------------------------
     // Live queries
     //
-    // The successor to subscribe_query/read_query/forest_*/on_data_changed for
-    // migrated views. Swift registers one LiveListener, subscribes per view
-    // (first value returned synchronously), and receives one batch per data
-    // version with only the changed subscriptions. Queries come from the client
-    // set; how each is answered (in-memory forest or SQL) is declared in
-    // gv_client::queries.
+    // Swift registers one LiveListener, subscribes per view (first value returned
+    // synchronously), and receives one batch per data version with only the
+    // changed subscriptions. Queries come from the client set; how each is
+    // answered (in-memory forest or SQL) is declared in gv_client::queries.
     // -------------------------------------------------------------------------
 
     /// Register the batch listener. Call once, before the first `live_subscribe`: batches are
@@ -201,70 +145,12 @@ impl GainzvilleCore {
     }
 
     /// Spawn a background task that creates a new activity every 10 seconds.
-    /// Cache refresh and `on_data_changed()` fire automatically via the change
-    /// broadcast — no manual wiring needed here.
+    /// Live queries update automatically via the change broadcast — no manual
+    /// wiring needed here.
     pub fn start_background_ticker(&self) {
         let _guard = RUNTIME.enter();
         self.client.start_background_ticker(self.actor_id);
     }
-
-    // -------------------------------------------------------------------------
-    // Forest
-    //
-    // The forest is backed by the AllEntries query cache. Call `subscribe_forest`
-    // once to start maintaining the cache; the returned token keeps it alive.
-    // After each `on_data_changed` callback, call any of the synchronous
-    // `forest_*` methods to read the current traversal state — no async needed.
-    // Adding new traversal methods is: call `forest_snapshot()`, call the Forest
-    // method, map results.
-    // -------------------------------------------------------------------------
-
-    /// Subscribe to the forest cache. Internally subscribes to AllEntries.
-    /// Hold the returned token for the lifetime of the subscriber; dropping it
-    /// unsubscribes automatically, same as `subscribe_query`.
-    pub fn subscribe_forest(&self) -> Result<Arc<FfiQuerySubscription>, FfiError> {
-        let subscription = RUNTIME
-            .block_on(
-                self.client
-                    .subscribe_query(DomainQuery::AllEntries(AllEntries {})),
-            )
-            .map_err(FfiError::from)?;
-        Ok(Arc::new(FfiQuerySubscription(subscription)))
-    }
-
-    /// All root entries (no parent), sorted by canonical instant.
-    pub fn forest_roots(&self) -> Vec<Entry> {
-        self.forest_snapshot()
-            .map(|f| f.roots().into_iter().cloned().collect())
-            .unwrap_or_default()
-    }
-
-    /// Direct children of `parent_id`, sorted by fractional index.
-    pub fn forest_children(&self, parent_id: Uuid) -> Vec<Entry> {
-        self.forest_snapshot()
-            .map(|f| f.children(parent_id).into_iter().cloned().collect())
-            .unwrap_or_default()
-    }
-
-    /// The root template entry for an activity, if present in the forest cache.
-    /// Backs the library's activity-template editing: the activity detail view
-    /// resolves the root here, then reuses the existing forest traversal +
-    /// per-entry join subscriptions to render and edit the template.
-    pub fn forest_activity_template_root(&self, activity_id: Uuid) -> Option<Entry> {
-        self.forest_snapshot()
-            .and_then(|f| f.template_root(activity_id).cloned())
-    }
-
-    /// Position immediately after the last child of `parent_id`.
-    /// Returns `None` if the parent is not found in the current snapshot.
-    /// Caller must ensure `parent_id` refers to a sequence entry.
-    pub fn forest_position_after_children(&self, parent_id: Uuid) -> Option<Position> {
-        self.forest_snapshot()
-            .and_then(|f| f.position_after_children(parent_id))
-    }
-
-    // (Suggested root insertion time moved to the client set:
-    // `ClientQuery::SuggestedRootInsertionTime`, read once via `live_read`.)
 
     // -------------------------------------------------------------------------
     // Dev / debug utilities
@@ -351,32 +237,16 @@ impl GainzvilleCore {
     }
 }
 
-impl GainzvilleCore {
-    /// Read the AllEntries cache and wrap it in a Forest for synchronous traversal.
-    /// Returns None if the forest has not been subscribed yet.
-    fn forest_snapshot(&self) -> Option<Forest> {
-        match self
-            .client
-            .read_cached_query(DomainQuery::AllEntries(AllEntries {}))?
-        {
-            DomainQueryResponse::AllEntries(entries) => Some(Forest::from(entries)),
-            _ => None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::Utc;
-    use gv_core::{DEFAULT_USER_ID, models::entry::Temporal};
+    use gv_core::{
+        DEFAULT_USER_ID,
+        models::entry::{Position, Temporal},
+    };
     use gv_ui::{ChildSlot, ChildSlots, WouldCreateCycle};
     use std::sync::Mutex;
-
-    struct NoopListener;
-    impl CoreListener for NoopListener {
-        fn on_data_changed(&self) {}
-    }
 
     #[derive(Default)]
     struct CollectBatches(Mutex<Vec<LiveBatch>>);
@@ -414,7 +284,6 @@ mod tests {
         let core = GainzvilleCore::new(
             format!("sqlite://{}?mode=rwc", path.display()),
             DEFAULT_USER_ID,
-            Arc::new(NoopListener),
         )
         .unwrap();
         core.dev_create_arbitrary_entries(200).unwrap();
@@ -434,7 +303,6 @@ mod tests {
         let core = GainzvilleCore::new(
             format!("sqlite://{}?mode=rwc", path.display()),
             DEFAULT_USER_ID,
-            Arc::new(NoopListener),
         )
         .unwrap();
         let listener = Arc::new(CollectBatches::default());

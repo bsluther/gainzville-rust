@@ -387,8 +387,7 @@ into that variant at the call site, so core never names a sqlx type. See
 ## What's Planned / Deferred
 
 **FFI dispatch**: Swift sends `ClientQuery` values to the live store (`live_subscribe`,
-`live_read`); the legacy `QueryStore` path still takes `DomainQuery` until it is retired screen by
-screen. Each set's dispatch is a `match` with no wildcard arm, so the compiler checks it covers every
+`live_read`). `DomainQuery` doesn't cross the FFI: it's for mutators and the server. Each set's dispatch is a `match` with no wildcard arm, so the compiler checks it covers every
 member. See
 [Boundary transformations](./boundary-transformations.md) for how domain types cross the FFI
 boundary as uniffi remote types.

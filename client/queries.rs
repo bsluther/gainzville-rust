@@ -9,15 +9,11 @@
 use chrono::{DateTime, Utc};
 use gv_core::{
     error::Result,
-    models::{
-        activity::Activity, attribute::Attribute, attribute_pair::AttributePair, entry::Entry,
-        entry_join::EntryJoin,
-    },
+    models::{activity::Activity, attribute::Attribute, entry::Entry, entry_join::EntryJoin},
     queries::{
         ActivityTemplateJoin, AllActivities, AllAttributes, DistinctTextValuesForAttribute,
-        FindActivityById, FindActivityTemplateRoot, FindAncestors, FindAttributeById,
-        FindAttributePairsForEntry, FindAttributesByOwner, FindDescendants, FindEntryById,
-        FindEntryJoinById, RootEntriesInInterval,
+        FindActivityTemplateRoot, FindAttributeById, FindAttributesByOwner, FindEntryJoinById,
+        RootEntriesInInterval,
     },
     query_executor::{ForestExecutor, QueryExecutor},
 };
@@ -26,7 +22,6 @@ use gv_ui::{
     ChildSlot,
     queries::{ChildSlots, SetsMembers, SuggestedRootInsertionTime, WouldCreateCycle},
 };
-use uuid::Uuid;
 
 /// A question the client can subscribe to or read once. The variant says *what* is
 /// asked, never how it is answered.
@@ -41,17 +36,12 @@ pub enum ClientQuery {
     RootEntriesInInterval(RootEntriesInInterval),
     ActivityTemplateJoin(ActivityTemplateJoin),
     // Shared with the domain set
-    FindEntryById(FindEntryById),
     FindEntryJoinById(FindEntryJoinById),
-    FindAncestors(FindAncestors),
-    FindDescendants(FindDescendants),
-    FindActivityById(FindActivityById),
     AllActivities(AllActivities),
     FindActivityTemplateRoot(FindActivityTemplateRoot),
     FindAttributeById(FindAttributeById),
     AllAttributes(AllAttributes),
     FindAttributesByOwner(FindAttributesByOwner),
-    FindAttributePairsForEntry(FindAttributePairsForEntry),
     DistinctTextValuesForAttribute(DistinctTextValuesForAttribute),
 }
 
@@ -67,17 +57,12 @@ pub enum ClientQueryResponse {
     RootEntriesInInterval(Vec<Entry>),
     ActivityTemplateJoin(Option<EntryJoin>),
     // Shared with the domain set
-    FindEntryById(Option<Entry>),
     FindEntryJoinById(Option<EntryJoin>),
-    FindAncestors(Vec<Uuid>),
-    FindDescendants(Vec<Entry>),
-    FindActivityById(Option<Activity>),
     AllActivities(Vec<Activity>),
     FindActivityTemplateRoot(Option<Entry>),
     FindAttributeById(Option<Attribute>),
     AllAttributes(Vec<Attribute>),
     FindAttributesByOwner(Vec<Attribute>),
-    FindAttributePairsForEntry(Vec<AttributePair>),
     DistinctTextValuesForAttribute(Vec<String>),
 }
 
@@ -105,11 +90,7 @@ impl ClientQuery {
             ClientQuery::ActivityTemplateJoin(q) => {
                 sql.execute(q).await.map(R::ActivityTemplateJoin)
             }
-            ClientQuery::FindEntryById(q) => sql.execute(q).await.map(R::FindEntryById),
             ClientQuery::FindEntryJoinById(q) => sql.execute(q).await.map(R::FindEntryJoinById),
-            ClientQuery::FindAncestors(q) => sql.execute(q).await.map(R::FindAncestors),
-            ClientQuery::FindDescendants(q) => sql.execute(q).await.map(R::FindDescendants),
-            ClientQuery::FindActivityById(q) => sql.execute(q).await.map(R::FindActivityById),
             ClientQuery::AllActivities(q) => sql.execute(q).await.map(R::AllActivities),
             ClientQuery::FindActivityTemplateRoot(q) => {
                 sql.execute(q).await.map(R::FindActivityTemplateRoot)
@@ -118,9 +99,6 @@ impl ClientQuery {
             ClientQuery::AllAttributes(q) => sql.execute(q).await.map(R::AllAttributes),
             ClientQuery::FindAttributesByOwner(q) => {
                 sql.execute(q).await.map(R::FindAttributesByOwner)
-            }
-            ClientQuery::FindAttributePairsForEntry(q) => {
-                sql.execute(q).await.map(R::FindAttributePairsForEntry)
             }
             ClientQuery::DistinctTextValuesForAttribute(q) => {
                 sql.execute(q).await.map(R::DistinctTextValuesForAttribute)

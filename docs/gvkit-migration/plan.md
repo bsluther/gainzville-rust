@@ -1,5 +1,9 @@
 # GvKit migration: inventory and plan
 
+> **Done (2026-11-01).** Kept as the record of the migration. Where it ended up differing: S0's
+> LiveStore fixes (see `live-review.md`); S4 uses plain hooks rather than an `@Observable` model,
+> because all three questions come from init inputs. The optional client-set prune in S6 was done.
+
 - Date: 2026-11-01
 - Base: `spike/gvkit-query-hooks` at `f130866`. All
   `file:line` refs are against that commit. Swift paths are relative to `swift-app/Gainzville/`.

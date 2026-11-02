@@ -429,29 +429,6 @@ pub struct EntryJoin {
 // the Rust definitions.
 
 #[uniffi::remote(Record)]
-pub struct IsEmailRegistered {
-    pub email: Email,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindUserById {
-    pub actor_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindUserByUsername {
-    pub username: Username,
-}
-
-#[uniffi::remote(Record)]
-pub struct AllActorIds;
-
-#[uniffi::remote(Record)]
-pub struct FindActivityById {
-    pub id: Uuid,
-}
-
-#[uniffi::remote(Record)]
 pub struct AllActivities;
 
 #[uniffi::remote(Record)]
@@ -459,15 +436,6 @@ pub struct AllActivities;
 /// `activity_id`). `CreateActivity` guarantees exactly one.
 pub struct FindActivityTemplateRoot {
     pub activity_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct AllEntries;
-
-#[uniffi::remote(Record)]
-pub struct EntriesRootedInTimeInterval {
-    pub from: DateTime<Utc>,
-    pub to: DateTime<Utc>,
 }
 
 #[uniffi::remote(Record)]
@@ -484,25 +452,7 @@ pub struct RootEntriesInInterval {
 }
 
 #[uniffi::remote(Record)]
-/// Where e is the entry with id == `entry_id`, this query returns a list of all the
-/// ancestor of e, including e. The result is sorted in ascending order so that e is first
-/// and the root is last, e.g. [e, ..., root_ancestor].
-pub struct FindAncestors {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindEntryById {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
 pub struct FindEntryJoinById {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindDescendants {
     pub entry_id: Uuid,
 }
 
@@ -518,27 +468,6 @@ pub struct AllAttributes;
 /// `owner_id` is the query dimension: returns all attributes owned by this actor.
 pub struct FindAttributesByOwner {
     pub owner_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindValueByKey {
-    pub entry_id: Uuid,
-    pub attribute_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindValuesForEntry {
-    pub entry_id: Uuid,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindValuesForEntries {
-    pub entry_ids: Vec<Uuid>,
-}
-
-#[uniffi::remote(Record)]
-pub struct FindAttributePairsForEntry {
-    pub entry_id: Uuid,
 }
 
 #[uniffi::remote(Record)]
@@ -583,60 +512,9 @@ pub struct SuggestedRootInsertionTime {
     pub day_start: DateTime<Utc>,
 }
 
-// --- Query sets ---
+// --- The client's query set ---
 //
-// Swift sees each set as one flat enum. The backing doesn't cross: it's invisible.
-
-#[uniffi::remote(Enum)]
-/// A question for the legacy `QueryStore` path. New code uses `ClientQuery`.
-pub enum DomainQuery {
-    IsEmailRegistered(IsEmailRegistered),
-    FindUserById(FindUserById),
-    FindUserByUsername(FindUserByUsername),
-    AllActorIds(AllActorIds),
-    FindActivityById(FindActivityById),
-    AllActivities(AllActivities),
-    FindActivityTemplateRoot(FindActivityTemplateRoot),
-    AllEntries(AllEntries),
-    EntriesRootedInTimeInterval(EntriesRootedInTimeInterval),
-    FindAncestors(FindAncestors),
-    FindEntryById(FindEntryById),
-    FindEntryJoinById(FindEntryJoinById),
-    FindDescendants(FindDescendants),
-    FindAttributeById(FindAttributeById),
-    AllAttributes(AllAttributes),
-    FindAttributesByOwner(FindAttributesByOwner),
-    FindValueByKey(FindValueByKey),
-    FindValuesForEntry(FindValuesForEntry),
-    FindValuesForEntries(FindValuesForEntries),
-    FindAttributePairsForEntry(FindAttributePairsForEntry),
-    DistinctTextValuesForAttribute(DistinctTextValuesForAttribute),
-}
-
-#[uniffi::remote(Enum)]
-pub enum DomainQueryResponse {
-    IsEmailRegistered(bool),
-    FindUserById(Option<User>),
-    FindUserByUsername(Option<User>),
-    AllActorIds(Vec<Uuid>),
-    FindActivityById(Option<Activity>),
-    AllActivities(Vec<Activity>),
-    FindActivityTemplateRoot(Option<Entry>),
-    AllEntries(Vec<Entry>),
-    EntriesRootedInTimeInterval(Vec<Entry>),
-    FindAncestors(Vec<Uuid>),
-    FindEntryById(Option<Entry>),
-    FindEntryJoinById(Option<EntryJoin>),
-    FindDescendants(Vec<Entry>),
-    FindAttributeById(Option<Attribute>),
-    AllAttributes(Vec<Attribute>),
-    FindAttributesByOwner(Vec<Attribute>),
-    FindValueByKey(Option<Value>),
-    FindValuesForEntry(Vec<Value>),
-    FindValuesForEntries(Vec<Value>),
-    FindAttributePairsForEntry(Vec<AttributePair>),
-    DistinctTextValuesForAttribute(Vec<String>),
-}
+// Swift sees one flat enum. The backing doesn't cross: it's invisible.
 
 #[uniffi::remote(Enum)]
 /// A question the client can subscribe to or read once. The variant says *what* is
@@ -648,17 +526,12 @@ pub enum ClientQuery {
     SuggestedRootInsertionTime(SuggestedRootInsertionTime),
     RootEntriesInInterval(RootEntriesInInterval),
     ActivityTemplateJoin(ActivityTemplateJoin),
-    FindEntryById(FindEntryById),
     FindEntryJoinById(FindEntryJoinById),
-    FindAncestors(FindAncestors),
-    FindDescendants(FindDescendants),
-    FindActivityById(FindActivityById),
     AllActivities(AllActivities),
     FindActivityTemplateRoot(FindActivityTemplateRoot),
     FindAttributeById(FindAttributeById),
     AllAttributes(AllAttributes),
     FindAttributesByOwner(FindAttributesByOwner),
-    FindAttributePairsForEntry(FindAttributePairsForEntry),
     DistinctTextValuesForAttribute(DistinctTextValuesForAttribute),
 }
 
@@ -670,17 +543,12 @@ pub enum ClientQueryResponse {
     SuggestedRootInsertionTime(DateTime<Utc>),
     RootEntriesInInterval(Vec<Entry>),
     ActivityTemplateJoin(Option<EntryJoin>),
-    FindEntryById(Option<Entry>),
     FindEntryJoinById(Option<EntryJoin>),
-    FindAncestors(Vec<Uuid>),
-    FindDescendants(Vec<Entry>),
-    FindActivityById(Option<Activity>),
     AllActivities(Vec<Activity>),
     FindActivityTemplateRoot(Option<Entry>),
     FindAttributeById(Option<Attribute>),
     AllAttributes(Vec<Attribute>),
     FindAttributesByOwner(Vec<Attribute>),
-    FindAttributePairsForEntry(Vec<AttributePair>),
     DistinctTextValuesForAttribute(Vec<String>),
 }
 

@@ -9,10 +9,7 @@ import SwiftUI
 
 @main
 struct GainzvilleApp: App {
-    let core: GainzvilleCore
     let gvClient: GvClient
-    let coreEnv: CoreEnv
-    let dataChange: DataChange
     let entryExpansion: EntryExpansion
     let logDayStore: LogDayStore
     let dragState: DragState
@@ -20,19 +17,10 @@ struct GainzvilleApp: App {
     let autocomplete: AutocompleteCoordinator
 
     init() {
-        let listener = AppListener()
-        let c = try! makeCore(listener: listener)
+        let c = try! makeCore()
         // Live queries (GvKit). Registers the batch listener, so it must exist
         // before any @GvQuery subscribes.
         let gv = GvClient(core: c)
-
-        let dc = DataChange()
-
-        listener.onChanged = { [weak dc] in
-            Task { @MainActor [weak dc] in
-                dc?.bump()
-            }
-        }
 
         // Debug seeds — uncomment once on a fresh DB, then re-comment.
 //         try? c.devSeedStdLib()                       // creates Reps, Load, Outcome, YDS Grade attrs
@@ -40,10 +28,7 @@ struct GainzvilleApp: App {
 //          try? c.devCreateArbitraryValues(count: 40)   // requires at least one entry and one attribute
         // Debug: uncomment to auto-create an activity every 10 s for testing.
         // c.startBackgroundTicker()
-        core = c
         gvClient = gv
-        coreEnv = CoreEnv(core: c)
-        dataChange = dc
         entryExpansion = EntryExpansion()
         logDayStore = LogDayStore()
         dragState = DragState()
@@ -55,8 +40,6 @@ struct GainzvilleApp: App {
         WindowGroup {
             RootView()
                 .environment(\.gvClient, gvClient)
-                .environmentObject(coreEnv)
-                .environmentObject(dataChange)
                 .environment(entryExpansion)
                 .environmentObject(logDayStore)
                 .environmentObject(dragState)

@@ -10,9 +10,7 @@ use gv_core::{
         user::User,
     },
     mutators,
-    queries::{
-        DomainQuery, DomainQueryResponse, FindActivityById, FindAttributeById, FindUserById, Query,
-    },
+    queries::{FindActivityById, FindAttributeById, FindUserById, Query},
     query_executor::QueryExecutor,
     std_lib::StandardLibrary,
 };
@@ -28,7 +26,6 @@ use uuid::Uuid;
 use gv_sql::sqlite::{SqliteDeltaExecutor, SqliteQueryExecutor};
 
 use crate::live::LiveStore;
-use crate::query_store::{QueryStore, QuerySubscription};
 
 /// How the app opens its database.
 ///
@@ -47,8 +44,6 @@ pub(crate) fn connect_options(db_path: &str) -> Result<SqliteConnectOptions> {
 pub struct SqliteClient {
     pub pool: SqlitePool,
     change_transmitter: broadcast::Sender<()>,
-    cache_ready_transmitter: broadcast::Sender<()>,
-    query_store: QueryStore,
     live: LiveStore,
     io: Arc<dyn Io>,
 }
@@ -137,21 +132,10 @@ impl SqliteClient {
 
     pub fn from_pool(pool: SqlitePool, io: Arc<dyn Io>) -> Self {
         let (change_transmitter, _rx) = broadcast::channel::<()>(16);
-        let (cache_ready_transmitter, _rx2) = broadcast::channel::<()>(16);
-        let cache_ready_tx = cache_ready_transmitter.clone();
-        let query_store = QueryStore::new(
-            pool.clone(),
-            change_transmitter.clone(),
-            Arc::new(move || {
-                let _ = cache_ready_tx.send(());
-            }),
-        );
         let live = LiveStore::new(pool.clone(), change_transmitter.subscribe());
         SqliteClient {
             pool,
             change_transmitter,
-            cache_ready_transmitter,
-            query_store,
             live,
             io,
         }
@@ -268,42 +252,17 @@ impl SqliteClient {
     where
         for<'c> SqliteQueryExecutor<'c>: QueryExecutor<Q>,
     {
-        self.query_store.run_query(query).await
+        let mut conn = self.pool.acquire().await.db_err()?;
+        SqliteQueryExecutor::new(&mut conn).execute(query).await
     }
 
-    pub async fn run_domain_query(&self, query: DomainQuery) -> Result<DomainQueryResponse> {
-        self.query_store.run_domain_query(query).await
-    }
-
-    pub async fn subscribe_query(&self, query: DomainQuery) -> Result<Arc<QuerySubscription>> {
-        self.query_store.subscribe_query(query).await
-    }
-
-    pub fn read_cached_query(&self, query: DomainQuery) -> Option<DomainQueryResponse> {
-        self.query_store.read_cached_query(query)
-    }
-
-    /// Live queries: subscriptions with ids and one consistent batch per data version. The
-    /// successor to `subscribe_query` + `subscribe_cache_ready` (which stay for unmigrated UI).
+    /// Live queries: subscriptions with ids and one consistent batch per data version.
     pub fn live(&self) -> &LiveStore {
         &self.live
     }
 
-    /// Subscribe to cache-ready notifications. Fires after each database change
-    /// has been propagated through all subscribed queries.
-    ///
-    /// FFI boundary contract: write-then-notify. On every change the client
-    /// refreshes every subscribed query in the cache, *then* fires this signal.
-    /// Consumers (Swift, etc.) should treat the notification as "the latest
-    /// values are already in the cache — read at your leisure". Don't pass
-    /// payloads on this channel; readers fan out to whichever cached queries
-    /// they care about.
-    pub fn subscribe_cache_ready(&self) -> broadcast::Receiver<()> {
-        self.cache_ready_transmitter.subscribe()
-    }
-
     /// Spawn a background task that creates a new activity every 10 seconds.
-    /// Cache refresh and notifications happen automatically via the change broadcast.
+    /// Live queries update automatically via the change broadcast.
     pub fn start_background_ticker(&self, actor_id: Uuid) {
         let client = self.clone();
         let _ = tokio::spawn(async move {
@@ -331,37 +290,8 @@ impl SqliteClient {
 pub mod tests {
     pub use super::*;
     pub use gv_core::SYSTEM_ACTOR_ID;
-    pub use gv_core::queries::{DomainQuery, FindActivityById, FindEntryJoinById, SnapshotAll};
+    pub use gv_core::queries::{FindEntryJoinById, SnapshotAll};
     pub use uuid::Uuid;
-
-    /// Two subscriptions to the same query key share one cache entry; the entry
-    /// must survive until the *last* handle drops. Regression for a refcount bug
-    /// where the first drop evicted the key, starving the other subscriber's
-    /// refreshes (stale reads until restart).
-    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
-    fn test_query_subscription_refcount(pool: SqlitePool) {
-        let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
-        let query = DomainQuery::FindEntryJoinById(FindEntryJoinById {
-            entry_id: Uuid::new_v4(),
-        });
-
-        let sub1 = client.subscribe_query(query.clone()).await.unwrap();
-        let sub2 = client.subscribe_query(query.clone()).await.unwrap();
-
-        // Dropping one of two subscribers must NOT evict the shared key.
-        drop(sub2);
-        assert!(
-            client.read_cached_query(query.clone()).is_some(),
-            "cache key must survive while another subscriber is alive"
-        );
-
-        // Dropping the last subscriber evicts it.
-        drop(sub1);
-        assert!(
-            client.read_cached_query(query).is_none(),
-            "cache key must be evicted once the last subscriber drops"
-        );
-    }
 
     /// Std-lib seeding runs on every launch, so it must converge rather than
     /// duplicate. This also exercises the seed path itself — template-tree
@@ -416,38 +346,8 @@ pub mod tests {
         }
     }
 
-    /// Regression: the refresh loop was `while let Ok(()) = rx.recv().await`, which exits on
-    /// `Err(Lagged)` — after a burst of writes the cache silently stopped refreshing until restart.
-    #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
-    async fn test_query_store_survives_lagged_change_channel(pool: SqlitePool) {
-        let client = SqliteClient::from_pool(pool, Arc::new(SystemIo::default()));
-        client.seed_default_user().await.unwrap();
-        let entry = lag_test_entry();
-        let query =
-            DomainQuery::FindEntryById(gv_core::queries::FindEntryById { entry_id: entry.id });
-        let _sub = client.subscribe_query(query.clone()).await.unwrap();
-
-        flood_change_channel(&client);
-        client
-            .run_action(gv_core::actions::CreateEntry::from(entry.clone()).into())
-            .await
-            .unwrap();
-
-        let refreshed = tokio::time::timeout(Duration::from_secs(5), async {
-            loop {
-                if let Some(DomainQueryResponse::FindEntryById(Some(_))) =
-                    client.read_cached_query(query.clone())
-                {
-                    return;
-                }
-                tokio::time::sleep(Duration::from_millis(5)).await;
-            }
-        })
-        .await;
-        assert!(refreshed.is_ok(), "cache must keep refreshing after Lagged");
-    }
-
-    /// Same regression for the live store's refresh loop.
+    /// Regression: a refresh loop of `while let Ok(()) = rx.recv().await` exits on `Err(Lagged)`, so
+    /// after a burst of writes it would silently stop refreshing until restart.
     #[sqlx::test(migrations = "../gv-sql/sqlite/migrations")]
     async fn test_live_store_survives_lagged_change_channel(pool: SqlitePool) {
         use crate::live::LiveResult;
@@ -461,9 +361,9 @@ pub mod tests {
         let entry = lag_test_entry();
         let sub = client
             .live()
-            .subscribe(ClientQuery::FindEntryById(
-                gv_core::queries::FindEntryById { entry_id: entry.id },
-            ))
+            .subscribe(ClientQuery::FindEntryJoinById(FindEntryJoinById {
+                entry_id: entry.id,
+            }))
             .await
             .unwrap();
         // Settle: no build in flight may mask the lag.
@@ -482,7 +382,7 @@ pub mod tests {
         assert_eq!(batch.updates[0].subscription_id, sub.subscription_id);
         assert!(matches!(
             &batch.updates[0].value,
-            LiveResult::Response(ClientQueryResponse::FindEntryById(Some(e))) if e.id == entry.id
+            LiveResult::Response(ClientQueryResponse::FindEntryJoinById(Some(j))) if j.entry.id == entry.id
         ));
     }
 }

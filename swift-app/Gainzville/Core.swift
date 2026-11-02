@@ -13,40 +13,8 @@ import SwiftUI
 /// real auth lands this becomes a property on `GainzvilleCore` or a
 /// session object.
 let SYSTEM_ACTOR_ID: String = "eee9e6ae-6531-4580-8356-427604a0dc02"
-internal import Combine
 
-// Bridges CoreListener callbacks from Rust to the main thread.
-// The onChanged closure is set after both `core` and `viewModel` exist,
-// avoiding the circular dependency at construction time.
-class AppListener: CoreListener {
-    var onChanged: (@Sendable () -> Void)?
-
-    func onDataChanged() {
-        onChanged?()
-    }
-}
-
-// Holds the GainzvilleCore for env-based access in views that need to
-// create their own subscriptions (e.g. TextSuggestionsModel). Not
-// observable — exposes `core` as a constant; never publishes changes.
-@MainActor
-final class CoreEnv: ObservableObject {
-    let core: GainzvilleCore
-    init(core: GainzvilleCore) { self.core = core }
-}
-
-// Fan-out for the on_data_changed callback from Rust. Per-view view
-// models subscribe via Combine and re-read their cached query on each
-// tick. See `client/client.rs::subscribe_cache_ready` for the
-// boundary contract: Rust writes the latest values into the cache,
-// then notifies; Swift reads from cache at its leisure.
-@MainActor
-final class DataChange: ObservableObject {
-    let didChange = PassthroughSubject<Void, Never>()
-    func bump() { didChange.send(()) }
-}
-
-func makeCore(listener: AppListener) throws -> GainzvilleCore {
+func makeCore() throws -> GainzvilleCore {
     let dbURL = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("gainzville.sqlite")
@@ -66,7 +34,6 @@ func makeCore(listener: AppListener) throws -> GainzvilleCore {
 
     return try GainzvilleCore(
         dbPath: "sqlite://\(dbURL.path)",
-        actorId: "eee9e6ae-6531-4580-8356-427604a0dc02",
-        listener: listener
+        actorId: SYSTEM_ACTOR_ID
     )
 }

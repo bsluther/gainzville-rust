@@ -6,10 +6,10 @@
 |-------|------|
 | `gv-core` | Domain model, actions, mutators, queries, delta/mutation types. No `sqlx` or `uniffi` dependency. |
 | `gv-sql` | DB boundary: `*Column` leaf encoders, `*Row` table mirrors, `core ↔ Row` transforms, and the per-backend executors (`Sqlite*`/`Postgres*`) behind `sqlite`/`postgres` features. |
-| `gv-ui` | Screen-shaped, platform-independent computations over the forest (e.g. drop slots). No storage, no FFI. (RFD 0003 spike.) |
-| `gv-client` | SQLite app shell: connection pool, app lifecycle, subscriptions (`query_store` ping-and-pull; `live` versioned batches, RFD 0003 spike). Offline-first target. |
+| `gv-ui` | Screen-shaped, platform-independent computations over the forest (e.g. drop slots). No storage, no FFI. |
+| `gv-client` | SQLite app shell: connection pool, app lifecycle, live queries (`live`: one versioned batch per data change; `queries`: the client's query set and which backing answers each). Offline-first target. |
 | `gv-server` | Postgres HTTP server: routes, auth, request handling. HTTP API + sync target. |
-| `gv-ffi` | FFI boundary: exposes `gv-core` types to Swift via uniffi (`[uniffi::remote]` + `custom_type!`). Depends on `gv-core`/`gv-client`, not `gv-sql`. |
+| `gv-ffi` | FFI boundary: exposes `gv-core` types and the client query set to Swift via uniffi (`[uniffi::remote]` + `custom_type!`). Depends on `gv-core`/`gv-client`, not `gv-sql`. |
 | `generation` | Arbitrary data generation traits for deterministic simulation and integration tests. |
 | `ivm` | Experimental DBSP/incremental view maintenance for sync. |
 
