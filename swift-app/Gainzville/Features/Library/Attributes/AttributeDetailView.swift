@@ -1,55 +1,23 @@
 import SwiftUI
-internal import Combine
-
-// View model for AttributeDetailView. Subscribes to the attribute by id so
-// edits (dispatched as UpdateAttribute) reflect live, and exposes a single
-// `apply(_:)` for the config editors to push an AttributeChange.
-@MainActor
-final class AttributeDetailViewModel: ObservableObject {
-    @Published private(set) var attribute: Attribute?
-
-    private var core: GainzvilleCore?
-    private var attributeId: String = ""
-    private var subscription: FfiQuerySubscription?
-    private var cancellable: AnyCancellable?
-    private var started = false
-
-    func start(core: GainzvilleCore?, dataChange: DataChange, attributeId: String) {
-        guard !started, let core else { return }
-        started = true
-        self.core = core
-        self.attributeId = attributeId
-        subscription = try? core.subscribeQuery(
-            query: .findAttributeById(FindAttributeById(attributeId: attributeId)))
-        refresh()
-        cancellable = dataChange.didChange.sink { [weak self] in self?.refresh() }
-    }
-
-    private func refresh() {
-        guard let core else { return }
-        if case .findAttributeById(let attr) =
-            core.readQuery(query: .findAttributeById(FindAttributeById(attributeId: attributeId))) {
-            attribute = attr
-        }
-    }
-
-    func apply(_ change: AttributeChange) {
-        guard let core else { return }
-        try? core.runAction(action: .updateAttribute(UpdateAttribute(
-            actorId: SYSTEM_ACTOR_ID, attributeId: attributeId, change: change)))
-    }
-}
 
 struct AttributeDetailView: View {
     let attribute: Attribute
 
-    @EnvironmentObject private var coreEnv: CoreEnv
-    @EnvironmentObject private var dataChange: DataChange
-    @StateObject private var vm = AttributeDetailViewModel()
+    @GvQuery private var liveAttribute: Attribute?
+    @Environment(\.gvClient) private var gv
 
-    // Prefer the live value; fall back to the value passed in for the first
-    // frame before the subscription populates.
-    private var live: Attribute { vm.attribute ?? attribute }
+    init(attribute: Attribute) {
+        self.attribute = attribute
+        _liveAttribute = GvQuery(.attribute(attribute.id))
+    }
+
+    // Prefer the live value; fall back to the value passed in (previews, or an
+    // attribute that has just been deleted).
+    private var live: Attribute { liveAttribute ?? attribute }
+
+    private func apply(_ change: AttributeChange) {
+        gv?.updateAttribute(attributeId: attribute.id, change: change)
+    }
 
     var body: some View {
         ScrollView {
@@ -82,29 +50,26 @@ struct AttributeDetailView: View {
         }
         .background(Color.gvBackground)
         .navigationTitle(live.name)
-        .onAppear {
-            vm.start(core: coreEnv.core, dataChange: dataChange, attributeId: attribute.id)
-        }
     }
 
     @ViewBuilder
     private var configEditor: some View {
         switch live.config {
         case .numeric(let cfg):
-            NumericConfigEditor(config: cfg) { vm.apply(.numeric(.setDefault($0))) }
+            NumericConfigEditor(config: cfg) { apply(.numeric(.setDefault($0))) }
         case .select(let cfg):
-            SelectConfigEditor(config: cfg) { vm.apply(.select(.setDefault($0))) }
+            SelectConfigEditor(config: cfg) { apply(.select(.setDefault($0))) }
         case .multiselect(let cfg):
             MultiselectConfigEditor(config: cfg)
         case .mass(let cfg):
-            MassConfigEditor(config: cfg) { vm.apply(.mass(.setDefaultUnit($0))) }
+            MassConfigEditor(config: cfg) { apply(.mass(.setDefaultUnit($0))) }
         case .length(let cfg):
-            LengthConfigEditor(config: cfg) { vm.apply(.length(.setDefaultUnit($0))) }
+            LengthConfigEditor(config: cfg) { apply(.length(.setDefaultUnit($0))) }
         case .text(let cfg):
             TextConfigEditor(
                 config: cfg,
-                onSetDefault: { vm.apply(.text(.setDefault($0))) },
-                onSetAutocomplete: { vm.apply(.text(.setAutocomplete($0))) }
+                onSetDefault: { apply(.text(.setDefault($0))) },
+                onSetAutocomplete: { apply(.text(.setAutocomplete($0))) }
             )
         }
     }
