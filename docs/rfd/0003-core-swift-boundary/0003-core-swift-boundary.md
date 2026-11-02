@@ -569,9 +569,8 @@ state: drag, focus, autocomplete.
 - `cargo test` passes (121 tests, reported by the migration agent; the touched crates were re-run
   separately);
 - both Xcode targets build;
-- the owner's manual checks passed through S5.
-
-The S6 smoke test, including a `-wipeDB` launch, isn't confirmed yet.
+- the owner's manual checks passed for every step, including the S6 smoke test and a `-wipeDB`
+  launch (2026-11-02).
 
 **Where it differs from the plan:**
 
