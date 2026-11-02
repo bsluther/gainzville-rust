@@ -91,7 +91,6 @@ struct DropTarget: View, DropDelegate {
     let position: Position
     let predId: String?
     let succId: String?
-    @EnvironmentObject private var forestVM: ForestViewModel
     @EnvironmentObject private var dragState: DragState
     @Environment(\.gvClient) private var gv
     @State private var isTargeted = false
@@ -123,7 +122,7 @@ struct DropTarget: View, DropDelegate {
         guard let entry = dragState.draggedEntry,
               isValidDrop(entryId: entry.id)
         else { return false }
-        forestVM.moveEntry(entry, to: position)
+        gv?.moveEntry(entry, to: position)
         dragState.draggedEntry = nil
         return true
     }

@@ -22,7 +22,7 @@ import AppKit
 struct TextAttribute: View {
     let entry: Entry
     let pair: TextAttributePair
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
     @EnvironmentObject private var coreEnv: CoreEnv
     @EnvironmentObject private var dataChange: DataChange
     @EnvironmentObject private var autocomplete: AutocompleteCoordinator
@@ -39,7 +39,7 @@ struct TextAttribute: View {
     private var barActions: [AttributeBarAction] {
         .text(remove: {
             pendingRemoval = true
-            forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+            gv?.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
             focused = false
         })
     }
@@ -233,10 +233,10 @@ struct TextAttribute: View {
         case nil:
             return false
         case .clear:
-            forestVM.clearAttributeValue(entryId: entry.id, attributeId: pair.attrId, field: .actual)
+            gv?.clearAttributeValue(entryId: entry.id, attributeId: pair.attrId, field: .actual)
             return true
         case .set(let value):
-            forestVM.updateAttributeValue(
+            gv?.updateAttributeValue(
                 entryId: entry.id,
                 attributeId: pair.attrId,
                 field: .actual,

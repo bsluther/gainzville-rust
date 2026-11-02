@@ -4,6 +4,7 @@ struct ActivityDetailView: View {
     let activity: Activity
 
     @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
 
     var body: some View {
         ScrollView {
@@ -37,7 +38,7 @@ struct ActivityDetailView: View {
                                     .foregroundStyle(Color.gvTextSecondary)
                                 Spacer()
                                 GvCheckbox(checked: root.isSequence) {
-                                    forestVM.setIsSequence(entryId: root.id, isSequence: !root.isSequence)
+                                    gv?.setIsSequence(entryId: root.id, isSequence: !root.isSequence)
                                 }
                             }
                         }

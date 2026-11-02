@@ -166,7 +166,7 @@ private struct EntryHeader: View {
     let isExpanded: Bool
     let onToggle: () -> Void
     @State private var isMenuPresented = false
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
     @EnvironmentObject private var dragState: DragState
     @Environment(\.entryContext) private var entryContext
 
@@ -199,7 +199,7 @@ private struct EntryHeader: View {
                 }
             } else {
                 FillCheckbox(checked: entry.isComplete, onToggle: {
-                    forestVM.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
+                    gv?.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
                 })
             }
         }
@@ -347,7 +347,7 @@ private struct SetsBody: View {
 private struct SetsControl: View {
     let members: [Entry]
     @Binding var selectedMemberId: String?
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
 
     private var selectedIndex: Int {
         members.firstIndex { $0.id == selectedMemberId } ?? members.count - 1
@@ -393,7 +393,7 @@ private struct SetsControl: View {
 
     private func addSet() {
         guard let last = members.last else { return }
-        forestVM.duplicateEntry(entry: last)
+        gv?.duplicateEntry(entry: last)
         // nil tracks the last member, which is the new copy after refresh.
         selectedMemberId = nil
     }
@@ -402,7 +402,7 @@ private struct SetsControl: View {
         guard members.count > 1 else { return }
         let index = selectedIndex
         selectedMemberId = index > 0 ? members[index - 1].id : members[1].id
-        forestVM.deleteEntry(entry: members[index])
+        gv?.deleteEntry(entry: members[index])
     }
 }
 
@@ -410,9 +410,15 @@ private struct SetsControl: View {
 
 private struct EntryFooter: View {
     let entry: Entry
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
     @Environment(\.entryContext) private var entryContext
+    @GvQuery private var appendPosition: Position?
     @State private var isCreatePresented = false
+
+    init(entry: Entry) {
+        self.entry = entry
+        _appendPosition = GvQuery(.appendPosition(in: entry.isSequence ? entry.id : nil))
+    }
 
     var body: some View {
         if entry.isSequence {
@@ -439,7 +445,9 @@ private struct EntryFooter: View {
             .padding(.bottom, GvSpacing.entrySpacing)
             .sheet(isPresented: $isCreatePresented) {
                 CreateEntrySheet(isPresented: $isCreatePresented) { activityId, name, isSeq in
-                    forestVM.createChildEntry(in: entry, activityId: activityId, name: name, isSequence: isSeq)
+                    if let appendPosition {
+                        gv?.createChildEntry(in: entry, at: appendPosition, activityId: activityId, name: name, isSequence: isSeq)
+                    }
                     isCreatePresented = false
                 }
             }
@@ -447,7 +455,7 @@ private struct EntryFooter: View {
             HStack {
                 Spacer()
                 FillCheckbox(checked: entry.isComplete, onToggle: {
-                    forestVM.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
+                    gv?.updateEntryCompletion(entry: entry, isComplete: !entry.isComplete)
                 })
             }
             .padding(.trailing, -GvSpacing.entrySpacing)
@@ -492,6 +500,7 @@ private struct EntryMenuContent: View {
     let activityName: String?
     @Binding var isPresented: Bool
     @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
 
     var body: some View {
         let isRoot = entry.position == nil
@@ -504,15 +513,22 @@ private struct EntryMenuContent: View {
                     // Group 1 — workflow
                     if !isTemplateRoot {
                         GvMenuRow("Duplicate", icon: "doc.on.doc") {
-                            forestVM.duplicateEntry(entry: entry)
+                            gv?.duplicateEntry(entry: entry)
                         }
                         if entry.displayAsSets {
                             GvMenuRow("Break out", icon: "rectangle.stack") {
-                                forestVM.setDisplayAsSets(entryId: entry.id, displayAsSets: false)
+                                gv?.setDisplayAsSets(entryId: entry.id, displayAsSets: false)
                             }
                         } else {
                             GvMenuRow("With sets", icon: "rectangle.stack.badge.plus") {
-                                forestVM.convertToSets(entry: entry)
+                                // The sequence id is minted here so the replacement card can
+                                // be marked expanded before it mounts: the entry's card
+                                // unmounts and the sequence's mounts with a fresh identity,
+                                // which would otherwise collapse it. Lowercased to match ids
+                                // as core emits them.
+                                let sequenceId = UUID().uuidString.lowercased()
+                                forestVM.markPendingExpanded(sequenceId)
+                                gv?.convertToSets(entry: entry, sequenceId: sequenceId)
                             }
                         }
                     }
@@ -557,12 +573,12 @@ private struct EntryMenuContent: View {
                     // Group 4 — destructive
                     if entry.isSequence {
                         GvMenuRow("Delete recursive", icon: "trash.fill", isDestructive: true) {
-                            forestVM.deleteEntry(entry: entry)
+                            gv?.deleteEntry(entry: entry)
                         }
                         GvMenuRow("Delete unbox", icon: "arrow.up.backward.and.arrow.down.forward", isDestructive: true)
                     } else {
                         GvMenuRow("Delete", icon: "trash", isDestructive: true) {
-                            forestVM.deleteEntry(entry: entry)
+                            gv?.deleteEntry(entry: entry)
                         }
                     }
                 }

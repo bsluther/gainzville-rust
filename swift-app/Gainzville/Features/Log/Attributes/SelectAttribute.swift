@@ -12,7 +12,7 @@ import SwiftUI
 struct SelectAttribute: View {
     let entry: Entry
     let pair: SelectAttributePair
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
 
     // Which endpoint the presented option list edits; nil = not presented.
     // Exact mode uses .min as "the" picker.
@@ -104,13 +104,13 @@ struct SelectAttribute: View {
         return .select(
             // Clear only when there's a value to clear, matching temporal.
             clear: pair.actual == nil ? nil : {
-                forestVM.clearAttributeValue(
+                gv?.clearAttributeValue(
                     entryId: entry.id, attributeId: pair.attrId, field: .actual)
                 presentedEndpoint = nil
             },
             range: range,
             remove: {
-                forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+                gv?.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
                 presentedEndpoint = nil
             }
         )
@@ -174,7 +174,7 @@ struct SelectAttribute: View {
 
     private func commitExact(_ option: String) {
         if case .exact(let cur) = pair.actual, cur == option { return }
-        forestVM.updateAttributeValue(
+        gv?.updateAttributeValue(
             entryId: entry.id,
             attributeId: pair.attrId,
             field: .actual,
@@ -189,7 +189,7 @@ struct SelectAttribute: View {
         let index = { (s: String) in pair.config.options.firstIndex(of: s) ?? 0 }
         let (lo, hi) = index(a) <= index(b) ? (a, b) : (b, a)
         if case .range(let curLo, let curHi) = pair.actual, curLo == lo, curHi == hi { return }
-        forestVM.updateAttributeValue(
+        gv?.updateAttributeValue(
             entryId: entry.id,
             attributeId: pair.attrId,
             field: .actual,

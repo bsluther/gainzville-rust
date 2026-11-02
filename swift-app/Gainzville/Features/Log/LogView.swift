@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LogView: View {
-    @EnvironmentObject var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
     @EnvironmentObject var logDayStore: LogDayStore
     @EnvironmentObject var dragState: DragState
     @State private var isCreatePresented = false
@@ -20,9 +20,9 @@ struct LogView: View {
         .sheet(item: $pendingRootDrop) { drop in
             RootDropTimePickerSheet(
                 day: drop.day,
-                initialTime: forestVM.suggestedRootInsertionTime(for: drop.day) ?? drop.day.start,
+                initialTime: suggestedRootInsertionTime(on: drop.day),
                 onConfirm: { time in
-                    forestVM.moveEntryToRoot(drop.entry, startTime: time)
+                    gv?.moveEntryToRoot(drop.entry, startTime: time)
                     pendingRootDrop = nil
                 },
                 onCancel: { pendingRootDrop = nil }
@@ -42,7 +42,7 @@ struct LogView: View {
         }
         .sheet(isPresented: $isCreatePresented) {
             CreateEntrySheet(isPresented: $isCreatePresented) { activityId, name, isSequence in
-                forestVM.createRootEntry(
+                gv?.createRootEntry(
                     activityId: activityId,
                     name: name,
                     isSequence: isSequence,
@@ -55,6 +55,12 @@ struct LogView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .gvAttributeKeyboardBar()
+    }
+
+    private func suggestedRootInsertionTime(on day: LogDay) -> Date {
+        guard let gv else { return day.start }
+        let ms = gv.read(.suggestedRootInsertionTime(on: day))
+        return Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
     }
 
     private func handleDayRootDrop(_ entry: Entry) {

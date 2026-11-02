@@ -14,7 +14,7 @@ import SwiftUI
 struct MultiselectAttribute: View {
     let entry: Entry
     let pair: MultiselectAttributePair
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
 
     @State private var isPresented = false
 
@@ -98,12 +98,12 @@ struct MultiselectAttribute: View {
         .multiselect(
             // Clear only when there's a selection to clear, matching select.
             clear: selected.isEmpty ? nil : {
-                forestVM.clearAttributeValue(
+                gv?.clearAttributeValue(
                     entryId: entry.id, attributeId: pair.attrId, field: .actual)
                 isPresented = false
             },
             remove: {
-                forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+                gv?.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
                 isPresented = false
             }
         )
@@ -121,10 +121,10 @@ struct MultiselectAttribute: View {
         }
         let ordered = pair.config.options.filter { set.contains($0) }
         if ordered.isEmpty {
-            forestVM.clearAttributeValue(
+            gv?.clearAttributeValue(
                 entryId: entry.id, attributeId: pair.attrId, field: .actual)
         } else {
-            forestVM.updateAttributeValue(
+            gv?.updateAttributeValue(
                 entryId: entry.id,
                 attributeId: pair.attrId,
                 field: .actual,

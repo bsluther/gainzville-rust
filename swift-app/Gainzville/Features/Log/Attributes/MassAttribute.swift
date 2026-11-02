@@ -16,7 +16,7 @@ import SwiftUI
 struct MassAttribute: View {
     let entry: Entry
     let pair: MassAttributePair
-    @EnvironmentObject private var forestVM: ForestViewModel
+    @Environment(\.gvClient) private var gv
 
     @State private var minValue: String = ""
     @State private var maxValue: String = ""
@@ -66,7 +66,7 @@ struct MassAttribute: View {
             range: (active: isRangeMode, toggle: toggleRange),
             remove: {
                 pendingRemoval = true
-                forestVM.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
+                gv?.removeAttribute(entryId: entry.id, attributeId: pair.attrId)
                 focusedField = nil
             }
         )
@@ -202,7 +202,7 @@ struct MassAttribute: View {
             if case .range(let unit, let lo, _) = pair.actual {
                 let collapsed = MassMeasurement(unit: unit, value: parse(minValue) ?? lo)
                 minValue = format(collapsed.value)
-                forestVM.updateAttributeValue(
+                gv?.updateAttributeValue(
                     entryId: entry.id,
                     attributeId: pair.attrId,
                     field: .actual,
@@ -257,7 +257,7 @@ struct MassAttribute: View {
             minValue = format(lo)
             maxValue = format(hi)
         }
-        forestVM.updateAttributeValue(
+        gv?.updateAttributeValue(
             entryId: entry.id,
             attributeId: pair.attrId,
             field: .actual,
@@ -306,10 +306,10 @@ struct MassAttribute: View {
         case nil:
             return false
         case .clear:
-            forestVM.clearAttributeValue(entryId: entry.id, attributeId: pair.attrId, field: .actual)
+            gv?.clearAttributeValue(entryId: entry.id, attributeId: pair.attrId, field: .actual)
             return true
         case .set(let value):
-            forestVM.updateAttributeValue(
+            gv?.updateAttributeValue(
                 entryId: entry.id,
                 attributeId: pair.attrId,
                 field: .actual,

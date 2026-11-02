@@ -26,9 +26,10 @@ extension GvKey where Value == [ChildSlot] {
 extension GvKey where Value == Position? {
     /// Where a new last child of `parentId` goes: the position of the final
     /// drop slot. Asks the same question as `.childSlots(of:)`, so the two share
-    /// one subscription and always agree.
-    static func appendPosition(in parentId: String) -> GvKey<Position?> {
-        GvKey(query: .childSlots(ChildSlots(parentId: parentId)), defaultValue: nil) { response in
+    /// one subscription and always agree. `nil` id = inactive.
+    static func appendPosition(in parentId: String?) -> GvKey<Position?> {
+        let query = parentId.map { ClientQuery.childSlots(ChildSlots(parentId: $0)) }
+        return GvKey(query: query, defaultValue: nil) { response in
             guard case .childSlots(let slots) = response else { return nil }
             for slot in slots.reversed() {
                 if case .drop(_, let position, _, _) = slot { return .some(position) }
