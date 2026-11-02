@@ -3,6 +3,14 @@
 - State: discussion
 - Linear: none yet
 
+## Status (2026-11-02): the lean is built
+
+The lean below has been built. The whole Swift app now runs on GvKit, on branch
+`spike/gvkit-query-hooks`. It isn't merged, and no PR is open. For what was built, where it differs
+from the plan, and what comes next, see [Migration](#migration-2026-11-01-complete-2026-11-02) and
+[After the migration](#after-the-migration-2026-11-02). The sections below are updated where the
+built system differs from what they first said.
+
 ## Latest / lean (2026-10-29)
 
 This records the shape that came out of a follow-up discussion
@@ -58,12 +66,21 @@ consumers do that work ad hoc: each view model is its own small piece of infrast
    view can sit one version off its neighbours for a moment. The rule:
 
    - **Never backwards.** A first value is never replaced by an older one.
-   - **A follow-up is already guaranteed** to bring it in line, and it depends on the backing:
-     - *SQL-backed* first values can be **ahead**, because they're read "now". The write they
-       already reflect triggers its own build, and a build already in flight must not overwrite
-       them with its older snapshot.
-     - *Forest-backed* first values can be **behind**, because they come from the last published
-       forest. The build in flight answers them.
+   - **A follow-up always brings it in line.** A first value can be *ahead* of the published version
+     (a SQL-backed value read "now") or *behind* it (a forest-backed value from the last published
+     forest).
+
+   **As built, `LiveStore` doesn't know which backing answers a question** (owner's decision, so the
+   backing stays stated in one `match`, `ClientQuery::execute`). The rule is the same for every
+   question:
+
+   - A build never overwrites a first value that was read during it. If the build's answer differs,
+     it asks for one more build, whose snapshot is newer than every such first value.
+   - A read that straddles the start of a build is read again.
+   - A forest loaded during a build isn't published.
+
+   So a first value that's ahead is never dragged back, and one that's behind catches up a build
+   later.
 
    This came out of the [LiveStore review](#livestore-review-2026-11-01) (finding 2). Answering a
    question from the published in-memory version would make its first value exact. That's one
@@ -202,8 +219,9 @@ an any query":
 - **A context's set lists the questions it accepts, directly.** A question both contexts need, such
   as an entry with its attributes, appears in both sets as a plain variant. No set ever wraps
   another set.
-- **There is always exactly one level.** A macro generates each set from tags on the question's
-  definition.
+- **There is always exactly one level.** Each set is a hand-written enum, with its response enum and
+  one dispatch `match`. A macro that generated them was tried in the spike and removed, because the
+  owner reviews this code by reading it (see [Spike](#spike-2026-10-30-done)).
 
 **Evidence from analysis.** On the `analysis` branch, a user's analysis is a `QuerySpec` run by an
 in-memory interpreter over the forest and values (`docs/analysis/README.md`). "The result of this
@@ -394,15 +412,24 @@ architectural win. Copying the design looks like a few hundred lines.
 - **Read-once sees the latest version.** It could disagree with what the hooks are showing. That's
   accepted for now, because there's a fix if needed (force every subscription to refresh to the
   latest version), and intents are validated in Rust anyway.
+- **No read-your-writes yet.** Every write-then-expect site is eventual by design. Read-your-writes
+  would come with version-at-commit, alongside the sync work.
+- **Writes stay record-level** for now, wrapped in GvKit's domain-named helpers (`GvWrites.swift`).
+  Intent-level writes are a later phase that changes the helpers' bodies, not their call sites.
+- **Query sets are hand-written and macro-free.**
+- **`LiveStore` doesn't know about backings.** The backing is stated once, in `ClientQuery::execute`.
 - **Performance work is deferred.** That covers an indexed forest, `Arc` snapshots and finer-grained
   invalidation. The boundary only has to not rule them out.
+- **Holding all data in memory is an open question, not a direction.**
 - **Timing: build it now** (2026-10-30, in response to the
   [skeptic comment](./comment-2026-10-30-skeptic.md), which argued for parking it until after
   dogfooding). This is treated as a foundation for building the UI well, and as necessary cleanup
   rather than a detour from dogfooding. With a few agents and a settled shape, the refactor isn't a
   huge lift.
 
-### Spike (2026-10-30)
+### Spike (2026-10-30, done)
+
+**Done.** The spike became the full migration ([below](#migration-2026-11-01-complete-2026-11-02)).
 
 A vertical slice of this lean is on branch `spike/gvkit-query-hooks`:
 
@@ -427,6 +454,12 @@ What changed in the lean as a result:
   to avoid two pipelines and mixed versions (all three).
 
 **Query sets and the macro (spike commits a03ac3f..35ae273).**
+
+> **Superseded.** The macros were removed in 79133a6, and the sets are written by hand, because the
+> macros made the spike hard to review by reading. Since f130866 the forest is just another
+> executor (`ForestExecutor`), and the backing decision is one `match` in `ClientQuery::execute`
+> rather than a two-group list. The findings below about unsealing, the crate graph and
+> clock-dependent questions still hold. This record is kept as history.
 
 - *Two flat sets.* `AnyQuery` became `DomainQuery`, used by mutators and the server, answerable by
   SQLite and Postgres. `ClientQuery` is the only set Swift sees. Shared questions are listed as plain
@@ -485,33 +518,145 @@ step (`MIGRATION-HANDOFF.md`).
     `VACUUM INTO`, not a raw file copy.
 - **A first value can move backwards (live once WAL is on).** A SQL-backed first value read mid-build
   was overwritten by that build's older snapshot. This led to the principle 3 refinement.
-  - *Fix:* build epochs, so a SQL-backed subscription that joins mid-build isn't answered by that
-    build.
 - **Smaller fixes in the same step:**
   - a panic in a build no longer kills the refresh loop;
   - batches are delivered through one serial queue, so a screen can't render two versions;
   - `sync()` gets a failure path.
 
-### Migration (2026-11-01)
+**Outcome (S0).** Findings 1, 2, 3, 4, 6, 10 and 11 are fixed.
+
+- **The database runs in WAL with `synchronous = FULL`.** Writes use `BEGIN IMMEDIATE`, because under
+  WAL a deferred transaction that reads before it writes fails immediately with
+  `SQLITE_BUSY_SNAPSHOT` if another writer committed in between.
+- **Finding 2 is fixed without the store knowing the backing** (owner's decision). A build never
+  overwrites a first value read during it; if its answer differs, it asks for one more build.
+- **The epoch is taken when the read starts, not when it's inserted.** Stamping at insert loses an
+  update.
+- **A panic is caught per answer and per build.** `sync()` returns `Result`.
+- **The sink runs under the state lock.** So batch v is queued before any `subscribe` can report v,
+  and `GvClient` needed no applied-version tracking.
+
+**Still open: findings 5, 7, 8 and 9.**
+
+- **5:** a forest-backed `read` right after a write is stale.
+- **7:** the `subscribe` retry is unbounded.
+- **8:** a Swift subscribe error is sticky.
+- **9:** there is a single sink.
+
+See `docs/gvkit-migration/live-review.md` (its Outcome section) on the spike branch.
+
+### Migration (2026-11-01, complete 2026-11-02)
 
 The owner decided to migrate the whole app now. The plan (`docs/gvkit-migration/plan.md` on the
 spike branch) inventories 30 Swift consumers and proceeds in seven steps, S0 to S6. It needs only
 two new client questions, `SetsMembers` and `ActivityTemplateJoin`. Writes stay record-level, wrapped
 in GvKit helpers. Read-your-writes isn't added: no write-then-expect site needs it. The migration
-runs locally from the handoff.
+ran locally from the handoff.
+
+**Complete.** S0 to S6 are committed on `spike/gvkit-query-hooks` (S6 is 52bce8b). The following are
+gone:
+
+- the ping-and-pull path: `QueryStore`, `CoreListener`/`on_data_changed`, `subscribe_query`,
+  `read_query`, and the `forest_*` FFI methods;
+- `ForestViewModel`, `DataChange`, `CoreEnv`, and the list and detail view models;
+- `DomainQuery` from the FFI.
+
+`Core.swift` went from about 460 lines to about 40. The `ObservableObject`s that remain hold real UI
+state: drag, focus, autocomplete.
+
+**Verified:**
+
+- `cargo test` passes (121 tests, reported by the migration agent; the touched crates were re-run
+  separately);
+- both Xcode targets build;
+- the owner's manual checks passed through S5.
+
+The S6 smoke test, including a `-wipeDB` launch, isn't confirmed yet.
+
+**Where it differs from the plan:**
+
+- **S0's `LiveStore` fixes,** as recorded in [LiveStore review](#livestore-review-2026-11-01).
+- **S4 (Edit Attributes) uses plain hooks,** not an `@Observable` model, because all three of its
+  questions come from init inputs. The public box (`GvLiveQuery`) exists for view models that need it.
+- **`GvClient` has no applied-version tracking.** The serial batch queue, plus the sink running
+  under the lock, is enough.
+- **Five client questions the app no longer asks were pruned:** `FindEntryById`, `FindAncestors`,
+  `FindDescendants`, `FindActivityById` and `FindAttributePairsForEntry`.
+- **Read-your-writes is still not provided** (see Settled for now).
+
+### After the migration (2026-11-02)
+
+**Against the first principles:**
+
+- **Principles 1, 4 and 6 (questions, values, one SDK): met.** Swift asks questions through hooks and
+  holds values. The subscribe, deliver, consistency and lifetime protocol lives once, in GvKit and
+  `LiveStore`.
+- **Principle 2 (the access pattern is abstracted): met.** The backing is one `match`. The two new
+  questions slotted in without touching `LiveStore`.
+- **Principle 3 (one version): met, with the refinement.** It's complex, but the complexity is
+  concentrated in `client/live.rs` (about 640 lines of code and about 820 of tests), which is the right
+  place for it.
+- **Principle 5 (structure in Rust): partly met.**
+  - In Rust now: drop slots, sets members and the append position.
+  - Still in Swift: the temporal rewrite on move-to-root, the insertion-time lookup and the actor id.
+    They're concentrated in `GvWrites.swift`, so the intent phase is one file, not 45 call sites.
+
+**A database engineer's review** ([sequence numbers](./comment-2026-11-02-database-engineer-sequence-numbers.md),
+[write queue](./comment-2026-11-02-database-engineer-write-queue.md),
+[future work](./comment-2026-11-02-database-engineer-future-work.md)) frames the boundary as a
+single-node database with materialized views and a replica in Swift. Its main points:
+
+- **Commit sequence numbers are the biggest architectural gain left.** `Version` counts builds, not
+  commits, and most of the subtle code in `live.rs` works around that: the straddle check, the
+  reconcile build, the `subscribe` retry. A `mutation_log` written inside each write transaction
+  (as `docs/sync.md` already plans) would give a commit sequence that becomes the version. That would
+  remove most of that code, give read-your-writes by waiting for a sequence, and become sync's
+  outbox. The costs are one row per write and a stored format, which RFD 2's data versioning must
+  cover.
+- **One writer behind a queue.** Writers currently compete through the pool, and `run_action` blocks
+  the main thread. One writer connection plus a small read-only pool would:
+  - assign sequence numbers;
+  - allow multi-action transactions, which the LLM import needs so a crash can't leave half a log;
+  - be the one place to handle failures.
+- **Failures need a surface.** `GvClient.run` logs a failed write and drops it, so a user can believe
+  a set was saved when it wasn't. `FfiError::Generic` also flattens `DomainError`. Typed errors across
+  the FFI, plus one failure channel in GvKit that the app displays, would fix both.
+- **The durability claim is wrong on Apple platforms.** `synchronous = FULL` without `fullfsync`
+  doesn't guarantee surviving a power cut, so `client.rs`'s comment overstates it. On a Mac,
+  `fullfsync` took commits from about 0.08 ms to about 4 ms; measure on a device.
+- **Cues for later, picked up when a symptom appears:**
+  - skip the forest reload when a write touches no entries;
+  - per-query invalidation;
+  - indexes, starting with `parent_id`;
+  - a read transaction for first values that use several statements;
+  - `ORDER BY` on list queries, which are compared by `Vec` equality;
+  - `UNIQUE (parent_id, frac_index)` for sibling positions;
+  - file metadata for RFD 2.
+
+  None of these changes the architecture.
+
+**Suggested order:**
+
+1. Write failures and durability, since both bear on trusting the data while dogfooding.
+2. Commit sequence numbers with a single writer, which may naturally take in intent-level writes.
+3. The cheap correctness cues.
 
 ### Open
 
-- **The query macro is done in the spike** (above). What's left is ergonomics: the macro bodies
-  aren't formatted by rustfmt, and question field types must be in scope in `gv-ffi`.
-- **A loading state in the hook.** Design it now for data that loads lazily: other users' data (for
-  example coaching), activity library content such as workout videos, and later virtualization.
-- **Compare against the research in depth.**
-  - Matrix: typed diffs, capability flags on records, and display items built by the core.
-  - SQLiteData: `@FetchAll` ergonomics and `FetchKeyRequest` for one consistent multi-read.
-  - Crux: intents and deterministic testing.
-- **The hook's form.** A property wrapper, an `@Observable` model, or both. AsyncSequence over
-  Combine.
+- **Commit sequence numbers and a mutation log** (database engineer). This would make the version a
+  commit position, provide read-your-writes, and serve as sync's outbox.
+- **Single writer, typed errors and a failure channel in GvKit,** plus multi-action transactions for
+  import.
+- **`fullfsync`:** measure the cost on a device and decide; until then, correct the durability
+  comment.
+- **Intent-level writes,** replacing the bodies in `GvWrites.swift`.
+- **A loading state in the hook.** It was removed while unused. It returns when data loads lazily:
+  other users' data (for example coaching), activity library content such as workout videos, and
+  later virtualization.
+- **`LiveStore` and deterministic simulation.** It runs on tokio tasks and real concurrency, so it
+  can't yet be simulated deterministically.
+- **Whether to hold all data in memory** (open question; see Settled for now).
+- **Merging `spike/gvkit-query-hooks`** into `main`.
 
 ## Earlier lean (2026-10-27)
 
