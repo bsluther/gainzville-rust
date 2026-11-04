@@ -690,8 +690,12 @@ it current through the normal query subscription. A drop captures the slot's par
 
 - **The move action carries the parent and fractional index** the user dropped on, as it does
   today.
-- **Time comes out of the move.** Editing time becomes its own action. Moving to the root still
-  takes a start time, and the mutator, not Swift, decides what happens to the duration.
+- **The move's target says what it carries.** Under a parent: the parent and index. To the root:
+  a start time, because a root log entry must be on the timeline, so position and time change in
+  one atomic step. The mutator, not Swift, decides what happens to the existing duration.
+- **Editing time alone becomes its own action,** so it no longer carries a copy of the position.
+  The move no longer carries a copy of the whole `temporal`, only the start time the root target
+  needs.
 - **Concurrent inserts into the same gap** can mint equal indices on two devices. That needs a
   tiebreaker (for example the entry id) when sync lands, not a different action shape.
 
