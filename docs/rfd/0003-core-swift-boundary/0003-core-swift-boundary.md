@@ -640,12 +640,39 @@ single-node database with materialized views and a replica in Swift. Its main po
 2. Commit sequence numbers with a single writer, which may naturally take in intent-level writes.
 3. The cheap correctness cues.
 
+### Write failures (2026-11-04)
+
+A follow-up to the [actions discussion](./comment-2026-11-04-actions-discussion.md), which leans
+toward reforming `Action` instead of adding a separate intent layer.
+
+Today `run_action` already returns a `Result`, but two places throw the information away.
+`FfiError::Generic` flattens `DomainError` into a string, so Swift can't tell a rejected action
+from a database failure or a broken invariant. And `GvClient.run` catches the error, logs it and
+drops it, so the calling view never hears about it.
+
+**Lean:**
+
+- **A typed error across the FFI** that mirrors `DomainError`: rejected (with its `RejectReason`),
+  database, and invariant.
+- **The GvKit write helpers throw** instead of swallowing.
+- **One default toast path in GvKit.** The write helper is the one place every write goes through.
+  It posts each failure to one shared piece of app state that a toast reads. A caller that wants to
+  handle a case itself, such as a form showing a validation message, catches the error and marks it
+  handled. This is Swift-only and needs nothing from Rust beyond the typed error.
+
+**Deferred:** a separate failure channel from Rust. A return value only works while the caller waits
+for the commit, which is today's behavior. Two later cases have no caller to return to: an
+asynchronous writer that returns before commit, and a sync rebase that rejects a pending action
+long after it was made. Their failures can feed the same shared state, so the toast won't change.
+The asynchronous writer itself is also deferred. It mainly guards against waiting out the 5 s busy
+timeout, which isn't expected to happen in practice.
+
 ### Open
 
 - **Commit sequence numbers and a mutation log** (database engineer). This would make the version a
   commit position, provide read-your-writes, and serve as sync's outbox.
-- **Single writer, typed errors and a failure channel in GvKit,** plus multi-action transactions for
-  import.
+- **Single writer and multi-action transactions** for import. Typed errors and the GvKit toast path
+  have a lean in [Write failures](#write-failures-2026-11-04).
 - **`fullfsync`:** measure the cost on a device and decide; until then, correct the durability
   comment.
 - **Intent-level writes,** replacing the bodies in `GvWrites.swift`.
