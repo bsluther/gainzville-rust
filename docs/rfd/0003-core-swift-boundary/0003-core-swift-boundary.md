@@ -667,6 +667,34 @@ long after it was made. Their failures can feed the same shared state, so the to
 The asynchronous writer itself is also deferred. It mainly guards against waiting out the 5 s busy
 timeout, which isn't expected to happen in practice.
 
+### Move actions keep the fractional index (2026-11-04)
+
+A response to the [actions discussion](./comment-2026-11-04-actions-discussion.md), reversing its
+placement recommendation.
+
+The comment proposed that a move under a parent name its placement ("first, after a given sibling,
+or at the end") and that the mutator turn it into a fractional index, falling back to the end when
+the sibling is gone. That loses intent. A fractional index marks a place in the order, not a
+reference to a neighbour, so it still lands where the user meant after the neighbours are deleted
+or reordered. "After X" breaks exactly when X goes away, and "the end" is a worse guess.
+
+The test for what an action carries is unchanged: only what the user decided, nothing copied from
+the client's snapshot. The index passes. It's the user's decision in a form that survives replay.
+The copied `temporal` in `moveEntry`, and the copied `position` in `updateEntryTemporal`, fail it.
+
+No new mechanism is needed to supply the index. `ChildSlots` (`gv-ui`) already lays out a
+sequence's drop slots in Rust, each with the `Position` that lands an entry there, and GvKit keeps
+it current through the normal query subscription. A drop captures the slot's parent and index.
+
+**Lean:**
+
+- **The move action carries the parent and fractional index** the user dropped on, as it does
+  today.
+- **Time comes out of the move.** Editing time becomes its own action. Moving to the root still
+  takes a start time, and the mutator, not Swift, decides what happens to the duration.
+- **Concurrent inserts into the same gap** can mint equal indices on two devices. That needs a
+  tiebreaker (for example the entry id) when sync lands, not a different action shape.
+
 ### Open
 
 - **Commit sequence numbers and a mutation log** (database engineer). This would make the version a
@@ -675,7 +703,9 @@ timeout, which isn't expected to happen in practice.
   have a lean in [Write failures](#write-failures-2026-11-04).
 - **`fullfsync`:** measure the cost on a device and decide; until then, correct the durability
   comment.
-- **Intent-level writes,** replacing the bodies in `GvWrites.swift`.
+- **Intent-level writes,** replacing the bodies in `GvWrites.swift`. Moves have a lean in
+  [Move actions keep the fractional index](#move-actions-keep-the-fractional-index-2026-11-04);
+  the code structure for shared preconditions is still open.
 - **A loading state in the hook.** It was removed while unused. It returns when data loads lazily:
   other users' data (for example coaching), activity library content such as workout videos, and
   later virtualization.
