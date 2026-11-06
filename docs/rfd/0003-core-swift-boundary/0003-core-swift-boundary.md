@@ -692,7 +692,8 @@ it current through the normal query subscription. A drop captures the slot's par
   today.
 - **The move's target says what it carries.** Under a parent: the parent and index. To the root:
   a start time, because a root log entry must be on the timeline, so position and time change in
-  one atomic step. The mutator, not Swift, decides what happens to the existing duration.
+  one atomic step. The mutator, not Swift, decides what happens to the existing duration. Moving
+  from the root into a parent keeps the entry's time: the user didn't decide to change it.
 - **Editing time alone becomes its own action,** so it no longer carries a copy of the position.
   The move no longer carries a copy of the whole `temporal`, only the start time the root target
   needs.
