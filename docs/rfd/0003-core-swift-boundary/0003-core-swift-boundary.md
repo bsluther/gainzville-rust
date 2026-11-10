@@ -667,38 +667,13 @@ long after it was made. Their failures can feed the same shared state, so the to
 The asynchronous writer itself is also deferred. It mainly guards against waiting out the 5 s busy
 timeout, which isn't expected to happen in practice.
 
-### Move actions keep the fractional index (2026-11-04)
+### Actions move to RFD 4 (2026-11-10)
 
-A response to the [actions discussion](./comment-2026-11-04-actions-discussion.md), reversing its
-placement recommendation.
-
-The comment proposed that a move under a parent name its placement ("first, after a given sibling,
-or at the end") and that the mutator turn it into a fractional index, falling back to the end when
-the sibling is gone. That loses intent. A fractional index marks a place in the order, not a
-reference to a neighbour, so it still lands where the user meant after the neighbours are deleted
-or reordered. "After X" breaks exactly when X goes away, and "the end" is a worse guess.
-
-The test for what an action carries is unchanged: only what the user decided, nothing copied from
-the client's snapshot. The index passes. It's the user's decision in a form that survives replay.
-The copied `temporal` in `moveEntry`, and the copied `position` in `updateEntryTemporal`, fail it.
-
-No new mechanism is needed to supply the index. `ChildSlots` (`gv-ui`) already lays out a
-sequence's drop slots in Rust, each with the `Position` that lands an entry there, and GvKit keeps
-it current through the normal query subscription. A drop captures the slot's parent and index.
-
-**Lean:**
-
-- **The move action carries the parent and fractional index** the user dropped on, as it does
-  today.
-- **The move's target says what it carries.** Under a parent: the parent and index. To the root:
-  a start time, because a root log entry must be on the timeline, so position and time change in
-  one atomic step. The mutator, not Swift, decides what happens to the existing duration. Moving
-  from the root into a parent keeps the entry's time: the user didn't decide to change it.
-- **Editing time alone becomes its own action,** so it no longer carries a copy of the position.
-  The move no longer carries a copy of the whole `temporal`, only the start time the root target
-  needs.
-- **Concurrent inserts into the same gap** can mint equal indices on two devices. That needs a
-  tiebreaker (for example the entry id) when sync lands, not a different action shape.
+Which actions should change to capture intent, and how mutators organize their checks, are about the
+action system, not the FFI. Both moved to [RFD 4: Actions](../0004-actions/0004-actions.md), along
+with the move-action lean first recorded here on 2026-11-04. The
+[actions discussion](./comment-2026-11-04-actions-discussion.md) stays here as written; RFD 4 links
+it.
 
 ### Open
 
@@ -708,9 +683,8 @@ it current through the normal query subscription. A drop captures the slot's par
   have a lean in [Write failures](#write-failures-2026-11-04).
 - **`fullfsync`:** measure the cost on a device and decide; until then, correct the durability
   comment.
-- **Intent-level writes,** replacing the bodies in `GvWrites.swift`. Moves have a lean in
-  [Move actions keep the fractional index](#move-actions-keep-the-fractional-index-2026-11-04);
-  the code structure for shared preconditions is still open.
+- **Intent-level writes,** replacing the bodies in `GvWrites.swift`. Which action shapes change is
+  [RFD 4](../0004-actions/0004-actions.md); swapping the helper bodies stays here.
 - **A loading state in the hook.** It was removed while unused. It returns when data loads lazily:
   other users' data (for example coaching), activity library content such as workout videos, and
   later virtualization.
