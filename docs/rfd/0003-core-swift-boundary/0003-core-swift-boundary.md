@@ -5,8 +5,8 @@
 
 ## Status (2026-11-02): the lean is built
 
-The lean below has been built. The whole Swift app now runs on GvKit, on branch
-`spike/gvkit-query-hooks`. It isn't merged, and no PR is open. For what was built, where it differs
+The lean below has been built. The whole Swift app now runs on GvKit. The work was done on branch
+`spike/gvkit-query-hooks` and merged into `main` on 2026-11-02 (adf6944). For what was built, where it differs
 from the plan, and what comes next, see [Migration](#migration-2026-11-01-complete-2026-11-02) and
 [After the migration](#after-the-migration-2026-11-02). The sections below are updated where the
 built system differs from what they first said.
@@ -691,7 +691,6 @@ it.
 - **`LiveStore` and deterministic simulation.** It runs on tokio tasks and real concurrency, so it
   can't yet be simulated deterministically.
 - **Whether to hold all data in memory** (open question; see Settled for now).
-- **Merging `spike/gvkit-query-hooks`** into `main`.
 
 ## Earlier lean (2026-10-27)
 
