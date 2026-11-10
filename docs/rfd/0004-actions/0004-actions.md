@@ -1,7 +1,7 @@
 # RFD 0004: Actions
 
 - State: discussion
-- Linear: none yet
+- Linear: [GV-77](https://linear.app/gainzville/issue/GV-77)
 
 ## Question
 
@@ -138,4 +138,3 @@ Not a lean yet.
 - **Typed check results** ("parse, don't validate"): a successful check returns a value the delta
   builder requires.
 - **Other action shapes:** the candidates above, and a pass over the rest of `Action`.
-- **Linear issue.**
