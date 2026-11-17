@@ -1,7 +1,7 @@
 # RFD 0005: Testing strategy
 
 - State: discussion
-- Linear: none yet
+- Linear: [GV-78](https://linear.app/gainzville/issue/GV-78)
 
 ## Question
 
